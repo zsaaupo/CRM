@@ -1,0 +1,15 @@
+# Local environment variables and credentials
+.env
+.env.*
+!.env.example
+
+# Python development files
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+
+# Local database and IDE configuration
+db.sqlite3
+db.sqlite3-journal
+.idea/
