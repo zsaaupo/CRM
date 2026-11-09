@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block header %}
+<aside id="workspace-sidebar" class="workspace-sidebar" data-sidebar>
+    <div class="sidebar-brand-row">
+        <a href="{% url 'dashboard' %}" class="workspace-brand" aria-label="eManager dashboard"><span class="brand-mark" aria-hidden="true">e</span><span>eManager<span class="text-emerald-600">.</span></span></a>
+        <button type="button" class="icon-button sidebar-close" data-sidebar-close aria-label="Close navigation"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" stroke-linecap="round"/></svg></button>
+    </div>
+    <div class="sidebar-workspace"><span class="workspace-monogram" aria-hidden="true">W</span><div><p>Personal workspace</p><span>Your space to stay organized</span></div></div>
+    <p class="sidebar-label">Workspace</p>
+    <nav aria-label="Main navigation" class="sidebar-nav">
+        <a href="{% url 'dashboard' %}" data-nav-item class="sidebar-link {% if page_section == 'dashboard' %}is-current{% endif %}" {% if page_section == 'dashboard' %}aria-current="page"{% endif %}>
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+            Dashboard
+        </a>
+        <button type="button" class="sidebar-link sidebar-group-toggle {% if page_section == 'users' %}is-current{% endif %}" data-users-toggle aria-controls="users-submenu" aria-expanded="{% if page_section == 'users' %}true{% else %}false{% endif %}">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3 21v-2a6 6 0 0 1 12 0v2M16 5a3 3 0 0 1 0 6M18 15a5 5 0 0 1 3 4v2" stroke-linecap="round"/></svg>
+            <span>Users</span>
+            <svg class="sidebar-chevron" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m9 5 7 7-7 7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <div id="users-submenu" class="sidebar-submenu" {% if page_section != 'users' %}hidden{% endif %}>
+            <a href="{% url 'account_pages:add-user' %}" data-nav-item class="sidebar-sub-link {% if user_page == 'add' %}is-current{% endif %}" {% if user_page == 'add' %}aria-current="page"{% endif %}>Add user</a>
+            <a href="{% url 'account_pages:user-list' %}" data-nav-item class="sidebar-sub-link {% if user_page == 'list' %}is-current{% endif %}" {% if user_page == 'list' %}aria-current="page"{% endif %}>User list</a>
+        </div>
+    </nav>
+    <div class="sidebar-footer"><span class="status-dot" aria-hidden="true"></span> A little more clarity, every day.</div>
+</aside>
+<button type="button" class="sidebar-overlay" data-sidebar-overlay aria-label="Close navigation" hidden></button>
+
+<header class="workspace-topbar">
+    <div class="topbar-heading">
+        <button type="button" class="icon-button sidebar-toggle" data-sidebar-toggle aria-controls="workspace-sidebar" aria-expanded="false" aria-label="Open navigation"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" stroke-linecap="round"/></svg></button>
+        <span class="topbar-workspace-label">Workspace</span><span class="topbar-divider" aria-hidden="true">/</span><span class="font-medium text-stone-800">{{ page_label }}</span>
+    </div>
+    <div class="user-menu" data-user-menu>
+        <button type="button" class="user-menu-trigger" data-user-menu-toggle aria-expanded="false" aria-controls="user-dropdown" aria-label="Open account menu for {{ display_name }}">
+            <span class="user-avatar" aria-hidden="true">{{ user_initials }}</span>
+            <span class="user-menu-name">{{ display_name }}</span>
+            <svg class="text-stone-400" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m6 9 6 6 6-6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <div id="user-dropdown" class="user-dropdown" data-user-dropdown hidden>
+            <div class="dropdown-identity"><p>{{ display_name }}</p><span>{{ profile_email }}</span></div>
+            <a href="{% url 'account_pages:profile' %}" class="dropdown-item"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21v-2a8 8 0 0 1 16 0v2" stroke-linecap="round"/></svg>Profile</a>
+            <form method="post" action="{% url 'account:logout' %}" data-logout-form data-redirect-url="{% url 'account_pages:login' %}">
+                {% csrf_token %}
+                <button type="submit" class="dropdown-item logout-item" data-logout-button><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M9 5H5v14h4M13 8l4 4-4 4M8 12h12" stroke-linecap="round" stroke-linejoin="round"/></svg><span data-logout-label>Logout</span></button>
+                <p class="form-error px-3 pb-2" data-logout-error role="alert" hidden></p>
+            </form>
+        </div>
+    </div>
+</header>
+{% endblock %}
+
+{% block main_class %}workspace-main{% endblock %}
+{% block extra_js %}<script type="module" src="{% static 'account/js/workspace.js' %}"></script>{% block workspace_js %}{% endblock %}{% endblock %}

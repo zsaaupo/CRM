@@ -1,0 +1,7 @@
+<header class="mx-auto flex h-20 max-w-7xl items-center justify-between px-6 sm:px-10">
+    <a href="{% url 'home' %}" class="flex items-center gap-2.5 rounded-md font-semibold tracking-tight text-stone-950 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-emerald-600" aria-label="eManager home">
+        <span class="flex h-8 w-8 items-center justify-center rounded-lg bg-stone-900 text-sm text-white" aria-hidden="true">e</span>
+        <span>eManager<span class="text-emerald-600">.</span></span>
+    </a>
+    {% block header_actions %}{% endblock %}
+</header>

@@ -1,27 +1,154 @@
 from datetime import timedelta
 from functools import partial
 
-from django.contrib.auth import get_user_model
+from django.contrib.auth import authenticate, get_user_model, login as auth_login, logout as auth_logout
 from django.db import IntegrityError, transaction
+from django.db.models import Q
+from django.middleware.csrf import get_token
 from django.utils import timezone
+from django.utils.decorators import method_decorator
+from django.views.decorators.cache import never_cache
+from django.views.decorators.csrf import csrf_protect
 from rest_framework import status
 from rest_framework.exceptions import ValidationError
-from rest_framework.generics import GenericAPIView
-from rest_framework.permissions import AllowAny
+from rest_framework.generics import GenericAPIView, ListAPIView
+from rest_framework.authentication import SessionAuthentication
+from rest_framework.pagination import PageNumberPagination
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from .emails import thread_send_email
 from .models import Account
 from .serializers import (
     AccountSerializer,
+    AddUserSerializer,
+    LoginSerializer,
     ResendOTPSerializer,
     SignUpSerializer,
+    UserListSerializer,
     VerifyOTPSerializer,
 )
 from .utils import generate_otp, otp_matches
 
 
 User = get_user_model()
+
+
+@method_decorator(never_cache, name='dispatch')
+@method_decorator(csrf_protect, name='dispatch')
+class LoginAPIView(GenericAPIView):
+    serializer_class = LoginSerializer
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    def get(self, request, *args, **kwargs):
+        return Response({'csrfToken': get_token(request)})
+
+    def post(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        user = authenticate(
+            request,
+            username=data['email'],
+            password=data['password'],
+        )
+        if user is None or not user.is_active:
+            return Response(
+                {'detail': 'Invalid email or password.'},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        auth_login(request, user)
+        account = Account.objects.filter(user=user).first()
+        return Response(
+            {
+                'message': 'Logged in successfully.',
+                'user': {'id': user.pk, 'email': data['email']},
+                'account': AccountSerializer(account).data if account else None,
+                # Django rotates the CSRF secret on login; use this for later POSTs.
+                'csrfToken': get_token(request),
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+@method_decorator(never_cache, name='dispatch')
+@method_decorator(csrf_protect, name='dispatch')
+class LogoutAPIView(APIView):
+    authentication_classes = [SessionAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, *args, **kwargs):
+        auth_logout(request)
+        return Response({'message': 'Logged out successfully.'}, status=status.HTTP_200_OK)
+
+
+@method_decorator(never_cache, name='dispatch')
+class AddUserAPIView(GenericAPIView):
+    serializer_class = AddUserSerializer
+    authentication_classes = [SessionAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = dict(serializer.validated_data)
+        password = data.pop('password')
+        data.pop('password_confirm')
+        email = data['email']
+
+        try:
+            with transaction.atomic():
+                user = User.objects.create_user(
+                    username=email,
+                    email=email,
+                    password=password,
+                    is_active=True,
+                )
+                account = Account.objects.create(user=user, **data)
+        except IntegrityError as exc:
+            if User.objects.filter(username__iexact=email).exists():
+                raise ValidationError({
+                    'email': 'An account with this email already exists.',
+                }) from exc
+            raise
+
+        return Response(
+            {
+                'message': 'User created successfully.',
+                'account': AccountSerializer(account).data,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class UserListPagination(PageNumberPagination):
+    page_size = 20
+
+
+@method_decorator(never_cache, name='dispatch')
+class UserListAPIView(ListAPIView):
+    serializer_class = UserListSerializer
+    authentication_classes = [SessionAuthentication]
+    permission_classes = [IsAuthenticated]
+    pagination_class = UserListPagination
+
+    def get_queryset(self):
+        users = User.objects.select_related('account').order_by('-date_joined', '-pk')
+        query = self.request.query_params.get('q', '').strip()
+        if query:
+            users = users.filter(
+                Q(username__icontains=query)
+                | Q(email__icontains=query)
+                | Q(account__full_name__icontains=query)
+                | Q(account__email__icontains=query)
+                | Q(account__phone_number__icontains=query)
+                | Q(account__designation__icontains=query)
+            )
+        return users
 
 
 class SignUpAPIView(GenericAPIView):

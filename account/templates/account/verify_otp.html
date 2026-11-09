@@ -1,0 +1,50 @@
+{% extends "layouts/auth.html" %}
+
+{% block title %}Verify your email | eManager{% endblock %}
+{% block auth_title %}Verify your email{% endblock %}
+{% block auth_description %}Use the six-character code from your inbox to finish setting up your account.{% endblock %}
+
+{% block auth_content %}
+<form method="post" action="{% url 'account:verify-otp' %}" data-auth-form="verify" data-resend-url="{% url 'account:resend-otp' %}" class="mt-8 space-y-5" novalidate>
+    {% csrf_token %}
+    <div class="form-status" data-form-status role="status" aria-live="polite" tabindex="-1" hidden></div>
+
+    <div>
+        <label for="verify-email" class="form-label">Email address</label>
+        <input id="verify-email" name="email" type="email" autocomplete="email" inputmode="email" autocapitalize="none" spellcheck="false" maxlength="254" placeholder="you@example.com" class="form-input" aria-describedby="verify-email-error" required>
+        <p id="verify-email-error" data-error-for="email" class="form-error" hidden></p>
+    </div>
+
+    <div>
+        <label for="verify-otp" class="form-label">Verification code</label>
+        <input id="verify-otp" name="otp" type="text" autocomplete="one-time-code" autocapitalize="characters" spellcheck="false" minlength="6" maxlength="6" pattern="[0-9A-Z]{6}" placeholder="A1B2C3" class="form-input otp-input" aria-describedby="verify-otp-hint verify-otp-error" required>
+        <p id="verify-otp-hint" class="mt-2 text-xs leading-5 text-stone-500">Six letters and numbers. Your code is valid for 10 minutes.</p>
+        <p id="verify-otp-error" data-error-for="otp" class="form-error" hidden></p>
+    </div>
+
+    <button type="submit" class="primary-button" data-loading-label="Verifying…">
+        <span data-button-label>Verify email</span>
+        <svg data-button-arrow width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="m5 12 4 4L19 6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span class="button-spinner" data-button-spinner hidden aria-hidden="true"></span>
+    </button>
+
+    <div class="border-t border-stone-100 pt-5 text-center">
+        <p class="text-sm text-stone-500">Didn’t receive a code?</p>
+        <button type="button" class="text-button mt-2" data-resend-otp data-loading-label="Requesting a code…">
+            <span data-button-label>Send a new code</span>
+            <span class="button-spinner" data-button-spinner hidden aria-hidden="true"></span>
+        </button>
+    </div>
+</form>
+
+<section data-verification-success class="mt-8 rounded-2xl border border-emerald-200 bg-emerald-50 p-6" role="status" tabindex="-1" hidden>
+    <svg class="mb-3 text-emerald-700" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <h2 class="text-lg font-semibold tracking-tight text-emerald-950">You’re all set.</h2>
+    <p class="mt-2 text-sm leading-6 text-emerald-800">Your email is verified and your account is ready.</p>
+    <a href="{% url 'account_pages:login' %}" class="primary-button mt-5">Continue to sign in <span aria-hidden="true">→</span></a>
+</section>
+{% endblock %}
+
+{% block auth_footer %}
+<a href="{% url 'account_pages:signup' %}" class="font-medium text-stone-900 underline decoration-stone-300 underline-offset-4 transition hover:decoration-stone-900 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-emerald-600">Back to signup</a>
+{% endblock %}

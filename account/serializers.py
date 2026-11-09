@@ -67,6 +67,47 @@ class SignUpSerializer(serializers.Serializer):
         return attrs
 
 
+class AddUserSerializer(SignUpSerializer):
+    date_of_birth = serializers.DateField(required=False, allow_null=True)
+    gender = serializers.ChoiceField(
+        choices=gender_choice, required=False, allow_blank=True, allow_null=True,
+    )
+    designation = serializers.CharField(max_length=150, required=False, allow_blank=True, allow_null=True)
+    address = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    city = serializers.CharField(max_length=100, required=False, allow_blank=True, allow_null=True)
+    state = serializers.CharField(max_length=100, required=False, allow_blank=True, allow_null=True)
+    postal_code = serializers.CharField(max_length=20, required=False, allow_blank=True, allow_null=True)
+    country = serializers.CharField(max_length=100, required=False, allow_blank=True, allow_null=True)
+
+
+class UserListSerializer(serializers.ModelSerializer):
+    full_name = serializers.SerializerMethodField()
+    email = serializers.SerializerMethodField()
+    phone_number = serializers.SerializerMethodField()
+    designation = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        fields = ['id', 'full_name', 'email', 'phone_number', 'designation', 'is_active', 'date_joined']
+        read_only_fields = fields
+
+    def get_full_name(self, user):
+        account = getattr(user, 'account', None)
+        return (account.full_name if account else '') or user.get_full_name() or user.get_username()
+
+    def get_email(self, user):
+        account = getattr(user, 'account', None)
+        return (account.email if account else '') or user.email or user.get_username()
+
+    def get_phone_number(self, user):
+        account = getattr(user, 'account', None)
+        return (account.phone_number if account else '') or ''
+
+    def get_designation(self, user):
+        account = getattr(user, 'account', None)
+        return (account.designation if account else '') or ''
+
+
 class VerifyOTPSerializer(serializers.Serializer):
     email = serializers.EmailField(max_length=254)
     otp = serializers.RegexField(
@@ -85,6 +126,14 @@ class VerifyOTPSerializer(serializers.Serializer):
 
 class ResendOTPSerializer(serializers.Serializer):
     email = serializers.EmailField(max_length=254)
+
+    def validate_email(self, value):
+        return value.lower()
+
+
+class LoginSerializer(serializers.Serializer):
+    email = serializers.EmailField(max_length=150)
+    password = serializers.CharField(write_only=True, trim_whitespace=False)
 
     def validate_email(self, value):
         return value.lower()

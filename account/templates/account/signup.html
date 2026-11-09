@@ -1,0 +1,63 @@
+{% extends "layouts/auth.html" %}
+
+{% block title %}Create your account | eManager{% endblock %}
+{% block auth_title %}Create your account{% endblock %}
+{% block auth_description %}A fresh start, with everything in one place. Enter your details to get started.{% endblock %}
+
+{% block auth_content %}
+<form method="post" action="{% url 'account:signup' %}" data-auth-form="signup" data-success-url="{% url 'account_pages:verify-otp' %}" class="mt-8 space-y-5" novalidate>
+    {% csrf_token %}
+    <div class="form-status" data-form-status role="status" aria-live="polite" tabindex="-1" hidden></div>
+
+    <div>
+        <label for="signup-full-name" class="form-label">Full name</label>
+        <input id="signup-full-name" name="full_name" type="text" autocomplete="name" maxlength="150" placeholder="Your full name" class="form-input" aria-describedby="signup-full-name-error" required>
+        <p id="signup-full-name-error" data-error-for="full_name" class="form-error" hidden></p>
+    </div>
+
+    <div>
+        <label for="signup-email" class="form-label">Email address</label>
+        <input id="signup-email" name="email" type="email" autocomplete="email" inputmode="email" autocapitalize="none" spellcheck="false" maxlength="150" placeholder="you@example.com" class="form-input" aria-describedby="signup-email-error" required>
+        <p id="signup-email-error" data-error-for="email" class="form-error" hidden></p>
+    </div>
+
+    <div>
+        <label for="signup-phone" class="form-label">Phone number <span class="ml-1 font-normal text-stone-400">Optional</span></label>
+        <input id="signup-phone" name="phone_number" type="tel" autocomplete="tel" maxlength="32" placeholder="+880 1700 000000" class="form-input" aria-describedby="signup-phone-error">
+        <p id="signup-phone-error" data-error-for="phone_number" class="form-error" hidden></p>
+    </div>
+
+    <div>
+        <label for="signup-password" class="form-label">Password</label>
+        <div class="relative">
+            <input id="signup-password" name="password" type="password" autocomplete="new-password" placeholder="Create a strong password" class="form-input password-input" aria-describedby="signup-password-hint signup-password-error" required>
+            <button type="button" class="password-toggle" data-password-toggle="signup-password" aria-controls="signup-password" aria-pressed="false" aria-label="Show password">Show</button>
+        </div>
+        <p id="signup-password-hint" class="mt-2 text-xs leading-5 text-stone-500">Use a strong, unique password that you don’t use elsewhere.</p>
+        <p id="signup-password-error" data-error-for="password" class="form-error" hidden></p>
+    </div>
+
+    <div>
+        <label for="signup-password-confirm" class="form-label">Confirm password</label>
+        <div class="relative">
+            <input id="signup-password-confirm" name="password_confirm" type="password" autocomplete="new-password" placeholder="Enter your password again" class="form-input password-input" aria-describedby="signup-password-confirm-error" required>
+            <button type="button" class="password-toggle" data-password-toggle="signup-password-confirm" aria-controls="signup-password-confirm" aria-pressed="false" aria-label="Show password confirmation">Show</button>
+        </div>
+        <p id="signup-password-confirm-error" data-error-for="password_confirm" class="form-error" hidden></p>
+    </div>
+
+    <button type="submit" class="primary-button" data-loading-label="Creating your account…">
+        <span data-button-label>Create account</span>
+        <svg data-button-arrow width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span class="button-spinner" data-button-spinner hidden aria-hidden="true"></span>
+    </button>
+    <p class="text-center text-xs leading-5 text-stone-500">We’ll email you a code to confirm it’s really you.</p>
+    <noscript><p class="form-error">Enable JavaScript to use the signup form and continue to verification.</p></noscript>
+</form>
+{% endblock %}
+
+{% block auth_footer %}
+<p class="mb-2">Already have an account? <a href="{% url 'account_pages:login' %}" class="font-medium text-stone-900 underline decoration-stone-300 underline-offset-4 hover:decoration-stone-900">Sign in</a></p>
+Already have a verification code?
+<a href="{% url 'account_pages:verify-otp' %}" class="font-medium text-stone-900 underline decoration-stone-300 underline-offset-4 transition hover:decoration-stone-900 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-emerald-600">Verify your email</a>
+{% endblock %}

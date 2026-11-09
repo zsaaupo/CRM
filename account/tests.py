@@ -112,7 +112,7 @@ class SignUpSerializerTests(TestCase):
 
 class SignUpAPIViewTests(APITestCase):
     def setUp(self):
-        email_patch = patch('account.views.thread_send_email')
+        email_patch = patch('account.api_views.thread_send_email')
         self.send_email = email_patch.start()
         self.addCleanup(email_patch.stop)
         self.url = reverse('account:signup')
@@ -127,7 +127,7 @@ class SignUpAPIViewTests(APITestCase):
     def test_anonymous_signup_creates_user_and_account(self):
         self.data['otp'] = '000000'
         with (
-            patch('account.views.generate_otp', return_value='A0Z9B1'),
+            patch('account.api_views.generate_otp', return_value='A0Z9B1'),
             self.captureOnCommitCallbacks(execute=True),
         ):
             response = self.client.post(self.url, self.data, format='json')
@@ -218,7 +218,7 @@ class SignUpAPIViewTests(APITestCase):
 
     def test_account_failure_rolls_back_user_creation(self):
         with (
-            patch('account.views.Account.objects.create', side_effect=IntegrityError),
+            patch('account.api_views.Account.objects.create', side_effect=IntegrityError),
             self.captureOnCommitCallbacks(execute=True) as callbacks,
         ):
             with self.assertRaises(IntegrityError):
@@ -384,7 +384,7 @@ class VerifyOTPAPIViewTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_activation_failure_rolls_back_code_consumption(self):
-        with patch('account.views.User.save', side_effect=RuntimeError('Save failed')):
+        with patch('account.api_views.User.save', side_effect=RuntimeError('Save failed')):
             with self.assertRaises(RuntimeError):
                 self.client.post(self.url, self.data, format='json')
         self.account.refresh_from_db()
@@ -396,7 +396,7 @@ class VerifyOTPAPIViewTests(APITestCase):
 
 class ResendOTPAPIViewTests(APITestCase):
     def setUp(self):
-        email_patch = patch('account.views.thread_send_email')
+        email_patch = patch('account.api_views.thread_send_email')
         self.send_email = email_patch.start()
         self.addCleanup(email_patch.stop)
         self.url = reverse('account:resend-otp')
@@ -415,7 +415,7 @@ class ResendOTPAPIViewTests(APITestCase):
     def test_resend_replaces_code_extends_expiry_and_emails_registered_address(self):
         requested_at = timezone.now()
         with (
-            patch('account.views.generate_otp', return_value='Z9Y8X7'),
+            patch('account.api_views.generate_otp', return_value='Z9Y8X7'),
             self.captureOnCommitCallbacks(execute=True),
         ):
             response = self.client.post(
@@ -506,7 +506,7 @@ class ResendOTPAPIViewTests(APITestCase):
         for values in cases:
             with self.subTest(values=values):
                 Account.objects.filter(pk=self.account.pk).update(**values)
-                with patch('account.views.generate_otp', return_value='Z9Y8X7'):
+                with patch('account.api_views.generate_otp', return_value='Z9Y8X7'):
                     response = self.client.post(self.url, self.data, format='json')
                 self.assertEqual(response.status_code, status.HTTP_200_OK)
                 self.account.refresh_from_db()
@@ -514,7 +514,7 @@ class ResendOTPAPIViewTests(APITestCase):
                 self.assertGreater(self.account.otp_expires_at, timezone.now())
 
     def test_old_code_is_rejected_and_new_code_can_verify(self):
-        with patch('account.views.generate_otp', return_value='Z9Y8X7'):
+        with patch('account.api_views.generate_otp', return_value='Z9Y8X7'):
             resend = self.client.post(self.url, self.data, format='json')
         old_code = self.client.post(
             self.verify_url, {**self.data, 'otp': 'A0Z9B1'}, format='json',
@@ -533,7 +533,7 @@ class ResendOTPAPIViewTests(APITestCase):
     def test_failed_update_preserves_old_code_and_does_not_email(self):
         original_expiry = self.account.otp_expires_at
         with (
-            patch('account.views.Account.save', side_effect=RuntimeError('Save failed')),
+            patch('account.api_views.Account.save', side_effect=RuntimeError('Save failed')),
             self.captureOnCommitCallbacks(execute=True) as callbacks,
         ):
             with self.assertRaises(RuntimeError):
@@ -549,7 +549,7 @@ class ResendOTPAPIViewTests(APITestCase):
             with self.subTest(stored_format=stored_code[:6]):
                 Account.objects.filter(pk=self.account.pk).update(otp=stored_code)
                 with patch(
-                    'account.views.generate_otp', side_effect=['A0Z9B1', 'Z9Y8X7'],
+                    'account.api_views.generate_otp', side_effect=['A0Z9B1', 'Z9Y8X7'],
                 ):
                     response = self.client.post(self.url, self.data, format='json')
                 self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -557,7 +557,7 @@ class ResendOTPAPIViewTests(APITestCase):
                 self.assertEqual(self.account.otp, 'Z9Y8X7')
 
     def test_only_latest_code_works_after_multiple_resends(self):
-        with patch('account.views.generate_otp', side_effect=['B1C2D3', 'Z9Y8X7']):
+        with patch('account.api_views.generate_otp', side_effect=['B1C2D3', 'Z9Y8X7']):
             self.client.post(self.url, self.data, format='json')
             self.client.post(self.url, self.data, format='json')
         previous = self.client.post(

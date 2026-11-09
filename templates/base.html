@@ -1,0 +1,24 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light">
+    <title>{% block title %}eManager{% endblock %}</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <link rel="stylesheet" href="{% static 'css/custom.css' %}">
+    {% block extra_css %}{% endblock %}
+</head>
+<body class="min-h-screen bg-stone-50 font-sans text-stone-900 antialiased">
+    <a href="#main-content" class="skip-link">Skip to content</a>
+    {% block header %}{% include "includes/header.html" %}{% endblock %}
+
+    <main id="main-content" class="{% block main_class %}{% endblock %}">
+        {% include "includes/messages.html" %}
+        {% block content %}{% endblock %}
+    </main>
+
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

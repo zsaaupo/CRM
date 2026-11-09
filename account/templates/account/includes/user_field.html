@@ -1,0 +1,8 @@
+<div>
+    <label for="add-{{ name }}" class="form-label">{{ label }}{% if not required %}<span class="ml-1 font-normal text-stone-400">Optional</span>{% endif %}</label>
+    <div class="relative">
+        <input id="add-{{ name }}" name="{{ name }}" type="{{ field_type|default:'text' }}" class="form-input {% if field_type == 'password' %}password-input{% endif %}" aria-describedby="add-{{ name }}-error" {% if required %}required{% endif %} {% if maxlength %}maxlength="{{ maxlength }}"{% endif %} {% if autocomplete %}autocomplete="{{ autocomplete }}"{% endif %} {% if placeholder %}placeholder="{{ placeholder }}"{% endif %} {% if field_type == 'email' %}autocapitalize="none" spellcheck="false"{% endif %}>
+        {% if field_type == 'password' %}<button type="button" class="password-toggle" data-password-toggle="add-{{ name }}" aria-controls="add-{{ name }}" aria-pressed="false" aria-label="Show {{ label|lower }}">Show</button>{% endif %}
+    </div>
+    <p id="add-{{ name }}-error" data-error-for="{{ name }}" class="form-error" hidden></p>
+</div>

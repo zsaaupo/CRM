@@ -1,0 +1,58 @@
+{% extends "layouts/dashboard.html" %}
+{% load static %}
+
+{% block title %}Add user | eManager{% endblock %}
+{% block content %}
+<div class="workspace-content">
+    <div class="page-heading">
+        <div><p class="page-eyebrow">People &amp; access</p><h1 class="page-title">Add user<span class="text-emerald-600">.</span></h1><p class="page-description">A new person. A more connected workspace.</p></div>
+        <a href="{% url 'account_pages:user-list' %}" class="secondary-button">Back to user list <span aria-hidden="true">&rarr;</span></a>
+    </div>
+    <div class="user-form-layout">
+        <form method="post" action="{% url 'account:add-user' %}" data-auth-form="add-user" data-success-url="{% url 'account_pages:user-list' %}" class="user-form-card" novalidate>
+            {% csrf_token %}
+            <div class="form-status mb-7" data-form-status role="status" aria-live="polite" tabindex="-1" hidden></div>
+            <fieldset>
+                <legend class="section-title">Personal details</legend>
+                <p class="section-description">Start with their name and contact information.</p>
+                <div class="user-form-grid">
+                    {% include "account/includes/user_field.html" with name="full_name" label="Full name" required=True maxlength=150 autocomplete="name" placeholder="e.g. Avery Morgan" only %}
+                    {% include "account/includes/user_field.html" with name="email" label="Email address" field_type="email" required=True maxlength=150 autocomplete="email" placeholder="person@example.com" only %}
+                    {% include "account/includes/user_field.html" with name="phone_number" label="Phone number" field_type="tel" maxlength=32 autocomplete="tel" placeholder="+880 1700 000000" only %}
+                    {% include "account/includes/user_field.html" with name="designation" label="Designation" maxlength=150 autocomplete="organization-title" placeholder="e.g. Teacher" only %}
+                    {% include "account/includes/user_field.html" with name="date_of_birth" label="Date of birth" field_type="date" autocomplete="bday" only %}
+                    <div><label for="add-gender" class="form-label">Gender <span class="ml-1 font-normal text-stone-400">Optional</span></label><select id="add-gender" name="gender" class="form-input" aria-describedby="add-gender-error"><option value="">Select gender</option><option value="M">Male</option><option value="F">Female</option><option value="T">Other</option></select><p id="add-gender-error" data-error-for="gender" class="form-error" hidden></p></div>
+                </div>
+            </fieldset>
+            <fieldset class="user-form-section">
+                <legend class="section-title">Address</legend>
+                <p class="section-description">Add location details if you have them.</p>
+                <div class="user-form-grid">
+                    <div class="user-form-full"><label for="add-address" class="form-label">Street address <span class="ml-1 font-normal text-stone-400">Optional</span></label><textarea id="add-address" name="address" rows="3" autocomplete="street-address" class="form-input" placeholder="Street, building, apartment" aria-describedby="add-address-error"></textarea><p id="add-address-error" data-error-for="address" class="form-error" hidden></p></div>
+                    {% include "account/includes/user_field.html" with name="city" label="City" maxlength=100 autocomplete="address-level2" only %}
+                    {% include "account/includes/user_field.html" with name="state" label="State / region" maxlength=100 autocomplete="address-level1" only %}
+                    {% include "account/includes/user_field.html" with name="postal_code" label="Postal code" maxlength=20 autocomplete="postal-code" only %}
+                    {% include "account/includes/user_field.html" with name="country" label="Country" maxlength=100 autocomplete="country-name" only %}
+                </div>
+            </fieldset>
+            <fieldset class="user-form-section">
+                <legend class="section-title">Login credentials</legend>
+                <p class="section-description">Choose a strong, unique password for the new account.</p>
+                <div class="user-form-grid">
+                    {% include "account/includes/user_field.html" with name="password" label="Password" field_type="password" required=True autocomplete="new-password" only %}
+                    {% include "account/includes/user_field.html" with name="password_confirm" label="Confirm password" field_type="password" required=True autocomplete="new-password" only %}
+                </div>
+            </fieldset>
+            <div class="user-form-actions"><a href="{% url 'account_pages:user-list' %}" class="secondary-button">Cancel</a><button type="submit" class="primary-button compact-primary" data-loading-label="Creating user..."><span data-button-label>Create user</span><span class="button-spinner" data-button-spinner hidden aria-hidden="true"></span><span data-button-arrow aria-hidden="true">&rarr;</span></button></div>
+            <noscript><p class="form-error">Enable JavaScript to create a user with this form.</p></noscript>
+        </form>
+        <aside class="user-form-aside">
+            <span class="user-aside-icon" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="10" cy="8" r="4"/><path d="M3 21v-2a7 7 0 0 1 12-5M19 14v8M15 18h8" stroke-linecap="round"/></svg></span>
+            <h2>A place in your workspace</h2><p>The account will be active as soon as you create it. They can sign in with their email and password.</p>
+            <div class="user-aside-note"><span class="status-dot" aria-hidden="true"></span><span>No email verification is required for users added here.</span></div>
+            <p class="mt-5">Only the name, email, and password fields are required.</p>
+        </aside>
+    </div>
+</div>
+{% endblock %}
+{% block workspace_js %}<script type="module" src="{% static 'account/js/auth.js' %}"></script>{% endblock %}

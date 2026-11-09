@@ -1,0 +1,72 @@
+from django.contrib.auth.mixins import LoginRequiredMixin
+from django.shortcuts import redirect
+from django.utils import timezone
+from django.utils.decorators import method_decorator
+from django.views.decorators.cache import never_cache
+from django.views.generic import TemplateView
+
+from .models import Account
+
+
+@method_decorator(never_cache, name='dispatch')
+class LoginPageView(TemplateView):
+    template_name = 'account/login.html'
+
+    def dispatch(self, request, *args, **kwargs):
+        if request.user.is_authenticated:
+            return redirect('dashboard')
+        return super().dispatch(request, *args, **kwargs)
+
+
+@method_decorator(never_cache, name='dispatch')
+class ProtectedAccountPageView(LoginRequiredMixin, TemplateView):
+    # Successful login always goes to the dashboard.
+    redirect_field_name = None
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        user = self.request.user
+        account = Account.objects.filter(user=user).first()
+        display_name = (
+            (account.full_name if account else '')
+            or user.get_full_name()
+            or user.get_username()
+        ).strip()
+        words = display_name.split()
+        context.update({
+            'profile': account,
+            'display_name': display_name,
+            'first_name': words[0] if words and '@' not in display_name else 'there',
+            'user_initials': ''.join(word[0] for word in words[:2]).upper() or 'U',
+            'profile_email': (account.email if account else '') or user.email or user.get_username(),
+            'today': timezone.localdate(),
+        })
+        return context
+
+
+class DashboardPageView(ProtectedAccountPageView):
+    template_name = 'account/dashboard.html'
+    extra_context = {'page_label': 'Dashboard', 'page_section': 'dashboard'}
+
+
+class ProfilePageView(ProtectedAccountPageView):
+    template_name = 'account/profile.html'
+    extra_context = {'page_label': 'Profile', 'page_section': 'profile'}
+
+
+class AddUserPageView(ProtectedAccountPageView):
+    template_name = 'account/add_user.html'
+    extra_context = {'page_label': 'Add user', 'page_section': 'users', 'user_page': 'add'}
+
+
+class UserListPageView(ProtectedAccountPageView):
+    template_name = 'account/user_list.html'
+    extra_context = {'page_label': 'User list', 'page_section': 'users', 'user_page': 'list'}
+
+
+class SignUpPageView(TemplateView):
+    template_name = 'account/signup.html'
+
+
+class VerifyOTPPageView(TemplateView):
+    template_name = 'account/verify_otp.html'
