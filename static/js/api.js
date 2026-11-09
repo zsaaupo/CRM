@@ -22,6 +22,29 @@ export async function getJSON(url) {
     return requestJSON(url, { method: "GET" });
 }
 
+export async function patchJSON(url, data, csrfToken) {
+    return requestJSON(url, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", "X-CSRFToken": csrfToken },
+        body: JSON.stringify(data),
+    });
+}
+
+export async function putJSON(url, data, csrfToken) {
+    return requestJSON(url, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", "X-CSRFToken": csrfToken },
+        body: JSON.stringify(data),
+    });
+}
+
+export async function deleteJSON(url, csrfToken) {
+    return requestJSON(url, {
+        method: "DELETE",
+        headers: { "X-CSRFToken": csrfToken },
+    });
+}
+
 async function requestJSON(url, options) {
     const controller = new AbortController();
     const timeout = window.setTimeout(() => controller.abort(), 20000);
@@ -37,6 +60,8 @@ async function requestJSON(url, options) {
             },
             signal: controller.signal,
         });
+
+        if (response.status === 204 && response.ok) return null;
 
         let result;
         try {

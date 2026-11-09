@@ -1,0 +1,31 @@
+{% extends "layouts/dashboard.html" %}
+{% load static %}
+{% block title %}Role list | eManager{% endblock %}
+{% block content %}
+<div class="workspace-content" data-role-list data-api-url="{% url 'account:group-list' %}" data-detail-url="{% url 'account:group-detail' 0 %}" data-permissions-url="{% url 'account_pages:role-permissions' 0 %}" data-login-url="{% url 'account_pages:login' %}">
+    <div class="page-heading"><div><p class="page-eyebrow">Roles &amp; permissions</p><h1 class="page-title">Roles<span class="text-emerald-600">.</span></h1><p class="page-description">Keep access organized around the people who need it.</p></div></div>
+    <div class="form-status mb-6" data-role-feedback role="status" aria-live="polite" tabindex="-1" hidden></div>
+    <section class="users-panel" aria-label="Role directory">
+        <div class="users-toolbar"><div><h2 class="section-title">All roles <span class="user-count" data-role-count hidden></span></h2><p class="mt-1 text-xs text-stone-400">Simple roles. Clear responsibilities.</p></div></div>
+        <p class="users-list-status" data-role-status role="status" aria-live="polite">Loading roles...</p>
+        <div class="users-list-error" data-role-error role="alert" hidden><p data-role-error-message></p><button type="button" class="text-button mt-3" data-role-retry>Try again <span aria-hidden="true">&rarr;</span></button></div>
+        <div class="users-empty" data-role-empty hidden><h3 class="font-semibold text-stone-800">No roles yet</h3><p class="mt-2 text-sm text-stone-500">Available roles will appear here.</p></div>
+        <div class="users-table-scroll" data-role-table hidden><table class="users-table roles-table"><caption class="sr-only">Roles and available actions</caption><thead><tr><th scope="col">Role name</th><th scope="col" class="role-actions-heading">Actions</th></tr></thead><tbody data-role-rows></tbody></table></div>
+    </section>
+    <template id="role-actions-template">
+        <div class="role-actions">
+            <button type="button" class="role-action" data-role-edit title="Edit role" aria-label="Edit role"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="m16 3 5 5-12 12-6 1 1-6L16 3ZM13 6l5 5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+            <a class="role-action" data-role-manage title="Manage permissions" aria-label="Manage permissions"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="m12 3 8 3v6c0 5-8 9-8 9S4 17 4 12V6l8-3Z" stroke-linejoin="round"/><path d="m8.5 12 2.5 2.5 4.5-5" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
+            <button type="button" class="role-action role-action-danger" data-role-delete title="Delete role" aria-label="Delete role"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+        </div>
+    </template>
+    <dialog class="role-dialog" data-edit-dialog aria-labelledby="edit-role-title">
+        <form data-edit-role-form novalidate>{% csrf_token %}<p class="page-eyebrow">Role details</p><h2 id="edit-role-title" class="text-xl font-semibold tracking-tight">Edit role</h2><p class="section-description">Give this role a clear, recognizable name.</p><label for="role-name" class="form-label">Role name</label><input id="role-name" name="name" type="text" class="form-input" required maxlength="150" aria-describedby="role-name-error" autocomplete="off"><p id="role-name-error" class="form-error" data-edit-role-error role="alert" hidden></p><div class="dialog-actions"><button type="button" class="secondary-button" data-dialog-close>Cancel</button><button type="submit" class="primary-button compact-primary" data-dialog-submit>Save name</button></div></form>
+    </dialog>
+    <dialog class="role-dialog" data-delete-dialog aria-labelledby="delete-role-title">
+        <form data-delete-role-form>{% csrf_token %}<p class="page-eyebrow">Remove role</p><h2 id="delete-role-title" class="text-xl font-semibold tracking-tight">Delete <span data-delete-role-name></span>?</h2><p class="section-description">Users will lose access granted through this role. Their accounts will remain. This action cannot be undone.</p><p class="form-error" data-delete-role-error role="alert" hidden></p><div class="dialog-actions"><button type="button" class="secondary-button" data-dialog-close>Cancel</button><button type="submit" class="primary-button compact-primary danger-button" data-dialog-submit>Delete role</button></div></form>
+    </dialog>
+    <noscript><p class="form-error mt-5">Enable JavaScript to load and manage roles.</p></noscript>
+</div>
+{% endblock %}
+{% block workspace_js %}<script type="module" src="{% static 'account/js/roles.js' %}"></script>{% endblock %}

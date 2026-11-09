@@ -57,7 +57,7 @@ class WorkspacePageTests(TestCase):
         self.assertContains(response, 'avery@example.com')
         self.assertNotContains(response, 'Other Private Person')
         self.assertNotContains(response, 'other@example.com')
-        self.assertContains(response, 'data-nav-item', count=3)
+        self.assertContains(response, 'data-nav-item', count=4)
         self.assertContains(response, 'data-users-toggle')
         self.assertContains(response, f'href="{reverse("account_pages:add-user")}"')
         self.assertContains(response, f'href="{reverse("account_pages:user-list")}"')

@@ -95,6 +95,95 @@ redirects to `/account/users/` on success. The list page fetches this endpoint
 and supports search, pagination, loading, empty, and retry states. Both pages
 are available under the expandable Users sidebar menu.
 
+## List permissions
+
+Send `GET /account/api/permissions/` with a logged-in session cookie. The endpoint
+uses `SessionAuthentication` and `IsAuthenticated`, matching Add User. Any active
+authenticated user can list permissions; no staff or superuser status is required.
+GET requests do not need a CSRF header or request body.
+
+The response is a JSON array of all Django permissions, including custom
+permissions. Each item contains `id`, `name`, `codename`, `content_type` (the
+content-type ID), `app_label`, and `model`. Results are ordered by app, model,
+and codename. There is no pagination. This lists available permissions rather
+than only permissions assigned to the current user, and does not assign any.
+Anonymous requests return 403; POST is not supported.
+
+## List groups
+
+Send `GET /account/api/groups/` with a logged-in session cookie. Like Add User
+and the permission list, it uses `SessionAuthentication` and `IsAuthenticated`.
+No request body or CSRF header is needed for this GET request.
+
+The response is a JSON array of all Django groups, ordered by name, without
+pagination. Each item contains `id`, `name`, and `permissions` (a list of
+permission IDs matching the permission-list endpoint). Groups without permissions
+have an empty list; no groups returns `[]`. Group membership is not required to
+list a group. This endpoint does not create groups or assign memberships or
+permissions. Anonymous requests return 403; POST is not supported.
+
+## Manage roles
+
+Roles use Django groups. The protected `/account/roles/` page loads the group
+list API and displays each role's name with Edit, Manage permissions and Delete
+icon actions. The sidebar has an expandable Roles & Permissions section.
+
+`GET /account/api/groups/<id>/` returns one group's ID, name and permission IDs.
+`PATCH` on the same URL renames it with `{"name": "Teachers"}`. Names are
+required, nonblank, unique and at most 150 characters. Permission IDs are read-only
+on this endpoint. `DELETE` removes the group and returns 204 with no body; it
+removes group memberships without deleting user accounts or permission records.
+These actions use `SessionAuthentication` and `IsAuthenticated`; any authenticated
+user can currently rename or delete roles. PATCH and DELETE require CSRF.
+Missing groups return 404. The UI confirms deletion before making the request.
+
+Manage permissions opens `/account/roles/<id>/permissions/`. It fetches the
+permission catalog and group detail, then groups permissions by content-type ID
+so models with the same name in different apps remain separate. Each model gets
+Create (`add`), Read (`view`), Update (`change`) and Delete columns; custom
+permissions appear alongside them. Missing CRUD permissions display a dash.
+Assigned permissions are checked. Checkbox values are permission IDs; the page
+shows a selection count and supports resetting to the loaded assignments.
+Save permissions submits all checked permission IDs through fetch to the
+group-permissions PUT endpoint with a CSRF token. After HTTP 200, the browser
+redirects to the role list. Failures display an error without clearing the
+selection. Save, Reset and the checkboxes are disabled during the request to
+prevent repeated or conflicting submissions. Unchecking every permission sends
+an empty list to clear the role's assignments.
+
+## Replace group permissions
+
+Send `PUT /account/api/groups/<id>/permissions/` with a logged-in session cookie
+and the current `X-CSRFToken` header:
+
+```json
+{
+  "permissions": [1, 2, 5, 8]
+}
+```
+
+Use real IDs from the permission list API. The `permissions` field is required
+and must be a list of existing positive integer permission IDs. Duplicate IDs
+are removed. Any invalid ID rejects the entire request with HTTP 400 without
+changing existing assignments. An empty list explicitly clears all permissions.
+
+The endpoint replaces the group's entire permission selection, including custom
+permissions. Repeating a request has the same result. HTTP 200 returns the group's
+`id`, `name` and saved `permissions` IDs. It does not rename groups, change their
+memberships or alter direct user permissions. Missing groups return 404.
+
+Authentication is `SessionAuthentication` and the current permission class is
+`IsAuthenticated`: any active authenticated user can assign permissions.
+Requests without a valid session/CSRF token receive 403. Only PUT and OPTIONS are supported;
+read current assignments through the existing group-detail GET endpoint.
+
+Replacement uses `transaction.atomic()` and locks the group with
+`select_for_update()` on databases that support row locking. Assignment writers
+should use the same locking convention. SQLite does not provide these row locks.
+There is no revision check, so a later completed save can replace an earlier
+selection. The permission page connects to this endpoint and redirects to
+`/account/roles/` after a successful save.
+
 ## Log out
 
 Send `POST /account/api/logout/` with the session cookie and current CSRF token.

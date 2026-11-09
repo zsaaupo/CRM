@@ -1,4 +1,5 @@
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Group, Permission
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db.models import Q
@@ -106,6 +107,47 @@ class UserListSerializer(serializers.ModelSerializer):
     def get_designation(self, user):
         account = getattr(user, 'account', None)
         return (account.designation if account else '') or ''
+
+
+class PermissionListSerializer(serializers.ModelSerializer):
+    app_label = serializers.CharField(source='content_type.app_label', read_only=True)
+    model = serializers.CharField(source='content_type.model', read_only=True)
+
+    class Meta:
+        model = Permission
+        fields = ['id', 'name', 'codename', 'content_type', 'app_label', 'model']
+        read_only_fields = fields
+
+
+class GroupListSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Group
+        fields = ['id', 'name', 'permissions']
+        read_only_fields = fields
+
+
+class GroupDetailSerializer(GroupListSerializer):
+    class Meta(GroupListSerializer.Meta):
+        read_only_fields = ['id', 'permissions']
+
+
+class GroupPermissionsSerializer(serializers.Serializer):
+    permissions = serializers.ListField(
+        child=serializers.IntegerField(min_value=1),
+        allow_empty=True,
+    )
+
+    def validate_permissions(self, value):
+        permission_ids = set(value)
+        existing_ids = set(Permission.objects.filter(
+            pk__in=permission_ids,
+        ).values_list('pk', flat=True))
+        invalid_ids = sorted(permission_ids - existing_ids)
+        if invalid_ids:
+            raise serializers.ValidationError(
+                f'Invalid permission IDs: {", ".join(map(str, invalid_ids))}.',
+            )
+        return sorted(permission_ids)
 
 
 class VerifyOTPSerializer(serializers.Serializer):

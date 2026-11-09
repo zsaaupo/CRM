@@ -38,11 +38,12 @@ const sidebarClose = document.querySelector("[data-sidebar-close]");
 const sidebarOverlay = document.querySelector("[data-sidebar-overlay]");
 const desktop = window.matchMedia("(min-width: 960px)");
 
-const usersToggle = document.querySelector("[data-users-toggle]");
-const usersSubmenu = document.getElementById("users-submenu");
-usersToggle?.addEventListener("click", () => {
-    usersSubmenu.hidden = !usersSubmenu.hidden;
-    usersToggle.setAttribute("aria-expanded", String(!usersSubmenu.hidden));
+document.querySelectorAll("[data-nav-toggle]").forEach((toggle) => {
+    const submenu = document.getElementById(toggle.getAttribute("aria-controls"));
+    toggle.addEventListener("click", () => {
+        submenu.hidden = !submenu.hidden;
+        toggle.setAttribute("aria-expanded", String(!submenu.hidden));
+    });
 });
 
 function setSidebar(open, returnFocus = false) {

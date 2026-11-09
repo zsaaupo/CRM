@@ -1,5 +1,6 @@
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.shortcuts import redirect
+from django.contrib.auth.models import Group
+from django.shortcuts import get_object_or_404, redirect
 from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import never_cache
@@ -62,6 +63,21 @@ class AddUserPageView(ProtectedAccountPageView):
 class UserListPageView(ProtectedAccountPageView):
     template_name = 'account/user_list.html'
     extra_context = {'page_label': 'User list', 'page_section': 'users', 'user_page': 'list'}
+
+
+class RoleListPageView(ProtectedAccountPageView):
+    template_name = 'account/role_list.html'
+    extra_context = {'page_label': 'Role list', 'page_section': 'roles', 'role_page': 'list'}
+
+
+class RolePermissionsPageView(ProtectedAccountPageView):
+    template_name = 'account/role_permissions.html'
+    extra_context = {'page_label': 'Manage permissions', 'page_section': 'roles'}
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['role'] = get_object_or_404(Group, pk=self.kwargs['pk'])
+        return context
 
 
 class SignUpPageView(TemplateView):

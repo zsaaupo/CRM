@@ -14,7 +14,7 @@
             <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
             Dashboard
         </a>
-        <button type="button" class="sidebar-link sidebar-group-toggle {% if page_section == 'users' %}is-current{% endif %}" data-users-toggle aria-controls="users-submenu" aria-expanded="{% if page_section == 'users' %}true{% else %}false{% endif %}">
+        <button type="button" class="sidebar-link sidebar-group-toggle {% if page_section == 'users' %}is-current{% endif %}" data-nav-toggle data-users-toggle aria-controls="users-submenu" aria-expanded="{% if page_section == 'users' %}true{% else %}false{% endif %}">
             <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3 21v-2a6 6 0 0 1 12 0v2M16 5a3 3 0 0 1 0 6M18 15a5 5 0 0 1 3 4v2" stroke-linecap="round"/></svg>
             <span>Users</span>
             <svg class="sidebar-chevron" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m9 5 7 7-7 7" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -22,6 +22,14 @@
         <div id="users-submenu" class="sidebar-submenu" {% if page_section != 'users' %}hidden{% endif %}>
             <a href="{% url 'account_pages:add-user' %}" data-nav-item class="sidebar-sub-link {% if user_page == 'add' %}is-current{% endif %}" {% if user_page == 'add' %}aria-current="page"{% endif %}>Add user</a>
             <a href="{% url 'account_pages:user-list' %}" data-nav-item class="sidebar-sub-link {% if user_page == 'list' %}is-current{% endif %}" {% if user_page == 'list' %}aria-current="page"{% endif %}>User list</a>
+        </div>
+        <button type="button" class="sidebar-link sidebar-group-toggle {% if page_section == 'roles' %}is-current{% endif %}" data-nav-toggle data-roles-toggle aria-controls="roles-submenu" aria-expanded="{% if page_section == 'roles' %}true{% else %}false{% endif %}">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="m12 3 8 3v6c0 5-8 9-8 9S4 17 4 12V6l8-3Z" stroke-linejoin="round"/><path d="m8.5 12 2.5 2.5 4.5-5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span>Roles &amp; Permissions</span>
+            <svg class="sidebar-chevron" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m9 5 7 7-7 7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <div id="roles-submenu" class="sidebar-submenu" {% if page_section != 'roles' %}hidden{% endif %}>
+            <a href="{% url 'account_pages:role-list' %}" data-nav-item class="sidebar-sub-link {% if page_section == 'roles' %}is-current{% endif %}" {% if role_page == 'list' %}aria-current="page"{% endif %}>Role list</a>
         </div>
     </nav>
     <div class="sidebar-footer"><span class="status-dot" aria-hidden="true"></span> A little more clarity, every day.</div>

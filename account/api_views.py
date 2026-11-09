@@ -2,6 +2,7 @@ from datetime import timedelta
 from functools import partial
 
 from django.contrib.auth import authenticate, get_user_model, login as auth_login, logout as auth_logout
+from django.contrib.auth.models import Group, Permission
 from django.db import IntegrityError, transaction
 from django.db.models import Q
 from django.middleware.csrf import get_token
@@ -11,7 +12,7 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import csrf_protect
 from rest_framework import status
 from rest_framework.exceptions import ValidationError
-from rest_framework.generics import GenericAPIView, ListAPIView
+from rest_framework.generics import GenericAPIView, ListAPIView, RetrieveUpdateDestroyAPIView
 from rest_framework.authentication import SessionAuthentication
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -23,7 +24,11 @@ from .models import Account
 from .serializers import (
     AccountSerializer,
     AddUserSerializer,
+    GroupDetailSerializer,
+    GroupListSerializer,
+    GroupPermissionsSerializer,
     LoginSerializer,
+    PermissionListSerializer,
     ResendOTPSerializer,
     SignUpSerializer,
     UserListSerializer,
@@ -95,6 +100,8 @@ class AddUserAPIView(GenericAPIView):
     def post(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+
+
         data = dict(serializer.validated_data)
         password = data.pop('password')
         data.pop('password_confirm')
@@ -149,6 +156,65 @@ class UserListAPIView(ListAPIView):
                 | Q(account__designation__icontains=query)
             )
         return users
+
+
+@method_decorator(never_cache, name='dispatch')
+class PermissionListAPIView(ListAPIView):
+    serializer_class = PermissionListSerializer
+    authentication_classes = [SessionAuthentication]
+    permission_classes = [IsAuthenticated]
+    pagination_class = None
+    queryset = Permission.objects.select_related('content_type').order_by(
+        'content_type__app_label', 'content_type__model', 'codename', 'pk',
+    )
+
+
+@method_decorator(never_cache, name='dispatch')
+class GroupListAPIView(ListAPIView):
+    serializer_class = GroupListSerializer
+    authentication_classes = [SessionAuthentication]
+    permission_classes = [IsAuthenticated]
+    pagination_class = None
+    queryset = Group.objects.prefetch_related('permissions').order_by('name', 'pk')
+
+
+@method_decorator(never_cache, name='dispatch')
+class GroupDetailAPIView(RetrieveUpdateDestroyAPIView):
+    serializer_class = GroupDetailSerializer
+    authentication_classes = [SessionAuthentication]
+    permission_classes = [IsAuthenticated]
+    http_method_names = ['get', 'patch', 'delete', 'head', 'options']
+    queryset = Group.objects.prefetch_related('permissions')
+
+    def perform_update(self, serializer):
+        try:
+            with transaction.atomic():
+                serializer.save()
+        except IntegrityError as exc:
+            if Group.objects.filter(name=serializer.validated_data.get('name')).exclude(
+                pk=serializer.instance.pk,
+            ).exists():
+                raise ValidationError({'name': 'A group with this name already exists.'}) from exc
+            raise
+
+
+@method_decorator(never_cache, name='dispatch')
+class GroupPermissionsAPIView(GenericAPIView):
+    serializer_class = GroupPermissionsSerializer
+    authentication_classes = [SessionAuthentication]
+    permission_classes = [IsAuthenticated]
+    http_method_names = ['put', 'options']
+    queryset = Group.objects.select_for_update()
+
+    def put(self, request, *args, **kwargs):
+        with transaction.atomic():
+            group = self.get_object()
+            serializer = self.get_serializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            group.permissions.set(serializer.validated_data['permissions'])
+            result = GroupListSerializer(group).data
+
+        return Response(result, status=status.HTTP_200_OK)
 
 
 class SignUpAPIView(GenericAPIView):

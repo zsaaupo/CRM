@@ -4,8 +4,12 @@ from django.urls import path
 
 from .api_views import (
     AddUserAPIView,
+    GroupDetailAPIView,
+    GroupListAPIView,
+    GroupPermissionsAPIView,
     LoginAPIView,
     LogoutAPIView,
+    PermissionListAPIView,
     ResendOTPAPIView,
     SignUpAPIView,
     UserListAPIView,
@@ -20,6 +24,10 @@ urlpatterns = [
     path('logout/', LogoutAPIView.as_view(), name='logout'),
     path('add-user/', AddUserAPIView.as_view(), name='add-user'),
     path('users/', UserListAPIView.as_view(), name='user-list'),
+    path('permissions/', PermissionListAPIView.as_view(), name='permission-list'),
+    path('groups/', GroupListAPIView.as_view(), name='group-list'),
+    path('groups/<int:pk>/', GroupDetailAPIView.as_view(), name='group-detail'),
+    path('groups/<int:pk>/permissions/', GroupPermissionsAPIView.as_view(), name='group-permissions'),
     path('signup/', SignUpAPIView.as_view(), name='signup'),
     path('verify-otp/', VerifyOTPAPIView.as_view(), name='verify-otp'),
     path('resend-otp/', ResendOTPAPIView.as_view(), name='resend-otp'),

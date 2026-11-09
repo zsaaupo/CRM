@@ -51,6 +51,8 @@ the shared typography and accessibility styles.
 - `/account/profile/` shows that user's profile details.
 - `/account/add-user/` creates an active user through the authenticated API.
 - `/account/users/` shows the authenticated user directory.
+- `/account/roles/` lists roles with edit, permissions and delete icon actions.
+- `/account/roles/<id>/permissions/` edits a role's model permissions.
 - `/account/signup/` renders `account/signup.html`.
 - `/account/verify-otp/` renders `account/verify_otp.html`.
 - Existing JSON endpoints stay under `/account/api/`.
@@ -74,6 +76,13 @@ Profile and Logout actions. Mobile navigation opens as a drawer and closes with
 Escape or the backdrop; keyboard focus stays inside the drawer while it is open.
 Logout uses a CSRF-protected POST and clears the session. Dashboard/profile pages
 are not cached, and browser-history restoration triggers an authentication recheck.
+
+Roles & Permissions expands to Role list. `roles.js` loads groups, handles the
+rename dialog and confirms deletion. `permissions.js` renders a checkbox matrix
+with one CRUD row per model, current group assignments, and any custom
+permissions. Save permissions sends checked IDs with a CSRF-protected PUT and
+redirects to the role list on success. Errors preserve checkbox selections;
+controls are disabled while saving. Reset restores the loaded assignments.
 
 Use `{% url %}` for page and API routes, and `{% static %}` for asset URLs.
 Use `{% csrf_token %}` in forms and send its value as `X-CSRFToken` when adding

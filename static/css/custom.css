@@ -215,6 +215,34 @@ button:focus-visible { outline: 2px solid #059669; outline-offset: 3px; }
 .users-list-error { margin: 24px; border: 1px solid #fecaca; border-radius: 12px; background: #fef2f2; padding: 20px; color: #991b1b; font-size: 13px; }
 .users-empty { padding: 52px 24px; text-align: center; }
 .users-pagination { display: flex; align-items: center; justify-content: space-between; gap: 16px; border-top: 1px solid #f0eeec; padding: 18px 24px; color: #a8a29e; font-size: 11px; }
+.roles-table .role-name-cell { max-width: none; color: #292524; font-weight: 550; }
+.roles-table .role-actions-heading { width: 160px; text-align: right; }
+.role-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.role-action { display: inline-flex; width: 35px; height: 35px; flex-shrink: 0; align-items: center; justify-content: center; border: 1px solid #e7e5e4; border-radius: 9px; background: #fff; color: #78716c; cursor: pointer; }
+.role-action:hover { border-color: #a7d5bd; background: #ecfdf5; color: #047857; }
+.role-action-danger:hover { border-color: #fecaca; background: #fef2f2; color: #b91c1c; }
+.role-action:focus-visible { outline: 2px solid #059669; outline-offset: 3px; }
+.role-dialog { width: min(440px, calc(100vw - 32px)); max-height: calc(100svh - 40px); margin: auto; overflow-y: auto; border: 1px solid #e7e5e4; border-radius: 18px; background: #fff; padding: 28px; color: #292524; box-shadow: 0 20px 80px -20px #1c19174d; }
+.role-dialog::backdrop { background: #1c191766; backdrop-filter: blur(3px); }
+.role-dialog h2 { overflow-wrap: anywhere; }
+.dialog-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 26px; }
+.danger-button { background: #b91c1c; }
+.danger-button:hover:not(:disabled) { background: #991b1b; }
+.permission-preview-note { display: flex; align-items: flex-start; gap: 11px; margin-bottom: 24px; border: 1px solid #d6e7dd; border-radius: 12px; background: #f0f7f2; padding: 16px 18px; color: #397153; font-size: 12px; line-height: 1.8; }
+.permission-preview-note svg { flex-shrink: 0; margin-top: 2px; }
+.permission-toolbar-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.permission-fields { min-width: 0; margin: 0; border: 0; padding: 0; }
+.permissions-table { min-width: 620px; }
+.permissions-table thead th:not(:first-child), .permissions-table td { text-align: center; }
+.permissions-table tbody th { min-width: 160px; border-top: 1px solid #f5f5f4; background: transparent; padding: 18px 22px; white-space: normal; }
+.permissions-table tbody tr:hover th { background: #fdfdfb; }
+.permission-model-name { display: block; color: #292524; font-size: 12px; font-weight: 550; text-transform: capitalize; }
+.permission-app-name { display: block; margin-top: 4px; color: #a8a29e; font-size: 10px; font-weight: 400; }
+.permission-checkbox-label { display: inline-flex; min-width: 36px; min-height: 36px; align-items: center; justify-content: center; gap: 9px; cursor: pointer; }
+.permission-checkbox { width: 17px; height: 17px; flex-shrink: 0; accent-color: #047857; cursor: pointer; }
+.permission-checkbox:focus-visible { outline: 2px solid #059669; outline-offset: 4px; }
+.permissions-table td.custom-permissions-cell { min-width: 220px; max-width: 330px; text-align: left; }
+.custom-permissions-cell .permission-checkbox-label { display: flex; justify-content: flex-start; font-size: 11px; }
 @media (max-width: 1199px) {
     .user-form-layout { grid-template-columns: minmax(0, 1fr); }
     .user-form-aside { display: none; }
