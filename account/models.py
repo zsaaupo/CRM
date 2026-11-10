@@ -7,6 +7,9 @@ from .strings import gender_choice
 
 class Account(models.Model):
 
+    class Meta:
+        permissions = [('manage_access', 'Can manage role assignments and role permissions')]
+
     user = models.OneToOneField(User, on_delete=models.PROTECT, related_name='account')
 
     full_name = models.CharField(max_length=150)

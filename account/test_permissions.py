@@ -1,3 +1,4 @@
+from .test_helpers import grant_permissions
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
 from django.contrib.contenttypes.models import ContentType
@@ -15,20 +16,21 @@ User = get_user_model()
 class PermissionListAPIViewTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(username='person@example.com')
+        grant_permissions(self.user, 'auth.view_permission')
         self.client = APIClient(enforce_csrf_checks=True)
         self.url = reverse('account:permission-list')
 
     def test_regular_authenticated_user_can_list_all_permissions(self):
         self.client.force_login(self.user)
         self.assertFalse(self.user.is_staff)
-        self.assertFalse(self.user.user_permissions.exists())
+        self.assertEqual(self.user.user_permissions.count(), 1)
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, 200)
         self.assertIsInstance(response.data, list)
         self.assertEqual(len(response.data), Permission.objects.count())
         self.assertGreater(len(response.data), 0)
         self.assertIn('no-store', response['Cache-Control'])
-        self.assertFalse(self.user.user_permissions.exists())
+        self.assertEqual(self.user.user_permissions.count(), 1)
 
     def test_anonymous_request_is_rejected(self):
         response = self.client.get(self.url)
@@ -64,7 +66,7 @@ class PermissionListAPIViewTests(TestCase):
         }, format='json', HTTP_X_CSRFTOKEN=token)
         self.assertEqual(response.status_code, 405)
         self.assertEqual(Permission.objects.count(), before)
-        self.assertFalse(self.user.user_permissions.exists())
+        self.assertEqual(self.user.user_permissions.count(), 1)
 
     def test_serializing_permission_models_uses_one_query(self):
         with self.assertNumQueries(1):

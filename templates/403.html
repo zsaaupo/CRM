@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Access denied | eManager{% endblock %}
+{% block content %}
+<section class="mx-auto max-w-lg px-6 py-24">
+    <h1 class="text-3xl font-semibold">Access denied</h1>
+    <p class="mt-4 text-sm text-stone-600">You do not have permission to access this page or change this assignment. Contact your administrator if you need access.</p>
+    <a href="{% url 'dashboard' %}" class="secondary-button mt-6">Back to dashboard</a>
+</section>
+{% endblock %}

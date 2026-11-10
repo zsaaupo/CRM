@@ -1,3 +1,4 @@
+from .test_helpers import grant_permissions
 from django.conf import settings
 from django.contrib.auth import SESSION_KEY, get_user_model
 from django.contrib.auth.models import Group, Permission
@@ -110,6 +111,7 @@ class UserListAPIViewTests(APITestCase):
 class UserManagementPageTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(username='creator@example.com', password='Creator!74#Secure')
+        grant_permissions(self.user, 'auth.add_user', 'auth.view_user', 'auth.change_user', 'auth.view_group', 'account.manage_access')
         self.user.user_permissions.add(Permission.objects.get(
             content_type__app_label='auth', codename='view_user',
         ))

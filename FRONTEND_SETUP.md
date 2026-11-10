@@ -1,5 +1,8 @@
 # Django frontend foundation
 
+See [ACCESS_CONTROL.md](ACCESS_CONTROL.md) for the site-wide permission policy
+and setup for delegated administrators.
+
 The initial pages use Django template inheritance, Tailwind's browser CDN,
 and namespaced vanilla JavaScript. Signup, verification, and resend forms use
 `fetch()` to call the JSON APIs without reloading on validation errors. The login
@@ -68,15 +71,17 @@ The dashboard sidebar contains Dashboard and an expandable Users section with
 Add user and User list links. The Users section stays expanded on those pages,
 with the current page highlighted. The add-user form sends a CSRF-protected
 fetch POST, shows field validation errors, and redirects to the user list on
-success. The list calls `GET /account/api/users/`, supports search and 20-user
+success when permitted, or to the dashboard otherwise. The list calls `GET /account/api/users/`, supports search and 20-user
 pages, and displays active/inactive status. Both new pages require login.
 The user list page and API additionally require `auth.view_user`, inherited from
 the user's assigned group or granted directly. In the role permission matrix,
 select Read for the user model in the auth app. Active superusers retain access.
 The User list sidebar link is hidden without permission. Direct navigation by
 authenticated users without permission returns 403. Permission changes apply on
-the next request; a list API 403 displays an access-denied message. Other modules
-retain their existing permission rules in this first rollout.
+the next request; a list API 403 displays an access-denied message. All management
+pages and APIs enforce the shared policy in `account/permissions.py`. Navigation
+and action buttons follow that policy. Dashboard, own profile and logout require
+login only; authentication and verification pages remain public.
 
 The top-right initials avatar opens
 Profile and Logout actions. Mobile navigation opens as a drawer and closes with
@@ -84,19 +89,22 @@ Escape or the backdrop; keyboard focus stays inside the drawer while it is open.
 Logout uses a CSRF-protected POST and clears the session. Dashboard/profile pages
 are not cached, and browser-history restoration triggers an authentication recheck.
 
-Each user row has an Assign role action with a shield/check permission icon.
+Authorized access administrators see an Assign role action with a shield/check
+permission icon on user rows.
 It opens the protected `/account/users/<id>/assign-role/` page, showing the target
 user, current role and a single-role dropdown. Saving sends the user and group IDs
 to `POST /account/api/assign-group/` with CSRF protection and redirects to the user
 list on success. Errors preserve the selection. With no roles, saving is disabled
-and the page links to Add role. Cancel returns to the user list without saving.
+and authorized creators see a link to Add role. Cancel returns to the user list
+without saving.
 
 The Add role button with a plus icon sits in the page heading above the role table,
 matching the Add user button on the user list page.
 It opens the protected `/account/roles/add/` page. The form uses `auth.js` to
 submit the role name to `POST /account/api/groups/` with CSRF protection, displays
-validation errors, and redirects to the role list after creation. Cancel returns
-to the role list. New roles start without permissions.
+validation errors, and redirects to the role list after creation when permitted,
+or to the dashboard otherwise. Cancel follows the same destination. New roles
+start without permissions.
 
 Roles & Permissions expands to Role list. `roles.js` loads groups, handles the
 rename dialog and confirms deletion. `permissions.js` renders a checkbox matrix

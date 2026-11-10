@@ -53,8 +53,11 @@ if (directory) {
         actions.textContent = "";
         const controls = document.getElementById("user-actions-template").content.cloneNode(true);
         const assign = controls.querySelector("[data-assign-role]");
-        assign.href = directory.dataset.assignRoleUrl.replace("/0/", `/${user.id}/`);
-        assign.setAttribute("aria-label", `Assign role to ${user.full_name || user.email || "user"}`);
+        if (assign) {
+            assign.href = directory.dataset.assignRoleUrl.replace("/0/", `/${user.id}/`);
+            assign.setAttribute("aria-label", `Assign role to ${user.full_name || user.email || "user"}`);
+            if (String(user.id) === directory.dataset.currentUserId && directory.dataset.superuser !== "true") assign.remove();
+        }
         actions.append(controls);
         row.append(actions);
         return row;

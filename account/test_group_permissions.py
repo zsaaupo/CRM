@@ -95,7 +95,7 @@ class GroupPermissionsAPIViewTests(TestCase):
         self.assertEqual(response.status_code, 403)
         self.assertEqual(list(self.group.permissions.all()), [self.old])
 
-    def test_regular_user_and_staff_can_assign_with_current_is_authenticated_policy(self):
+    def test_regular_user_and_staff_cannot_assign_without_access_management_permission(self):
         for is_staff in [False, True]:
             with self.subTest(is_staff=is_staff):
                 self.member.is_staff = is_staff
@@ -104,8 +104,8 @@ class GroupPermissionsAPIViewTests(TestCase):
                 client.force_login(self.member)
                 token = client.get(reverse('account:login')).data['csrfToken']
                 response = client.put(self.url, {'permissions': [self.new.pk]}, format='json', HTTP_X_CSRFTOKEN=token)
-                self.assertEqual(response.status_code, 200)
-        self.assertEqual(list(self.group.permissions.all()), [self.new])
+                self.assertEqual(response.status_code, 403)
+        self.assertEqual(list(self.group.permissions.all()), [self.old])
 
     def test_inactive_superuser_cannot_assign(self):
         self.superuser.is_active = False

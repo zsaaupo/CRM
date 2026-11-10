@@ -22,7 +22,7 @@
         <p id="assign-role-error" class="form-error" data-assignment-error hidden></p>
         <p id="assign-role-hint" class="mt-2 text-xs leading-5 text-stone-500">Saving replaces any previous role. A user can be assigned to only one role here.</p>
         {% else %}
-        <p class="section-description">No roles are available. <a href="{% url 'account_pages:add-role' %}" class="text-button">Add a role</a>, then return here to assign it.</p>
+        <p class="section-description">No roles are available. {% if access.add_role %}<a href="{% url 'account_pages:add-role' %}" class="text-button">Add a role</a>, then return here to assign it.{% else %}Ask your administrator to create a role.{% endif %}</p>
         {% endif %}
         <div class="user-form-actions">
             <a href="{% url 'account_pages:user-list' %}" class="secondary-button">Cancel</a>

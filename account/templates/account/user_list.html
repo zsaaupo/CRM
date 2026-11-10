@@ -3,10 +3,10 @@
 
 {% block title %}User list | eManager{% endblock %}
 {% block content %}
-<div class="workspace-content" data-user-list data-api-url="{% url 'account:user-list' %}" data-login-url="{% url 'account_pages:login' %}" data-assign-role-url="{% url 'account_pages:assign-role' 0 %}">
+<div class="workspace-content" data-user-list data-current-user-id="{{ request.user.pk }}" data-superuser="{{ request.user.is_superuser|yesno:'true,false' }}" data-api-url="{% url 'account:user-list' %}" data-login-url="{% url 'account_pages:login' %}" data-assign-role-url="{% url 'account_pages:assign-role' 0 %}">
     <div class="page-heading">
         <div><p class="page-eyebrow">People &amp; access</p><h1 class="page-title">Users<span class="text-emerald-600">.</span></h1><p class="page-description">The people who make up your workspace.</p></div>
-        <a href="{% url 'account_pages:add-user' %}" class="primary-button compact-primary"><span aria-hidden="true">+</span> Add user</a>
+        {% if access.add_user %}<a href="{% url 'account_pages:add-user' %}" class="primary-button compact-primary"><span aria-hidden="true">+</span> Add user</a>{% endif %}
     </div>
     <section class="users-panel" aria-label="User directory">
         <div class="users-toolbar">
@@ -15,7 +15,7 @@
         </div>
         <p class="users-list-status" data-list-status role="status" aria-live="polite">Loading users...</p>
         <div class="users-list-error" data-list-error role="alert" hidden><p data-list-error-message></p><button type="button" class="text-button mt-3" data-list-retry>Try again <span aria-hidden="true">&rarr;</span></button></div>
-        <div class="users-empty" data-list-empty hidden><span class="user-aside-icon mx-auto" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="8" r="4"/><path d="M4 21v-2a8 8 0 0 1 16 0v2" stroke-linecap="round"/></svg></span><h3 class="mt-4 font-semibold text-stone-800">No users found</h3><p class="mt-2 text-sm text-stone-500">Try a different search or add someone new.</p><a href="{% url 'account_pages:add-user' %}" class="text-button mt-5">Add your first user <span aria-hidden="true">&rarr;</span></a></div>
+        <div class="users-empty" data-list-empty hidden><span class="user-aside-icon mx-auto" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="8" r="4"/><path d="M4 21v-2a8 8 0 0 1 16 0v2" stroke-linecap="round"/></svg></span><h3 class="mt-4 font-semibold text-stone-800">No users found</h3><p class="mt-2 text-sm text-stone-500">Try a different search or add someone new.</p>{% if access.add_user %}<a href="{% url 'account_pages:add-user' %}" class="text-button mt-5">Add your first user <span aria-hidden="true">&rarr;</span></a>{% endif %}</div>
         <div class="users-table-scroll" data-list-table hidden>
             <table class="users-table"><caption class="sr-only">Users and their account details</caption><thead><tr><th scope="col">Name</th><th scope="col">Email address</th><th scope="col">Phone number</th><th scope="col">Designation</th><th scope="col">Status</th><th scope="col">Joined</th><th scope="col" class="user-actions-heading">Actions</th></tr></thead><tbody data-user-rows></tbody></table>
         </div>
@@ -23,7 +23,7 @@
         <noscript><p class="form-error p-6">Enable JavaScript to load the user list.</p></noscript>
     </section>
     <template id="user-actions-template">
-        <div class="role-actions"><a class="role-action" data-assign-role title="Assign role" aria-label="Assign role"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="m12 3 8 3v6c0 5-8 9-8 9S4 17 4 12V6l8-3Z" stroke-linejoin="round"/><path d="m8.5 12 2.5 2.5 4.5-5" stroke-linecap="round" stroke-linejoin="round"/></svg></a></div>
+        <div class="role-actions">{% if access.assign_role %}<a class="role-action" data-assign-role title="Assign role" aria-label="Assign role"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="m12 3 8 3v6c0 5-8 9-8 9S4 17 4 12V6l8-3Z" stroke-linejoin="round"/><path d="m8.5 12 2.5 2.5 4.5-5" stroke-linecap="round" stroke-linejoin="round"/></svg></a>{% endif %}</div>
     </template>
 </div>
 {% endblock %}

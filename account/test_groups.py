@@ -1,3 +1,4 @@
+from .test_helpers import grant_permissions
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -16,6 +17,7 @@ User = get_user_model()
 class GroupListAPIViewTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(username='person@example.com')
+        grant_permissions(self.user, 'auth.view_group', 'auth.add_group')
         self.client = APIClient(enforce_csrf_checks=True)
         self.url = reverse('account:group-list')
 
@@ -35,7 +37,7 @@ class GroupListAPIViewTests(TestCase):
         ])
         self.assertIn('no-store', response['Cache-Control'])
         self.assertFalse(self.user.groups.exists())
-        self.assertFalse(self.user.user_permissions.exists())
+        self.assertEqual(self.user.user_permissions.count(), 2)
 
     def test_anonymous_and_inactive_sessions_are_rejected(self):
         self.assertEqual(self.client.get(self.url).status_code, 403)

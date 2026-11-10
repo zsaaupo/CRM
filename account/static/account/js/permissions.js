@@ -131,7 +131,7 @@ if (panel) {
             updateCount();
         } catch (error) {
             if (version !== loadVersion) return;
-            if (error.status === 401 || error.status === 403) {
+            if (error.status === 401) {
                 window.location.replace(panel.dataset.loginUrl);
                 return;
             }

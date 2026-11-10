@@ -1,3 +1,5 @@
+from .test_helpers import grant_permissions
+
 from django.conf import settings
 from django.contrib.auth import SESSION_KEY, get_user_model
 from django.contrib.auth.models import Permission
@@ -48,6 +50,7 @@ class WorkspacePageTests(TestCase):
         self.assertRedirects(response, reverse('dashboard'), fetch_redirect_response=False)
 
     def test_dashboard_shows_current_user_and_workspace_navigation(self):
+        grant_permissions(self.user, 'auth.add_user', 'auth.view_group', 'auth.add_group')
         self.user.user_permissions.add(Permission.objects.get(
             content_type__app_label='auth', codename='view_user',
         ))
@@ -61,7 +64,7 @@ class WorkspacePageTests(TestCase):
         self.assertContains(response, 'avery@example.com')
         self.assertNotContains(response, 'Other Private Person')
         self.assertNotContains(response, 'other@example.com')
-        self.assertContains(response, 'data-nav-item', count=4)
+        self.assertContains(response, 'data-nav-item', count=5)
         self.assertContains(response, 'data-users-toggle')
         self.assertContains(response, f'href="{reverse("account_pages:add-user")}"')
         self.assertContains(response, f'href="{reverse("account_pages:user-list")}"')

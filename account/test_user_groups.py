@@ -1,3 +1,4 @@
+from .test_helpers import grant_permissions
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -13,6 +14,7 @@ User = get_user_model()
 class UserGroupTestSetup:
     def setUp(self):
         self.caller = User.objects.create_user(username='manager@example.com')
+        grant_permissions(self.caller, 'auth.view_user', 'auth.change_user', 'auth.view_group', 'account.manage_access')
         self.target = User.objects.create_user(username='member@example.com')
         self.old = Group.objects.create(name='Teachers')
         self.new = Group.objects.create(name='Sales')

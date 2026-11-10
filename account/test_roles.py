@@ -1,3 +1,4 @@
+from .test_helpers import grant_permissions
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group, Permission
@@ -13,6 +14,7 @@ User = get_user_model()
 class RoleManagementTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(username='manager@example.com')
+        grant_permissions(self.user, 'auth.view_group', 'auth.add_group', 'auth.change_group', 'auth.delete_group', 'auth.view_permission', 'account.manage_access')
         self.group = Group.objects.create(name='Teachers')
         self.permission = Permission.objects.get(
             codename='view_account', content_type__app_label='account',

@@ -15,7 +15,7 @@ if (directory) {
 
     function roleUrl(template, id) { return template.replace("/0/", `/${id}/`); }
     function sessionExpired(error) {
-        if (error.status !== 401 && error.status !== 403) return false;
+        if (error.status !== 401) return false;
         window.location.replace(directory.dataset.loginUrl);
         return true;
     }
@@ -58,12 +58,18 @@ if (directory) {
         const edit = controls.querySelector("[data-role-edit]");
         const manage = controls.querySelector("[data-role-manage]");
         const remove = controls.querySelector("[data-role-delete]");
-        edit.setAttribute("aria-label", `Edit ${role.name}`);
-        manage.setAttribute("aria-label", `Manage permissions for ${role.name}`);
-        remove.setAttribute("aria-label", `Delete ${role.name}`);
-        manage.href = roleUrl(directory.dataset.permissionsUrl, role.id);
-        edit.addEventListener("click", () => openDialog(role, "edit"));
-        remove.addEventListener("click", () => openDialog(role, "delete"));
+        if (edit) {
+            edit.setAttribute("aria-label", `Edit ${role.name}`);
+            edit.addEventListener("click", () => openDialog(role, "edit"));
+        }
+        if (manage) {
+            manage.setAttribute("aria-label", `Manage permissions for ${role.name}`);
+            manage.href = roleUrl(directory.dataset.permissionsUrl, role.id);
+        }
+        if (remove) {
+            remove.setAttribute("aria-label", `Delete ${role.name}`);
+            remove.addEventListener("click", () => openDialog(role, "delete"));
+        }
         actions.append(controls);
         row.append(name, actions);
         return row;

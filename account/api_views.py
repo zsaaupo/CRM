@@ -22,7 +22,7 @@ from rest_framework.views import APIView
 
 from .emails import thread_send_email
 from .models import Account
-from .permissions import HasRequiredPermissions
+from .permissions import ACCESS_RULES, HasRequiredPermissions, check_assignment_target, check_role_permission_target
 from .serializers import (
     AccountSerializer,
     AddUserSerializer,
@@ -99,7 +99,8 @@ class LogoutAPIView(APIView):
 class AddUserAPIView(GenericAPIView):
     serializer_class = AddUserSerializer
     authentication_classes = [SessionAuthentication]
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasRequiredPermissions]
+    required_permissions = ACCESS_RULES['add_user']
 
     def post(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
@@ -145,7 +146,7 @@ class UserListAPIView(ListAPIView):
     serializer_class = UserListSerializer
     authentication_classes = [SessionAuthentication]
     permission_classes = [IsAuthenticated, HasRequiredPermissions]
-    required_permissions = ('auth.view_user',)
+    required_permissions = ACCESS_RULES['view_users']
     pagination_class = UserListPagination
 
     def get_queryset(self):
@@ -167,7 +168,8 @@ class UserListAPIView(ListAPIView):
 class PermissionListAPIView(ListAPIView):
     serializer_class = PermissionListSerializer
     authentication_classes = [SessionAuthentication]
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasRequiredPermissions]
+    required_permissions = ACCESS_RULES['view_permissions']
     pagination_class = None
     queryset = Permission.objects.select_related('content_type').order_by(
         'content_type__app_label', 'content_type__model', 'codename', 'pk',
@@ -178,7 +180,8 @@ class PermissionListAPIView(ListAPIView):
 class GroupListAPIView(ListCreateAPIView):
     serializer_class = GroupListSerializer
     authentication_classes = [SessionAuthentication]
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasRequiredPermissions]
+    required_permissions = {'GET': ACCESS_RULES['view_roles'], 'POST': ACCESS_RULES['add_role']}
     pagination_class = None
     queryset = Group.objects.prefetch_related('permissions').order_by('name', 'pk')
 
@@ -201,7 +204,12 @@ class GroupListAPIView(ListCreateAPIView):
 class GroupDetailAPIView(RetrieveUpdateDestroyAPIView):
     serializer_class = GroupDetailSerializer
     authentication_classes = [SessionAuthentication]
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasRequiredPermissions]
+    required_permissions = {
+        'GET': ACCESS_RULES['view_roles'],
+        'PATCH': ACCESS_RULES['change_role'],
+        'DELETE': ACCESS_RULES['delete_role'],
+    }
     http_method_names = ['get', 'patch', 'delete', 'head', 'options']
     queryset = Group.objects.prefetch_related('permissions')
 
@@ -221,13 +229,15 @@ class GroupDetailAPIView(RetrieveUpdateDestroyAPIView):
 class GroupPermissionsAPIView(GenericAPIView):
     serializer_class = GroupPermissionsSerializer
     authentication_classes = [SessionAuthentication]
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasRequiredPermissions]
+    required_permissions = ACCESS_RULES['manage_role_permissions']
     http_method_names = ['put', 'options']
     queryset = Group.objects.select_for_update()
 
     def put(self, request, *args, **kwargs):
         with transaction.atomic():
             group = self.get_object()
+            check_role_permission_target(request.user, group)
             serializer = self.get_serializer(data=request.data)
             serializer.is_valid(raise_exception=True)
             group.permissions.set(serializer.validated_data['permissions'])
@@ -240,7 +250,8 @@ class GroupPermissionsAPIView(GenericAPIView):
 class UserGroupsAPIView(GenericAPIView):
     serializer_class = UserGroupsSerializer
     authentication_classes = [SessionAuthentication]
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasRequiredPermissions]
+    required_permissions = {'GET': ACCESS_RULES['view_users'], 'PUT': ACCESS_RULES['assign_role']}
     http_method_names = ['get', 'put', 'head', 'options']
     queryset = User.objects.all()
 
@@ -260,6 +271,7 @@ class UserGroupsAPIView(GenericAPIView):
     def put(self, request, *args, **kwargs):
         with transaction.atomic():
             user = self.get_object()
+            check_assignment_target(request.user, user)
             serializer = self.get_serializer(data=request.data)
             serializer.is_valid(raise_exception=True)
             group = serializer.validated_data['group']
@@ -275,12 +287,14 @@ class UserGroupsAPIView(GenericAPIView):
 class AssignGroupAPIView(UserGroupsAPIView):
     serializer_class = AssignGroupSerializer
     http_method_names = ['post', 'options']
+    required_permissions = ACCESS_RULES['assign_role']
 
     def post(self, request, *args, **kwargs):
         with transaction.atomic():
             serializer = self.get_serializer(data=request.data)
             serializer.is_valid(raise_exception=True)
             user = get_object_or_404(self.get_queryset(), pk=serializer.validated_data['user'])
+            check_assignment_target(request.user, user)
             group = serializer.validated_data['group']
             user.groups.set([group])
         return Response({'user': user.pk, 'group': group.pk}, status=status.HTTP_200_OK)

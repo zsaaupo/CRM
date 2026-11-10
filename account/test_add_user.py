@@ -1,3 +1,4 @@
+from .test_helpers import grant_permissions
 from unittest.mock import patch
 
 from django.contrib.auth import SESSION_KEY, get_user_model
@@ -17,6 +18,7 @@ class AddUserAPIViewTests(APITestCase):
         self.creator = User.objects.create_user(
             username='creator@example.com', password='Creator!74#Secure',
         )
+        grant_permissions(self.creator, 'auth.add_user')
         self.client = APIClient(enforce_csrf_checks=True)
         self.client.force_login(self.creator)
         token = self.client.get(reverse('account:login')).data['csrfToken']

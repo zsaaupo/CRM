@@ -1,5 +1,8 @@
 # Session login API
 
+All management endpoints now enforce permissions. See [ACCESS_CONTROL.md](ACCESS_CONTROL.md)
+for the full permission matrix, migration and administrator setup.
+
 ## Obtain a CSRF token
 
 Send `GET /account/api/login/`. The response contains `csrfToken` and sets a
@@ -47,8 +50,8 @@ login page are redirected to the dashboard. Protected HTML pages use Django's
 ## Add a user
 
 Send `POST /account/api/add-user/` with the logged-in session cookie and current
-`X-CSRFToken` header. Permission is `IsAuthenticated`: any authenticated user can
-create a regular user for now; staff privileges are not required.
+`X-CSRFToken` header. Requires authentication and `auth.add_user`.
+Staff status alone is insufficient.
 
 ```json
 {
@@ -97,21 +100,22 @@ with an empty `results` array; an invalid page returns 404. Anonymous requests
 return 403. This GET request does not require a CSRF header.
 
 The protected `/account/add-user/` page calls the add-user API with fetch and
-redirects to `/account/users/` on success. The list page fetches this endpoint
+redirects to `/account/users/` on success when the creator can view users, or to
+the dashboard otherwise. The list page fetches this endpoint
 and supports search, pagination, loading, empty, and retry states. The HTML user
 list requires the same `auth.view_user` permission: anonymous visitors go to login,
 and authenticated visitors without permission receive 403. The sidebar User list
 link is only shown to users with access. If an open list loses permission, its
 next API request displays an access-denied message instead of redirecting to login.
-This permission rollout applies to user listing only; other APIs retain their
-existing policies, including role and permission assignment. No new permission
-records or database migration are required.
+All other management APIs and pages now enforce the permissions in
+[ACCESS_CONTROL.md](ACCESS_CONTROL.md). Apply migration 0011 for the new
+`account.manage_access` permission.
 
 ## List permissions
 
 Send `GET /account/api/permissions/` with a logged-in session cookie. The endpoint
-uses `SessionAuthentication` and `IsAuthenticated`, matching Add User. Any active
-authenticated user can list permissions; no staff or superuser status is required.
+uses `SessionAuthentication`, `IsAuthenticated` and `HasRequiredPermissions`.
+The caller must have `auth.view_permission`.
 GET requests do not need a CSRF header or request body.
 
 The response is a JSON array of all Django permissions, including custom
@@ -123,8 +127,8 @@ Anonymous requests return 403; POST is not supported.
 
 ## List groups
 
-Send `GET /account/api/groups/` with a logged-in session cookie. Like Add User
-and the permission list, it uses `SessionAuthentication` and `IsAuthenticated`.
+Send `GET /account/api/groups/` with a logged-in session cookie and
+`auth.view_group`. Authentication and permission checks are both required.
 No request body or CSRF header is needed for this GET request.
 
 The response is a JSON array of all Django groups, ordered by name, without
@@ -145,8 +149,7 @@ Send `POST /account/api/groups/` with a logged-in session cookie and the current
 }
 ```
 
-Permission is `IsAuthenticated`: any active authenticated user can create a group;
-staff status and existing group permissions are not required. Names are required,
+Requires authentication and `auth.add_group`. Names are required,
 trimmed, nonblank, unique and at most 150 characters. Invalid or duplicate names
 return HTTP 400 with a `name` field error. Anonymous or inactive sessions and
 requests without valid CSRF receive HTTP 403.
@@ -167,8 +170,9 @@ icon actions. The sidebar has an expandable Roles & Permissions section.
 required, nonblank, unique and at most 150 characters. Permission IDs are read-only
 on this endpoint. `DELETE` removes the group and returns 204 with no body; it
 removes group memberships without deleting user accounts or permission records.
-These actions use `SessionAuthentication` and `IsAuthenticated`; any authenticated
-user can currently rename or delete roles. PATCH and DELETE require CSRF.
+GET requires `auth.view_group`; PATCH requires `auth.change_group`; DELETE
+requires both `auth.delete_group` and `account.manage_access`. All require
+authentication; PATCH and DELETE also require CSRF.
 Missing groups return 404. The UI confirms deletion before making the request.
 
 Manage permissions opens `/account/roles/<id>/permissions/`. It fetches the
@@ -206,8 +210,9 @@ permissions. Repeating a request has the same result. HTTP 200 returns the group
 `id`, `name` and saved `permissions` IDs. It does not rename groups, change their
 memberships or alter direct user permissions. Missing groups return 404.
 
-Authentication is `SessionAuthentication` and the current permission class is
-`IsAuthenticated`: any active authenticated user can assign permissions.
+Authentication is `SessionAuthentication`. The caller needs `auth.view_group`,
+`auth.change_group`, `auth.view_permission` and `account.manage_access`.
+Non-superusers cannot change permissions of a group they belong to.
 Requests without a valid session/CSRF token receive 403. Only PUT and OPTIONS are supported;
 read current assignments through the existing group-detail GET endpoint.
 
@@ -245,13 +250,15 @@ The existing `PUT /account/api/users/<id>/groups/` endpoint also accepts only
 `GET` on that endpoint still returns `{"user_id": 7, "groups": [2]}` to inspect
 stored memberships. Existing memberships are replaced when the user is assigned
 a group; no existing data is modified automatically. This API rule does not change
-Django's built-in many-to-many group model or Django admin's membership editor.
+Django's built-in many-to-many group model. User/group writes in Django admin
+are restricted to superusers to prevent bypassing application checks.
 Users do not need an Account profile. Direct user permissions, user flags,
 passwords and the groups' permission selections are unchanged.
 
-These endpoints use `SessionAuthentication` and `IsAuthenticated`, matching the
-existing group APIs. Any active authenticated caller can read or replace any
-user's groups, including their own; no administrative permission is checked.
+Reading user groups requires `auth.view_user`. Both assignment endpoints require
+`auth.view_user`, `auth.change_user`, `auth.view_group` and `account.manage_access`.
+All use session authentication and permission checks. Non-superusers cannot
+change their own role or a superuser's role.
 Anonymous/inactive callers receive 403, as do PUT requests without valid CSRF.
 The body-based assignment endpoint supports POST and OPTIONS; the user-specific
 endpoint supports GET, PUT, HEAD and OPTIONS. Responses are not cached.

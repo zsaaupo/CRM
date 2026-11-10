@@ -1,3 +1,4 @@
+from .test_helpers import grant_permissions
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group, Permission
@@ -14,6 +15,7 @@ User = get_user_model()
 class AssignRolePageTests(TestCase):
     def setUp(self):
         self.caller = User.objects.create_user(username='manager@example.com')
+        grant_permissions(self.caller, 'auth.view_user', 'auth.change_user', 'auth.view_group', 'auth.add_group', 'account.manage_access')
         self.target = User.objects.create_user(username='member@example.com')
         self.old = Group.objects.create(name='Teachers')
         self.new = Group.objects.create(name='Sales manager')

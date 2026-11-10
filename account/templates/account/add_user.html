@@ -6,10 +6,10 @@
 <div class="workspace-content">
     <div class="page-heading">
         <div><p class="page-eyebrow">People &amp; access</p><h1 class="page-title">Add user<span class="text-emerald-600">.</span></h1><p class="page-description">A new person. A more connected workspace.</p></div>
-        <a href="{% url 'account_pages:user-list' %}" class="secondary-button">Back to user list <span aria-hidden="true">&rarr;</span></a>
+        <a href="{{ user_list_url }}" class="secondary-button">Back to user list <span aria-hidden="true">&rarr;</span></a>
     </div>
     <div class="user-form-layout">
-        <form method="post" action="{% url 'account:add-user' %}" data-auth-form="add-user" data-success-url="{% url 'account_pages:user-list' %}" class="user-form-card" novalidate>
+        <form method="post" action="{% url 'account:add-user' %}" data-auth-form="add-user" data-success-url="{{ user_list_url }}" class="user-form-card" novalidate>
             {% csrf_token %}
             <div class="form-status mb-7" data-form-status role="status" aria-live="polite" tabindex="-1" hidden></div>
             <fieldset>
@@ -43,7 +43,7 @@
                     {% include "account/includes/user_field.html" with name="password_confirm" label="Confirm password" field_type="password" required=True autocomplete="new-password" only %}
                 </div>
             </fieldset>
-            <div class="user-form-actions"><a href="{% url 'account_pages:user-list' %}" class="secondary-button">Cancel</a><button type="submit" class="primary-button compact-primary" data-loading-label="Creating user..."><span data-button-label>Create user</span><span class="button-spinner" data-button-spinner hidden aria-hidden="true"></span><span data-button-arrow aria-hidden="true">&rarr;</span></button></div>
+            <div class="user-form-actions"><a href="{{ user_list_url }}" class="secondary-button">Cancel</a><button type="submit" class="primary-button compact-primary" data-loading-label="Creating user..."><span data-button-label>Create user</span><span class="button-spinner" data-button-spinner hidden aria-hidden="true"></span><span data-button-arrow aria-hidden="true">&rarr;</span></button></div>
             <noscript><p class="form-error">Enable JavaScript to create a user with this form.</p></noscript>
         </form>
         <aside class="user-form-aside">
