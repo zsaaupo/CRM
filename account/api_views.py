@@ -22,6 +22,7 @@ from rest_framework.views import APIView
 
 from .emails import thread_send_email
 from .models import Account
+from .permissions import HasRequiredPermissions
 from .serializers import (
     AccountSerializer,
     AddUserSerializer,
@@ -143,7 +144,8 @@ class UserListPagination(PageNumberPagination):
 class UserListAPIView(ListAPIView):
     serializer_class = UserListSerializer
     authentication_classes = [SessionAuthentication]
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasRequiredPermissions]
+    required_permissions = ('auth.view_user',)
     pagination_class = UserListPagination
 
     def get_queryset(self):

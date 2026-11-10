@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.contrib.auth import SESSION_KEY, get_user_model
+from django.contrib.auth.models import Permission
 from django.contrib.sessions.models import Session
 from django.test import TestCase
 from django.urls import reverse
@@ -47,6 +48,9 @@ class WorkspacePageTests(TestCase):
         self.assertRedirects(response, reverse('dashboard'), fetch_redirect_response=False)
 
     def test_dashboard_shows_current_user_and_workspace_navigation(self):
+        self.user.user_permissions.add(Permission.objects.get(
+            content_type__app_label='auth', codename='view_user',
+        ))
         other = User.objects.create_user(username='other@example.com')
         Account.objects.create(user=other, full_name='Other Private Person', email='other@example.com', phone_number='')
         self.client.force_login(self.user)

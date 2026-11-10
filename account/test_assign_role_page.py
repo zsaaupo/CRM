@@ -1,6 +1,6 @@
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.contrib.auth.models import Group
+from django.contrib.auth.models import Group, Permission
 from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
@@ -49,6 +49,9 @@ class AssignRolePageTests(TestCase):
         self.assertEqual(response.context['display_name'], self.caller.username)
 
     def test_page_csrf_assigns_one_role_then_user_list_loads(self):
+        self.caller.user_permissions.add(Permission.objects.get(
+            content_type__app_label='auth', codename='view_user',
+        ))
         self.client.force_login(self.caller)
         self.client.get(self.url)
         token = self.client.cookies[settings.CSRF_COOKIE_NAME].value

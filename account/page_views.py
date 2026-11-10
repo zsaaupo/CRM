@@ -1,4 +1,4 @@
-from django.contrib.auth.mixins import LoginRequiredMixin
+from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.shortcuts import get_object_or_404, redirect
@@ -61,7 +61,8 @@ class AddUserPageView(ProtectedAccountPageView):
     extra_context = {'page_label': 'Add user', 'page_section': 'users', 'user_page': 'add'}
 
 
-class UserListPageView(ProtectedAccountPageView):
+class UserListPageView(PermissionRequiredMixin, ProtectedAccountPageView):
+    permission_required = 'auth.view_user'
     template_name = 'account/user_list.html'
     extra_context = {'page_label': 'User list', 'page_section': 'users', 'user_page': 'list'}
 

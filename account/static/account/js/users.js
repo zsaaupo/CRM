@@ -98,12 +98,14 @@ if (directory) {
             directory.querySelector("[data-list-range]").textContent = `Showing ${start}\u2013${start + data.results.length - 1} of ${data.count}`;
         } catch (error) {
             if (version !== requestVersion) return;
-            if (error.status === 401 || error.status === 403) {
+            if (error.status === 401) {
                 window.location.replace(directory.dataset.loginUrl);
                 return;
             }
             status.hidden = true;
-            directory.querySelector("[data-list-error-message]").textContent = error.message || "Could not load users. Please try again.";
+            directory.querySelector("[data-list-error-message]").textContent = error.status === 403
+                ? "You do not have permission to view users. Contact your administrator."
+                : error.message || "Could not load users. Please try again.";
             errorBox.hidden = false;
         } finally {
             if (version === requestVersion) directory.setAttribute("aria-busy", "false");

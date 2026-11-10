@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.contrib.auth import SESSION_KEY, get_user_model
+from django.contrib.auth.models import Group, Permission
 from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient, APITestCase
@@ -14,6 +15,11 @@ User = get_user_model()
 class UserListAPIViewTests(APITestCase):
     def setUp(self):
         self.user = User.objects.create_user(username='manager@example.com', password='Manager!72Strong')
+        self.role = Group.objects.create(name='User directory readers')
+        self.role.permissions.add(Permission.objects.get(
+            content_type__app_label='auth', codename='view_user',
+        ))
+        self.user.groups.add(self.role)
         self.account = Account.objects.create(
             user=self.user, full_name='Avery Morgan', email=self.user.username,
             phone_number='+8801700000000', designation='Teacher', otp='AB123C',
@@ -26,7 +32,7 @@ class UserListAPIViewTests(APITestCase):
         self.url = reverse('account:user-list')
         self.client.force_login(self.user)
 
-    def test_authenticated_regular_user_can_list_active_and_inactive_users(self):
+    def test_user_with_group_permission_can_list_active_and_inactive_users(self):
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data['count'], 2)
@@ -104,6 +110,9 @@ class UserListAPIViewTests(APITestCase):
 class UserManagementPageTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(username='creator@example.com', password='Creator!74#Secure')
+        self.user.user_permissions.add(Permission.objects.get(
+            content_type__app_label='auth', codename='view_user',
+        ))
         self.client = APIClient(enforce_csrf_checks=True)
 
     def test_user_management_pages_require_login(self):

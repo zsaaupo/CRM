@@ -70,6 +70,13 @@ with the current page highlighted. The add-user form sends a CSRF-protected
 fetch POST, shows field validation errors, and redirects to the user list on
 success. The list calls `GET /account/api/users/`, supports search and 20-user
 pages, and displays active/inactive status. Both new pages require login.
+The user list page and API additionally require `auth.view_user`, inherited from
+the user's assigned group or granted directly. In the role permission matrix,
+select Read for the user model in the auth app. Active superusers retain access.
+The User list sidebar link is hidden without permission. Direct navigation by
+authenticated users without permission returns 403. Permission changes apply on
+the next request; a list API 403 displays an access-denied message. Other modules
+retain their existing permission rules in this first rollout.
 
 The top-right initials avatar opens
 Profile and Logout actions. Mobile navigation opens as a drawer and closes with

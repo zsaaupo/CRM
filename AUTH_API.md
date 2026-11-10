@@ -77,8 +77,14 @@ anonymous requests or session requests without valid CSRF return 403.
 ## List users
 
 Send `GET /account/api/users/` with a logged-in session cookie. The view uses
-`IsAuthenticated`; any authenticated user can list users for now. It includes
-active and inactive users, including users without an Account profile.
+`IsAuthenticated` and the reusable `HasRequiredPermissions` class, requiring
+`auth.view_user` (auth → user → Read in the role permission matrix).
+Assign this permission to the user's group to grant access. Django's direct user
+permissions and active-superuser override are supported too; staff status alone
+does not grant access. Missing permissions return HTTP 403. Group membership and
+permission changes take effect on the next request without logging in again.
+The directory includes active and inactive users, including users without an
+Account profile.
 
 The response contains `count`, `next`, `previous`, and `results`, with 20 users
 per page, newest first. Each result exposes only `id`, `full_name`, `email`,
@@ -92,8 +98,14 @@ return 403. This GET request does not require a CSRF header.
 
 The protected `/account/add-user/` page calls the add-user API with fetch and
 redirects to `/account/users/` on success. The list page fetches this endpoint
-and supports search, pagination, loading, empty, and retry states. Both pages
-are available under the expandable Users sidebar menu.
+and supports search, pagination, loading, empty, and retry states. The HTML user
+list requires the same `auth.view_user` permission: anonymous visitors go to login,
+and authenticated visitors without permission receive 403. The sidebar User list
+link is only shown to users with access. If an open list loses permission, its
+next API request displays an access-denied message instead of redirecting to login.
+This permission rollout applies to user listing only; other APIs retain their
+existing policies, including role and permission assignment. No new permission
+records or database migration are required.
 
 ## List permissions
 
