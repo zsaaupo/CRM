@@ -6,13 +6,14 @@ from django.contrib.auth.models import Group, Permission
 from django.db import IntegrityError, transaction
 from django.db.models import Q
 from django.middleware.csrf import get_token
+from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import csrf_protect
 from rest_framework import status
 from rest_framework.exceptions import ValidationError
-from rest_framework.generics import GenericAPIView, ListAPIView, RetrieveUpdateDestroyAPIView
+from rest_framework.generics import GenericAPIView, ListAPIView, ListCreateAPIView, RetrieveUpdateDestroyAPIView
 from rest_framework.authentication import SessionAuthentication
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -24,6 +25,7 @@ from .models import Account
 from .serializers import (
     AccountSerializer,
     AddUserSerializer,
+    AssignGroupSerializer,
     GroupDetailSerializer,
     GroupListSerializer,
     GroupPermissionsSerializer,
@@ -32,6 +34,7 @@ from .serializers import (
     ResendOTPSerializer,
     SignUpSerializer,
     UserListSerializer,
+    UserGroupsSerializer,
     VerifyOTPSerializer,
 )
 from .utils import generate_otp, otp_matches
@@ -170,12 +173,26 @@ class PermissionListAPIView(ListAPIView):
 
 
 @method_decorator(never_cache, name='dispatch')
-class GroupListAPIView(ListAPIView):
+class GroupListAPIView(ListCreateAPIView):
     serializer_class = GroupListSerializer
     authentication_classes = [SessionAuthentication]
     permission_classes = [IsAuthenticated]
     pagination_class = None
     queryset = Group.objects.prefetch_related('permissions').order_by('name', 'pk')
+
+    def get_serializer_class(self):
+        if self.request.method == 'POST':
+            return GroupDetailSerializer
+        return super().get_serializer_class()
+
+    def perform_create(self, serializer):
+        try:
+            with transaction.atomic():
+                serializer.save()
+        except IntegrityError as exc:
+            if Group.objects.filter(name=serializer.validated_data['name']).exists():
+                raise ValidationError({'name': 'A group with this name already exists.'}) from exc
+            raise
 
 
 @method_decorator(never_cache, name='dispatch')
@@ -215,6 +232,56 @@ class GroupPermissionsAPIView(GenericAPIView):
             result = GroupListSerializer(group).data
 
         return Response(result, status=status.HTTP_200_OK)
+
+
+@method_decorator(never_cache, name='dispatch')
+class UserGroupsAPIView(GenericAPIView):
+    serializer_class = UserGroupsSerializer
+    authentication_classes = [SessionAuthentication]
+    permission_classes = [IsAuthenticated]
+    http_method_names = ['get', 'put', 'head', 'options']
+    queryset = User.objects.all()
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        if self.request.method in ('PUT', 'POST'):
+            return queryset.select_for_update()
+        return queryset
+
+    def get(self, request, *args, **kwargs):
+        user = self.get_object()
+        return Response({
+            'user_id': user.pk,
+            'groups': list(user.groups.order_by('pk').values_list('pk', flat=True)),
+        })
+
+    def put(self, request, *args, **kwargs):
+        with transaction.atomic():
+            user = self.get_object()
+            serializer = self.get_serializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            group = serializer.validated_data['group']
+            user.groups.set([group])
+            result = {
+                'user': user.pk,
+                'group': group.pk,
+            }
+        return Response(result, status=status.HTTP_200_OK)
+
+
+@method_decorator(never_cache, name='dispatch')
+class AssignGroupAPIView(UserGroupsAPIView):
+    serializer_class = AssignGroupSerializer
+    http_method_names = ['post', 'options']
+
+    def post(self, request, *args, **kwargs):
+        with transaction.atomic():
+            serializer = self.get_serializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            user = get_object_or_404(self.get_queryset(), pk=serializer.validated_data['user'])
+            group = serializer.validated_data['group']
+            user.groups.set([group])
+        return Response({'user': user.pk, 'group': group.pk}, status=status.HTTP_200_OK)
 
 
 class SignUpAPIView(GenericAPIView):

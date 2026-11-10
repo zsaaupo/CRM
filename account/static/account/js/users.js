@@ -49,6 +49,14 @@ if (directory) {
         const date = new Date(user.date_joined);
         const joined = Number.isNaN(date.getTime()) ? "" : date.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
         row.append(name, cell(user.email), cell(user.phone_number), cell(user.designation), state, cell(joined, "user-joined"));
+        const actions = cell("");
+        actions.textContent = "";
+        const controls = document.getElementById("user-actions-template").content.cloneNode(true);
+        const assign = controls.querySelector("[data-assign-role]");
+        assign.href = directory.dataset.assignRoleUrl.replace("/0/", `/${user.id}/`);
+        assign.setAttribute("aria-label", `Assign role to ${user.full_name || user.email || "user"}`);
+        actions.append(controls);
+        row.append(actions);
         return row;
     }
 

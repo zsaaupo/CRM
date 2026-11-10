@@ -119,8 +119,30 @@ The response is a JSON array of all Django groups, ordered by name, without
 pagination. Each item contains `id`, `name`, and `permissions` (a list of
 permission IDs matching the permission-list endpoint). Groups without permissions
 have an empty list; no groups returns `[]`. Group membership is not required to
-list a group. This endpoint does not create groups or assign memberships or
-permissions. Anonymous requests return 403; POST is not supported.
+list a group. GET does not assign memberships or permissions. Anonymous requests
+return 403.
+
+## Create a group
+
+Send `POST /account/api/groups/` with a logged-in session cookie and the current
+`X-CSRFToken` header:
+
+```json
+{
+  "name": "Teachers"
+}
+```
+
+Permission is `IsAuthenticated`: any active authenticated user can create a group;
+staff status and existing group permissions are not required. Names are required,
+trimmed, nonblank, unique and at most 150 characters. Invalid or duplicate names
+return HTTP 400 with a `name` field error. Anonymous or inactive sessions and
+requests without valid CSRF receive HTTP 403.
+
+Success returns HTTP 201 with the new group's `id`, `name`, and `permissions: []`.
+Creation does not assign users or permissions; `id` and `permissions` are read-only.
+Use the existing group-permissions PUT endpoint to assign permissions separately.
+No database migration is required.
 
 ## Manage roles
 
@@ -183,6 +205,48 @@ should use the same locking convention. SQLite does not provide these row locks.
 There is no revision check, so a later completed save can replace an earlier
 selection. The permission page connects to this endpoint and redirects to
 `/account/roles/` after a successful save.
+
+## Assign one group to a user
+
+Send `POST /account/api/assign-group/` with a logged-in session cookie and
+the current `X-CSRFToken` header. The request contains one user ID and one group ID:
+
+```json
+{"user": 7, "group": 2}
+```
+
+Success returns HTTP 200:
+
+```json
+{"user": 7, "group": 2}
+```
+
+Assignment replaces all previous group memberships with exactly the selected
+group. Repeating the request does not add another membership. Both IDs are
+required positive integers; lists and null values are rejected. Invalid payloads
+or nonexistent groups return 400 without changing assignments; missing users
+return 404. Group IDs are available from `GET /account/api/groups/`.
+
+The existing `PUT /account/api/users/<id>/groups/` endpoint also accepts only
+`{"group": 2}` and replaces the user's group with that one group. The old
+`groups` array payload is no longer accepted, including empty arrays.
+`GET` on that endpoint still returns `{"user_id": 7, "groups": [2]}` to inspect
+stored memberships. Existing memberships are replaced when the user is assigned
+a group; no existing data is modified automatically. This API rule does not change
+Django's built-in many-to-many group model or Django admin's membership editor.
+Users do not need an Account profile. Direct user permissions, user flags,
+passwords and the groups' permission selections are unchanged.
+
+These endpoints use `SessionAuthentication` and `IsAuthenticated`, matching the
+existing group APIs. Any active authenticated caller can read or replace any
+user's groups, including their own; no administrative permission is checked.
+Anonymous/inactive callers receive 403, as do PUT requests without valid CSRF.
+The body-based assignment endpoint supports POST and OPTIONS; the user-specific
+endpoint supports GET, PUT, HEAD and OPTIONS. Responses are not cached.
+
+Updates are atomic and lock the target user on databases supporting row locking;
+SQLite does not provide those row locks. Concurrent saves have no revision check.
+No database migration is required.
 
 ## Log out
 

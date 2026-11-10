@@ -150,6 +150,25 @@ class GroupPermissionsSerializer(serializers.Serializer):
         return sorted(permission_ids)
 
 
+class UserGroupsSerializer(serializers.Serializer):
+    group = serializers.IntegerField(min_value=1)
+
+    def validate_group(self, value):
+        try:
+            return Group.objects.get(pk=value)
+        except Group.DoesNotExist as exc:
+            raise serializers.ValidationError('Invalid group ID.') from exc
+
+    def validate(self, attrs):
+        if 'groups' in self.initial_data:
+            raise serializers.ValidationError({'groups': 'Provide one group ID using "group".'})
+        return attrs
+
+
+class AssignGroupSerializer(UserGroupsSerializer):
+    user = serializers.IntegerField(min_value=1)
+
+
 class VerifyOTPSerializer(serializers.Serializer):
     email = serializers.EmailField(max_length=254)
     otp = serializers.RegexField(

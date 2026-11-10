@@ -1,0 +1,35 @@
+{% extends "layouts/dashboard.html" %}
+{% load static %}
+{% block title %}Assign role | eManager{% endblock %}
+{% block content %}
+<div class="workspace-content">
+    <div class="page-heading">
+        <div><p class="page-eyebrow">People &amp; access</p><h1 class="page-title">Assign role<span class="text-emerald-600">.</span></h1><p class="page-description">Choose one role for this user.</p></div>
+        <a href="{% url 'account_pages:user-list' %}" class="secondary-button">Back to users <span aria-hidden="true">&rarr;</span></a>
+    </div>
+    <form method="post" action="{% url 'account:assign-group' %}" class="user-form-card max-w-2xl" data-role-assignment data-user-id="{{ target_user.pk }}" data-success-url="{% url 'account_pages:user-list' %}" novalidate>
+        {% csrf_token %}
+        <div class="form-status mb-7" data-assignment-status role="status" aria-live="polite" tabindex="-1" hidden></div>
+        <h2 class="section-title">{{ target_name }}</h2>
+        <p class="section-description break-all">{{ target_email }}</p>
+        <p class="mb-6 text-sm text-stone-500">Current role: {% for role in current_groups %}{{ role.name }}{% if not forloop.last %}, {% endif %}{% empty %}Not assigned{% endfor %}</p>
+        {% if roles %}
+        <label for="assign-role" class="form-label">Role</label>
+        <select id="assign-role" name="group" class="form-input" aria-describedby="assign-role-hint assign-role-error" required>
+            <option value="">Select a role</option>
+            {% for role in roles %}<option value="{{ role.pk }}"{% if role.pk == selected_group_id %} selected{% endif %}>{{ role.name }}</option>{% endfor %}
+        </select>
+        <p id="assign-role-error" class="form-error" data-assignment-error hidden></p>
+        <p id="assign-role-hint" class="mt-2 text-xs leading-5 text-stone-500">Saving replaces any previous role. A user can be assigned to only one role here.</p>
+        {% else %}
+        <p class="section-description">No roles are available. <a href="{% url 'account_pages:add-role' %}" class="text-button">Add a role</a>, then return here to assign it.</p>
+        {% endif %}
+        <div class="user-form-actions">
+            <a href="{% url 'account_pages:user-list' %}" class="secondary-button">Cancel</a>
+            <button type="submit" class="primary-button compact-primary" data-assignment-save{% if not roles %} disabled{% endif %}><span data-assignment-label>Assign role</span><span class="button-spinner" data-assignment-spinner hidden aria-hidden="true"></span></button>
+        </div>
+        <noscript><p class="form-error">Enable JavaScript to assign a role.</p></noscript>
+    </form>
+</div>
+{% endblock %}
+{% block workspace_js %}<script type="module" src="{% static 'account/js/assign_role.js' %}"></script>{% endblock %}

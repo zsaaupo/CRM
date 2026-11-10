@@ -110,6 +110,7 @@ document.querySelectorAll("[data-auth-form]").forEach((form) => {
     const isLogin = form.dataset.authForm === "login";
     const isVerify = form.dataset.authForm === "verify";
     const isAddUser = form.dataset.authForm === "add-user";
+    const isAddRole = form.dataset.authForm === "add-role";
 
     if (isVerify) {
         try { if (!emailInput.value) emailInput.value = sessionStorage.getItem(emailStorageKey) || ""; } catch { /* Email remains editable. */ }
@@ -130,7 +131,7 @@ document.querySelectorAll("[data-auth-form]").forEach((form) => {
         event.preventDefault();
         if (form.dataset.busy === "true") return;
         clearFeedback(form);
-        const names = isAddUser
+        const names = isAddRole ? ["name"] : isAddUser
             ? ["full_name", "email", "phone_number", "designation", "date_of_birth", "gender", "address", "city", "state", "postal_code", "country", "password", "password_confirm"]
             : isSignup
             ? ["full_name", "email", "phone_number", "password", "password_confirm"]
@@ -144,13 +145,18 @@ document.querySelectorAll("[data-auth-form]").forEach((form) => {
         }
 
         const payload = Object.fromEntries(names.map((name) => [name, form.elements.namedItem(name).value]));
-        payload.email = payload.email.trim();
+        if (emailInput) payload.email = payload.email.trim();
+        if (isAddRole) payload.name = payload.name.trim();
         if (isAddUser && !payload.date_of_birth) payload.date_of_birth = null;
         const button = form.querySelector('button[type="submit"]');
         setBusy(form, button, true);
         try {
             const result = await postJSON(form.action, payload, csrfToken);
-            if (isAddUser) {
+            if (isAddRole) {
+                form.reset();
+                setStatus(form, "Role created. Opening the role list...", true);
+                window.location.assign(form.dataset.successUrl);
+            } else if (isAddUser) {
                 form.reset();
                 setStatus(form, "User created. Opening the user list...", true);
                 window.location.assign(form.dataset.successUrl);

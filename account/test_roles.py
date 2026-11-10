@@ -95,7 +95,8 @@ class RoleManagementTests(TestCase):
 
     def test_role_pages_require_login(self):
         client = APIClient()
-        for name, args in [('account_pages:role-list', []), ('account_pages:role-permissions', [self.group.pk])]:
+        for name, args in [('account_pages:role-list', []), ('account_pages:add-role', []),
+                           ('account_pages:role-permissions', [self.group.pk])]:
             response = client.get(reverse(name, args=args))
             self.assertRedirects(response, reverse('account_pages:login'), fetch_redirect_response=False)
 
@@ -103,6 +104,8 @@ class RoleManagementTests(TestCase):
         response = self.client.get(reverse('account_pages:role-list'))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'data-roles-toggle')
+        self.assertContains(response, f'href="{reverse("account_pages:add-role")}"')
+        self.assertContains(response, '>Add role</a>')
         self.assertContains(response, 'aria-controls="roles-submenu" aria-expanded="true"')
         self.assertContains(response, f'data-api-url="{reverse("account:group-list")}"')
         for title in ['Edit role', 'Manage permissions', 'Delete role']:
@@ -112,6 +115,27 @@ class RoleManagementTests(TestCase):
         self.assertContains(response, 'data-delete-dialog')
         self.assertIn(settings.CSRF_COOKIE_NAME, response.cookies)
         self.assertIn('no-store', response['Cache-Control'])
+
+    def test_add_role_page_can_create_role_and_return_to_directory(self):
+        page = self.client.get(reverse('account_pages:add-role'))
+        self.assertEqual(page.status_code, 200)
+        self.assertTemplateUsed(page, 'account/add_role.html')
+        self.assertContains(page, 'data-auth-form="add-role"')
+        self.assertContains(page, f'action="{reverse("account:group-list")}"')
+        self.assertContains(page, f'data-success-url="{reverse("account_pages:role-list")}"')
+        self.assertContains(page, 'name="name"')
+        self.assertContains(page, 'account/js/auth.js')
+        self.assertIn('no-store', page['Cache-Control'])
+        token = self.client.cookies[settings.CSRF_COOKIE_NAME].value
+        response = self.client.post(
+            reverse('account:group-list'), {'name': 'Sales manager'}, format='json',
+            HTTP_X_CSRFTOKEN=token,
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data['permissions'], [])
+        self.assertEqual(self.client.get(reverse('account_pages:role-list')).status_code, 200)
+        roles = self.client.get(reverse('account:group-list')).data
+        self.assertIn(response.data, roles)
 
     def test_permission_template_has_crud_columns_save_api_and_redirect_destination(self):
         self.group.name = '<script>unsafe</script>'

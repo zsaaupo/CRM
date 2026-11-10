@@ -1,4 +1,5 @@
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.shortcuts import get_object_or_404, redirect
 from django.utils import timezone
@@ -63,6 +64,33 @@ class AddUserPageView(ProtectedAccountPageView):
 class UserListPageView(ProtectedAccountPageView):
     template_name = 'account/user_list.html'
     extra_context = {'page_label': 'User list', 'page_section': 'users', 'user_page': 'list'}
+
+
+class AssignRolePageView(ProtectedAccountPageView):
+    template_name = 'account/assign_role.html'
+    extra_context = {'page_label': 'Assign role', 'page_section': 'users'}
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        target = get_object_or_404(
+            get_user_model().objects.select_related('account'), pk=self.kwargs['pk'],
+        )
+        account = getattr(target, 'account', None)
+        current_groups = list(target.groups.order_by('name', 'pk'))
+        context.update({
+            'target_user': target,
+            'target_name': (account.full_name if account else '') or target.get_full_name() or target.get_username(),
+            'target_email': (account.email if account else '') or target.email or target.get_username(),
+            'roles': list(Group.objects.order_by('name', 'pk')),
+            'selected_group_id': current_groups[0].pk if len(current_groups) == 1 else None,
+            'current_groups': current_groups,
+        })
+        return context
+
+
+class AddRolePageView(ProtectedAccountPageView):
+    template_name = 'account/add_role.html'
+    extra_context = {'page_label': 'Add role', 'page_section': 'roles', 'role_page': 'add'}
 
 
 class RoleListPageView(ProtectedAccountPageView):

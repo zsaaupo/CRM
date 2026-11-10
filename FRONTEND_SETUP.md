@@ -77,6 +77,20 @@ Escape or the backdrop; keyboard focus stays inside the drawer while it is open.
 Logout uses a CSRF-protected POST and clears the session. Dashboard/profile pages
 are not cached, and browser-history restoration triggers an authentication recheck.
 
+Each user row has an Assign role action with a shield/check permission icon.
+It opens the protected `/account/users/<id>/assign-role/` page, showing the target
+user, current role and a single-role dropdown. Saving sends the user and group IDs
+to `POST /account/api/assign-group/` with CSRF protection and redirects to the user
+list on success. Errors preserve the selection. With no roles, saving is disabled
+and the page links to Add role. Cancel returns to the user list without saving.
+
+The Add role button with a plus icon sits in the page heading above the role table,
+matching the Add user button on the user list page.
+It opens the protected `/account/roles/add/` page. The form uses `auth.js` to
+submit the role name to `POST /account/api/groups/` with CSRF protection, displays
+validation errors, and redirects to the role list after creation. Cancel returns
+to the role list. New roles start without permissions.
+
 Roles & Permissions expands to Role list. `roles.js` loads groups, handles the
 rename dialog and confirms deletion. `permissions.js` renders a checkbox matrix
 with one CRUD row per model, current group assignments, and any custom

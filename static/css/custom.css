@@ -217,6 +217,7 @@ button:focus-visible { outline: 2px solid #059669; outline-offset: 3px; }
 .users-pagination { display: flex; align-items: center; justify-content: space-between; gap: 16px; border-top: 1px solid #f0eeec; padding: 18px 24px; color: #a8a29e; font-size: 11px; }
 .roles-table .role-name-cell { max-width: none; color: #292524; font-weight: 550; }
 .roles-table .role-actions-heading { width: 160px; text-align: right; }
+.users-table .user-actions-heading { width: 90px; text-align: right; }
 .role-actions { display: flex; justify-content: flex-end; gap: 8px; }
 .role-action { display: inline-flex; width: 35px; height: 35px; flex-shrink: 0; align-items: center; justify-content: center; border: 1px solid #e7e5e4; border-radius: 9px; background: #fff; color: #78716c; cursor: pointer; }
 .role-action:hover { border-color: #a7d5bd; background: #ecfdf5; color: #047857; }

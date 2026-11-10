@@ -1,0 +1,30 @@
+{% extends "layouts/dashboard.html" %}
+{% load static %}
+{% block title %}Add role | eManager{% endblock %}
+{% block content %}
+<div class="workspace-content">
+    <div class="page-heading">
+        <div><p class="page-eyebrow">Roles &amp; permissions</p><h1 class="page-title">Add role<span class="text-emerald-600">.</span></h1><p class="page-description">Create a role to organize access for your team.</p></div>
+        <a href="{% url 'account_pages:role-list' %}" class="secondary-button">Back to roles <span aria-hidden="true">&rarr;</span></a>
+    </div>
+    <form method="post" action="{% url 'account:group-list' %}" data-auth-form="add-role" data-success-url="{% url 'account_pages:role-list' %}" class="user-form-card max-w-2xl" novalidate>
+        {% csrf_token %}
+        <div class="form-status mb-7" data-form-status role="status" aria-live="polite" tabindex="-1" hidden></div>
+        <h2 class="section-title">Role details</h2>
+        <p id="add-role-name-hint" class="section-description">Choose a unique name. You can assign permissions from the role list after creating it.</p>
+        <label for="add-role-name" class="form-label">Role name</label>
+        <input id="add-role-name" name="name" type="text" class="form-input" required maxlength="150" autocomplete="off" placeholder="e.g. Sales manager" aria-describedby="add-role-name-hint add-role-name-error">
+        <p id="add-role-name-error" data-error-for="name" class="form-error" hidden></p>
+        <div class="user-form-actions">
+            <a href="{% url 'account_pages:role-list' %}" class="secondary-button">Cancel</a>
+            <button type="submit" class="primary-button compact-primary" data-loading-label="Creating role...">
+                <svg data-button-arrow width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke-linecap="round"/></svg>
+                <span data-button-label>Add role</span>
+                <span class="button-spinner" data-button-spinner hidden aria-hidden="true"></span>
+            </button>
+        </div>
+        <noscript><p class="form-error">Enable JavaScript to create a role.</p></noscript>
+    </form>
+</div>
+{% endblock %}
+{% block workspace_js %}<script type="module" src="{% static 'account/js/auth.js' %}"></script>{% endblock %}
