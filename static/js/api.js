@@ -22,6 +22,14 @@ export async function getJSON(url) {
     return requestJSON(url, { method: "GET" });
 }
 
+export async function postFormData(url, data, csrfToken) {
+    return requestJSON(url, {
+        method: "POST",
+        headers: { "X-CSRFToken": csrfToken },
+        body: data,
+    });
+}
+
 export async function patchJSON(url, data, csrfToken) {
     return requestJSON(url, {
         method: "PATCH",

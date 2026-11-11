@@ -14,6 +14,7 @@ class Account(models.Model):
 
     full_name = models.CharField(max_length=150)
     email = models.EmailField(max_length=254)
+    image = models.ImageField(upload_to='profile_pictures/', blank=True)
     otp = models.CharField(max_length=128, null=True, blank=True,editable=False)
     otp_expires_at = models.DateTimeField(null=True, blank=True, editable=False)
     date_of_birth = models.DateField(null=True, blank=True)

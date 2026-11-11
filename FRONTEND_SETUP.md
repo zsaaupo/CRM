@@ -44,6 +44,15 @@ the shared typography and accessibility styles.
 
 ## Preview pages
 
+The Add user form includes an optional profile image picker and submits through
+the shared `postFormData` helper, preserving session and CSRF protection. The
+browser sets the multipart boundary. Empty optional dates are omitted and image
+validation errors appear beside the file picker. Signup has no image upload.
+User rows display the API's `image` URL in their existing avatar position. The
+profile, dashboard and account menu share `includes/avatar.html`. Images cover
+the avatar area; existing name initials remain the fallback for missing images
+or image load failures.
+
 ```powershell
 .\venv\Scripts\python.exe manage.py runserver
 ```

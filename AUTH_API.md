@@ -3,6 +3,23 @@
 All management endpoints now enforce permissions. See [ACCESS_CONTROL.md](ACCESS_CONTROL.md)
 for the full permission matrix, migration and administrator setup.
 
+## Account profile images
+
+`POST /account/api/add-user/` accepts an optional `image` file.
+Use multipart/form-data with the normal add-user
+fields as Text and `image` as File. Let the client set the multipart Content-Type
+boundary. JSON without an image remains supported; JSON cannot contain a file
+upload. Invalid images receive HTTP 400 with an `image` field error.
+
+Signup does not support image uploads. Submitted image fields are ignored;
+new signup accounts start without an image.
+
+Signup, add-user and login account responses include `account.image` as a media
+URL or null. User-list results include the same value as `image`. Login accepts
+credentials only and returns the existing saved image. Verification preserves
+the image. OTP, logout and role/group endpoints keep their existing message or
+assignment responses, since they do not return account profiles.
+
 ## Obtain a CSRF token
 
 Send `GET /account/api/login/`. The response contains `csrfToken` and sets a
@@ -67,6 +84,13 @@ Staff status alone is insufficient.
 Name, email, password and matching confirmation are required. Phone and profile
 fields (`date_of_birth`, `gender`, `designation`, `address`, `city`, `state`,
 `postal_code`, `country`) are optional. Gender accepts `M`, `F` or `T`.
+An optional `image` file is also accepted. For image uploads, select Postman's
+Body > form-data, add the normal fields as Text, and add `image` as File.
+Do not manually set Content-Type: let Postman generate the multipart boundary.
+Keep the session cookies and `X-CSRFToken` header. JSON requests without an image
+remain supported. Invalid images return HTTP 400 with an `image` field error.
+Images are stored under `media/profile_pictures/`; the account response includes
+the `image` media URL, or null when no image is set.
 Email is normalized and checked for duplicates; Django password validation applies.
 Only declared fields are accepted for creation, so callers cannot assign staff,
 superuser, groups, permissions, user IDs or OTP values.
@@ -91,7 +115,9 @@ Account profile.
 
 The response contains `count`, `next`, `previous`, and `results`, with 20 users
 per page, newest first. Each result exposes only `id`, `full_name`, `email`,
-`phone_number`, `designation`, `is_active`, and `date_joined`. Passwords, OTPs,
+`image`, `phone_number`, `designation`, `is_active`, and `date_joined`.
+`image` contains the profile image media URL or null for users without an image
+or Account profile. Passwords, OTPs,
 birth dates, addresses, and permissions are not included.
 
 Use `?page=2` for later pages or `?q=avery` to search by name, email, phone or

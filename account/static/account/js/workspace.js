@@ -1,5 +1,11 @@
 import { postJSON } from "../../js/api.js";
 
+document.querySelectorAll("[data-avatar-image]").forEach((image) => {
+    const fallback = () => image.remove();
+    image.addEventListener("error", fallback, { once: true });
+    if (image.complete && image.naturalWidth === 0) fallback();
+});
+
 const userMenu = document.querySelector("[data-user-menu]");
 const menuToggle = userMenu?.querySelector("[data-user-menu-toggle]");
 const dropdown = userMenu?.querySelector("[data-user-dropdown]");

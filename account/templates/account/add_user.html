@@ -9,13 +9,19 @@
         <a href="{{ user_list_url }}" class="secondary-button">Back to user list <span aria-hidden="true">&rarr;</span></a>
     </div>
     <div class="user-form-layout">
-        <form method="post" action="{% url 'account:add-user' %}" data-auth-form="add-user" data-success-url="{{ user_list_url }}" class="user-form-card" novalidate>
+        <form method="post" enctype="multipart/form-data" action="{% url 'account:add-user' %}" data-auth-form="add-user" data-success-url="{{ user_list_url }}" class="user-form-card" novalidate>
             {% csrf_token %}
             <div class="form-status mb-7" data-form-status role="status" aria-live="polite" tabindex="-1" hidden></div>
             <fieldset>
                 <legend class="section-title">Personal details</legend>
                 <p class="section-description">Start with their name and contact information.</p>
                 <div class="user-form-grid">
+                    <div class="user-form-full">
+                        <label for="add-image" class="form-label">Profile picture <span class="ml-1 font-normal text-stone-400">Optional</span></label>
+                        <input id="add-image" name="image" type="file" accept="image/*" class="form-input" aria-describedby="add-image-hint add-image-error">
+                        <p id="add-image-hint" class="mt-2 text-xs leading-5 text-stone-500">Choose a profile image. Without one, their name initials will be shown.</p>
+                        <p id="add-image-error" data-error-for="image" class="form-error" hidden></p>
+                    </div>
                     {% include "account/includes/user_field.html" with name="full_name" label="Full name" required=True maxlength=150 autocomplete="name" placeholder="e.g. Avery Morgan" only %}
                     {% include "account/includes/user_field.html" with name="email" label="Email address" field_type="email" required=True maxlength=150 autocomplete="email" placeholder="person@example.com" only %}
                     {% include "account/includes/user_field.html" with name="phone_number" label="Phone number" field_type="tel" maxlength=32 autocomplete="tel" placeholder="+880 1700 000000" only %}

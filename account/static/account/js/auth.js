@@ -1,4 +1,4 @@
-import { APIError, postJSON } from "../../js/api.js";
+import { APIError, postJSON, postFormData } from "../../js/api.js";
 
 const emailStorageKey = "emanager.pendingEmail";
 
@@ -151,7 +151,18 @@ document.querySelectorAll("[data-auth-form]").forEach((form) => {
         const button = form.querySelector('button[type="submit"]');
         setBusy(form, button, true);
         try {
-            const result = await postJSON(form.action, payload, csrfToken);
+            let result;
+            if (isAddUser) {
+                const data = new FormData();
+                for (const [name, value] of Object.entries(payload)) {
+                    if (value !== null) data.append(name, value);
+                }
+                const image = form.elements.namedItem("image")?.files[0];
+                if (image) data.append("image", image);
+                result = await postFormData(form.action, data, csrfToken);
+            } else {
+                result = await postJSON(form.action, payload, csrfToken);
+            }
             if (isAddRole) {
                 form.reset();
                 setStatus(form, "Role created. Opening the role list...", true);

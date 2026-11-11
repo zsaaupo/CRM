@@ -16,6 +16,7 @@ from rest_framework.exceptions import ValidationError
 from rest_framework.generics import GenericAPIView, ListAPIView, ListCreateAPIView, RetrieveUpdateDestroyAPIView
 from rest_framework.authentication import SessionAuthentication
 from rest_framework.pagination import PageNumberPagination
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -98,6 +99,7 @@ class LogoutAPIView(APIView):
 @method_decorator(never_cache, name='dispatch')
 class AddUserAPIView(GenericAPIView):
     serializer_class = AddUserSerializer
+    parser_classes = [JSONParser, FormParser, MultiPartParser]
     authentication_classes = [SessionAuthentication]
     permission_classes = [IsAuthenticated, HasRequiredPermissions]
     required_permissions = ACCESS_RULES['add_user']

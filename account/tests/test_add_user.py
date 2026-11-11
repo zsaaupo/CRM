@@ -1,10 +1,15 @@
 from .test_helpers import grant_permissions
 from unittest.mock import patch
+from io import BytesIO
+from tempfile import TemporaryDirectory
 
 from django.contrib.auth import SESSION_KEY, get_user_model
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import IntegrityError
+from django.test import override_settings
 from django.urls import reverse
 from rest_framework.test import APIClient, APITestCase
+from PIL import Image
 
 from account.models import Account
 
@@ -14,6 +19,8 @@ User = get_user_model()
 
 class AddUserAPIViewTests(APITestCase):
     def setUp(self):
+        media_root = self.enterContext(TemporaryDirectory())
+        self.enterContext(override_settings(MEDIA_ROOT=media_root))
         self.url = reverse('account:add-user')
         self.creator = User.objects.create_user(
             username='creator@example.com', password='Creator!74#Secure',
@@ -74,6 +81,27 @@ class AddUserAPIViewTests(APITestCase):
         response = self.client.post(self.url, data, format='json')
         self.assertEqual(response.status_code, 201, response.data)
         self.assertEqual(response.data['account']['phone_number'], '')
+        self.assertIsNone(response.data['account']['image'])
+
+    def test_multipart_image_is_saved_and_its_url_is_returned(self):
+        content = BytesIO()
+        Image.new('RGB', (2, 2)).save(content, format='PNG')
+        upload = SimpleUploadedFile('avatar.png', content.getvalue(), content_type='image/png')
+        response = self.client.post(self.url, {**self.data, 'image': upload}, format='multipart')
+        self.assertEqual(response.status_code, 201, response.data)
+        account = Account.objects.get(email='new.person@example.com')
+        self.assertTrue(account.image.name.startswith('profile_pictures/'))
+        self.assertEqual(response.data['account']['image'], account.image.url)
+        with account.image.storage.open(account.image.name, 'rb') as stored:
+            self.assertEqual(stored.read(), content.getvalue())
+
+    def test_invalid_image_returns_field_error_without_creating_records(self):
+        upload = SimpleUploadedFile('avatar.png', b'not an image', content_type='image/png')
+        response = self.client.post(self.url, {**self.data, 'image': upload}, format='multipart')
+        self.assertEqual(response.status_code, 400, response.data)
+        self.assertIn('image', response.data)
+        self.assertEqual(User.objects.count(), 1)
+        self.assertFalse(Account.objects.exists())
 
     def test_anonymous_and_inactive_users_cannot_create_users(self):
         anonymous = APIClient(enforce_csrf_checks=True)

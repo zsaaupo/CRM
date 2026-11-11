@@ -1,0 +1,4 @@
+<span class="user-avatar{% if avatar_class %} {{ avatar_class }}{% endif %}" aria-hidden="true">
+    <span>{{ initials }}</span>
+    {% if image %}<img class="avatar-image" src="{{ image.url }}" alt="" data-avatar-image>{% endif %}
+</span>

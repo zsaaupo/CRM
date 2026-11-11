@@ -51,13 +51,17 @@ class UserListAPIViewTests(APITestCase):
         self.assertEqual(self.client.get(self.url).status_code, 403)
 
     def test_response_only_exposes_directory_fields(self):
+        self.account.image = 'profile_pictures/avatar.png'
+        self.account.save(update_fields=['image'])
         rows = self.client.get(self.url).data['results']
-        expected = {'id', 'full_name', 'email', 'phone_number', 'designation', 'is_active', 'date_joined'}
+        expected = {'id', 'full_name', 'email', 'image', 'phone_number', 'designation', 'is_active', 'date_joined'}
         for row in rows:
             self.assertEqual(set(row), expected)
         self.assertEqual(rows[1]['phone_number'], '+8801700000000')
         self.assertEqual(rows[1]['designation'], 'Teacher')
         self.assertEqual(rows[1]['full_name'], 'Avery Morgan')
+        self.assertEqual(rows[1]['image'], f'{settings.MEDIA_URL}profile_pictures/avatar.png')
+        self.assertIsNone(rows[0]['image'])
 
     def test_users_without_account_are_included_with_identity_fallbacks(self):
         user = User.objects.create_user(
@@ -69,6 +73,7 @@ class UserListAPIViewTests(APITestCase):
         self.assertEqual(row['email'], 'admin@example.com')
         self.assertEqual(row['phone_number'], '')
         self.assertEqual(row['designation'], '')
+        self.assertIsNone(row['image'])
 
     def test_case_insensitive_search_matches_name_email_phone_and_designation(self):
         for query in ['AVERY', 'MANAGER@EXAMPLE', '1700000000', 'TEACHER', '  Avery  ']:
@@ -134,6 +139,9 @@ class UserManagementPageTests(TestCase):
         self.assertContains(response, 'name="password_confirm"')
         self.assertContains(response, 'name="designation"')
         self.assertContains(response, 'name="country"')
+        self.assertContains(response, 'enctype="multipart/form-data"')
+        self.assertContains(response, 'name="image" type="file"')
+        self.assertContains(response, 'data-error-for="image"')
         self.assertContains(response, 'aria-controls="users-submenu" aria-expanded="true"')
         self.assertContains(response, 'src="/static/account/js/auth.js"')
         self.assertContains(response, 'src="/static/account/js/workspace.js"')

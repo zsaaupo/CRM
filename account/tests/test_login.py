@@ -69,12 +69,15 @@ class LoginAPIViewTests(APITestCase):
         self.assertIn('no-store', response['Cache-Control'])
 
     def test_verified_user_logs_in_and_session_is_available_on_later_requests(self):
+        self.account.image = 'profile_pictures/avatar.png'
+        self.account.save(update_fields=['image'])
         self.data['email'] = 'PERSON@EXAMPLE.COM'
         response = self.client.post(self.url, self.data, format='json')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(self.client.session[SESSION_KEY], str(self.user.pk))
         self.assertEqual(response.data['user']['id'], self.user.pk)
         self.assertEqual(response.data['account']['id'], self.account.pk)
+        self.assertEqual(response.data['account']['image'], self.account.image.url)
         self.assertEqual(response.data['user']['email'], 'person@example.com')
         self.assertTrue(response.cookies[settings.SESSION_COOKIE_NAME]['httponly'])
         self.assertNotIn(self.password, response.content.decode())

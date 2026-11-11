@@ -20,6 +20,7 @@ class AccountSerializer(serializers.ModelSerializer):
             'user',
             'full_name',
             'email',
+            'image',
             'date_of_birth',
             'gender',
             'phone_number',
@@ -69,6 +70,7 @@ class SignUpSerializer(serializers.Serializer):
 
 
 class AddUserSerializer(SignUpSerializer):
+    image = serializers.ImageField(required=False, allow_null=True)
     date_of_birth = serializers.DateField(required=False, allow_null=True)
     gender = serializers.ChoiceField(
         choices=gender_choice, required=False, allow_blank=True, allow_null=True,
@@ -84,12 +86,13 @@ class AddUserSerializer(SignUpSerializer):
 class UserListSerializer(serializers.ModelSerializer):
     full_name = serializers.SerializerMethodField()
     email = serializers.SerializerMethodField()
+    image = serializers.SerializerMethodField()
     phone_number = serializers.SerializerMethodField()
     designation = serializers.SerializerMethodField()
 
     class Meta:
         model = User
-        fields = ['id', 'full_name', 'email', 'phone_number', 'designation', 'is_active', 'date_joined']
+        fields = ['id', 'full_name', 'email', 'image', 'phone_number', 'designation', 'is_active', 'date_joined']
         read_only_fields = fields
 
     def get_full_name(self, user):
@@ -99,6 +102,10 @@ class UserListSerializer(serializers.ModelSerializer):
     def get_email(self, user):
         account = getattr(user, 'account', None)
         return (account.email if account else '') or user.email or user.get_username()
+
+    def get_image(self, user):
+        account = getattr(user, 'account', None)
+        return account.image.url if account and account.image else None
 
     def get_phone_number(self, user):
         account = getattr(user, 'account', None)

@@ -44,6 +44,7 @@ class AccountAdmin(admin.ModelAdmin):
         "user",
         "full_name",
         "email",
+        "image",
         "otp",
         "otp_expires_at",
         "date_of_birth",

@@ -35,6 +35,15 @@ if (directory) {
         avatar.className = "user-avatar";
         avatar.setAttribute("aria-hidden", "true");
         avatar.textContent = (user.full_name || user.email || "U").trim().split(/\s+/).slice(0, 2).map((word) => word[0]).join("").toUpperCase() || "U";
+        if (user.image) {
+            const image = document.createElement("img");
+            image.className = "avatar-image";
+            image.alt = "";
+            image.loading = "lazy";
+            image.addEventListener("error", () => image.remove(), { once: true });
+            image.src = user.image;
+            avatar.append(image);
+        }
         const label = document.createElement("span");
         label.textContent = user.full_name || "Unnamed user";
         name.textContent = "";

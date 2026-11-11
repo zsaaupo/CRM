@@ -81,6 +81,20 @@ class WorkspacePageTests(TestCase):
         self.assertContains(response, 'Manager')
         self.assertContains(response, 'Bangladesh')
         self.assertNotContains(response, 'otp_expires_at')
+        self.assertContains(response, '>AM</span>')
+        self.assertNotContains(response, 'data-avatar-image')
+
+    def test_profile_and_dashboard_display_saved_picture_with_initials_fallback(self):
+        self.account.image = 'profile_pictures/avery.png'
+        self.account.save(update_fields=['image'])
+        self.client.force_login(self.user)
+        for name in ['account_pages:profile', 'dashboard']:
+            with self.subTest(name=name):
+                response = self.client.get(reverse(name))
+                self.assertEqual(response.status_code, 200)
+                self.assertContains(response, f'src="{self.account.image.url}"', count=2)
+                self.assertContains(response, 'data-avatar-image', count=2)
+                self.assertContains(response, '>AM</span>', count=2)
 
     def test_missing_account_uses_user_identity_without_crashing(self):
         self.account.delete()

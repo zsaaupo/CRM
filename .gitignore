@@ -16,3 +16,6 @@ db.sqlite3-journal
 
 # Collected deployment assets
 staticfiles/
+
+# User-uploaded files
+media/
