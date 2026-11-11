@@ -3,9 +3,10 @@ from django.db import models
 from django.contrib.auth.models import User
 from django.utils import timezone
 from .strings import gender_choice
+from common.models import TimeStampedModel
 
 
-class Account(models.Model):
+class Account(TimeStampedModel):
 
     class Meta:
         permissions = [('manage_access', 'Can manage role assignments and role permissions')]
@@ -28,9 +29,6 @@ class Account(models.Model):
     state = models.CharField(max_length=100, null=True, blank=True)
     postal_code = models.CharField(max_length=20, null=True, blank=True)
     country = models.CharField(max_length=100, null=True, blank=True)
-
-    created_at = models.DateTimeField(default=timezone.now, editable=False)
-    updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return self.full_name or self.user.get_username()

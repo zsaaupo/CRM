@@ -34,6 +34,19 @@
             {% if access.add_role %}<a href="{% url 'account_pages:add-role' %}" data-nav-item class="sidebar-sub-link {% if role_page == 'add' %}is-current{% endif %}" {% if role_page == 'add' %}aria-current="page"{% endif %}>Add role</a>{% endif %}
         </div>
         {% endif %}
+        {% if inventory_menu %}
+        <button type="button" class="sidebar-link sidebar-group-toggle {% if page_section == 'inventory' %}is-current{% endif %}" data-nav-toggle data-inventory-toggle aria-controls="inventory-submenu" aria-expanded="{% if page_section == 'inventory' %}true{% else %}false{% endif %}">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="m12 3 9 5-9 5-9-5 9-5ZM3 8v9l9 5 9-5V8M12 13v9M7.5 5.5l9 5" stroke-linejoin="round"/></svg>
+            <span>Inventory</span>
+            <svg class="sidebar-chevron" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m9 5 7 7-7 7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <div id="inventory-submenu" class="sidebar-submenu" {% if page_section != 'inventory' %}hidden{% endif %}>
+            {% for item in inventory_menu %}
+            <a href="{{ item.list_url }}" data-nav-item class="sidebar-sub-link {% if inventory_key == item.key and inventory_mode == 'list' %}is-current{% endif %}" {% if inventory_key == item.key and inventory_mode == 'list' %}aria-current="page"{% endif %}>{{ item.label }}</a>
+            {% if item.key == 'product' and item.can_add %}<a href="{{ item.add_url }}" data-nav-item class="sidebar-sub-link {% if inventory_key == 'product' and inventory_mode == 'add' %}is-current{% endif %}" {% if inventory_key == 'product' and inventory_mode == 'add' %}aria-current="page"{% endif %}>Add product</a>{% endif %}
+            {% endfor %}
+        </div>
+        {% endif %}
     </nav>
     <div class="sidebar-footer"><span class="status-dot" aria-hidden="true"></span> A little more clarity, every day.</div>
 </aside>
