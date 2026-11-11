@@ -5,7 +5,7 @@ from django.test import RequestFactory, TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
 
-from .permissions import ACCESS_RULES
+from account.permissions import ACCESS_RULES
 from .test_helpers import grant_permissions
 
 

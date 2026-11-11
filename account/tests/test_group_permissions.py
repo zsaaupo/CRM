@@ -6,7 +6,7 @@ from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
 
-from .serializers import GroupPermissionsSerializer
+from account.serializers import GroupPermissionsSerializer
 
 
 User = get_user_model()

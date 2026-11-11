@@ -6,7 +6,7 @@ from django.db import IntegrityError
 from django.urls import reverse
 from rest_framework.test import APIClient, APITestCase
 
-from .models import Account
+from account.models import Account
 
 
 User = get_user_model()

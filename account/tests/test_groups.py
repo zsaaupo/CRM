@@ -8,7 +8,7 @@ from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
 
-from .serializers import GroupListSerializer
+from account.serializers import GroupListSerializer
 
 
 User = get_user_model()

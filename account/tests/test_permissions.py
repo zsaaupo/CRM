@@ -6,8 +6,8 @@ from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
 
-from .models import Account
-from .serializers import PermissionListSerializer
+from account.models import Account
+from account.serializers import PermissionListSerializer
 
 
 User = get_user_model()
