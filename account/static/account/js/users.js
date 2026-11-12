@@ -57,7 +57,7 @@ if (directory) {
         state.append(badge);
         const date = new Date(user.date_joined);
         const joined = Number.isNaN(date.getTime()) ? "" : date.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
-        row.append(name, cell(user.email), cell(user.phone_number), cell(user.designation), state, cell(joined, "user-joined"));
+        row.append(name, cell(user.email), cell(user.phone_number), cell(user.designation), cell(user.role || "Unassigned"), state, cell(joined, "user-joined"));
         const actions = cell("");
         actions.textContent = "";
         const controls = document.getElementById("user-actions-template").content.cloneNode(true);

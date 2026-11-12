@@ -54,7 +54,7 @@ class UserListAPIViewTests(APITestCase):
         self.account.image = 'profile_pictures/avatar.png'
         self.account.save(update_fields=['image'])
         rows = self.client.get(self.url).data['results']
-        expected = {'id', 'full_name', 'email', 'image', 'phone_number', 'designation', 'is_active', 'date_joined'}
+        expected = {'id', 'full_name', 'email', 'image', 'phone_number', 'designation', 'role', 'is_active', 'date_joined'}
         for row in rows:
             self.assertEqual(set(row), expected)
         self.assertEqual(rows[1]['phone_number'], '+8801700000000')
@@ -102,10 +102,32 @@ class UserListAPIViewTests(APITestCase):
         self.assertTrue(second.data['previous'])
         self.assertEqual(self.client.get(self.url, {'page': 99}).status_code, 404)
 
-    def test_list_serialization_fetches_profiles_in_one_query(self):
-        with self.assertNumQueries(1):
-            rows = UserListSerializer(User.objects.select_related('account').order_by('pk'), many=True).data
-        self.assertEqual(len(rows), 2)
+    def test_list_serialization_fetches_profiles_and_roles_in_two_queries(self):
+        User.objects.bulk_create([User(username=f'role-reader-{index}') for index in range(20)])
+        with self.assertNumQueries(2):
+            rows = UserListSerializer(User.objects.select_related('account').prefetch_related('groups').order_by('pk'), many=True).data
+        self.assertEqual(len(rows), 22)
+
+    def test_roles_reflect_assignment_renaming_and_removal(self):
+        rows = {row['id']: row for row in self.client.get(self.url).data['results']}
+        self.assertEqual(rows[self.user.pk]['role'], self.role.name)
+        self.assertIsNone(rows[self.other.pk]['role'])
+        role = Group.objects.create(name='Sales representative')
+        self.other.groups.set([role])
+        rows = {row['id']: row for row in self.client.get(self.url).data['results']}
+        self.assertEqual(rows[self.other.pk]['role'], 'Sales representative')
+        role.name = 'Sales manager'
+        role.save(update_fields=['name'])
+        rows = {row['id']: row for row in self.client.get(self.url).data['results']}
+        self.assertEqual(rows[self.other.pk]['role'], 'Sales manager')
+        self.other.groups.clear()
+        rows = {row['id']: row for row in self.client.get(self.url).data['results']}
+        self.assertIsNone(rows[self.other.pk]['role'])
+
+    def test_legacy_multiple_groups_are_displayed_without_hiding_roles(self):
+        self.other.groups.set([Group.objects.create(name='Support'), Group.objects.create(name='Accounting')])
+        rows = {row['id']: row for row in self.client.get(self.url).data['results']}
+        self.assertEqual(rows[self.other.pk]['role'], 'Accounting, Support')
 
     def test_post_does_not_create_users(self):
         response = self.client.post(self.url, {'email': 'extra@example.com'}, format='json')
@@ -156,6 +178,7 @@ class UserManagementPageTests(TestCase):
         self.assertTemplateUsed(response, 'account/user_list.html')
         self.assertContains(response, f'data-api-url="{reverse("account:user-list")}"')
         self.assertContains(response, 'data-user-search')
+        self.assertContains(response, '<th scope="col">Role</th>')
         self.assertContains(response, f'data-assign-role-url="{reverse("account_pages:assign-role", args=[0])}"')
         self.assertContains(response, 'id="user-actions-template"')
         self.assertContains(response, 'title="Assign role"')

@@ -115,7 +115,11 @@ Account profile.
 
 The response contains `count`, `next`, `previous`, and `results`, with 20 users
 per page, newest first. Each result exposes only `id`, `full_name`, `email`,
-`image`, `phone_number`, `designation`, `is_active`, and `date_joined`.
+`image`, `phone_number`, `designation`, `role`, `is_active`, and `date_joined`.
+`role` is the assigned Django group name, or null when no role is assigned; the
+user list displays Unassigned for null values. Legacy users with multiple groups
+have their group names joined in alphabetical order. Group names are prefetched
+for the page to avoid a separate query per user.
 `image` contains the profile image media URL or null for users without an image
 or Account profile. Passwords, OTPs,
 birth dates, addresses, and permissions are not included.

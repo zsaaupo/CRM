@@ -152,7 +152,7 @@ class UserListAPIView(ListAPIView):
     pagination_class = UserListPagination
 
     def get_queryset(self):
-        users = User.objects.select_related('account').order_by('-date_joined', '-pk')
+        users = User.objects.select_related('account').prefetch_related('groups').order_by('-date_joined', '-pk')
         query = self.request.query_params.get('q', '').strip()
         if query:
             users = users.filter(

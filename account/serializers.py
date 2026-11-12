@@ -89,10 +89,11 @@ class UserListSerializer(serializers.ModelSerializer):
     image = serializers.SerializerMethodField()
     phone_number = serializers.SerializerMethodField()
     designation = serializers.SerializerMethodField()
+    role = serializers.SerializerMethodField()
 
     class Meta:
         model = User
-        fields = ['id', 'full_name', 'email', 'image', 'phone_number', 'designation', 'is_active', 'date_joined']
+        fields = ['id', 'full_name', 'email', 'image', 'phone_number', 'designation', 'role', 'is_active', 'date_joined']
         read_only_fields = fields
 
     def get_full_name(self, user):
@@ -114,6 +115,10 @@ class UserListSerializer(serializers.ModelSerializer):
     def get_designation(self, user):
         account = getattr(user, 'account', None)
         return (account.designation if account else '') or ''
+
+    def get_role(self, user):
+        groups = sorted(user.groups.all(), key=lambda group: (group.name.casefold(), group.pk))
+        return ', '.join(group.name for group in groups) or None
 
 
 class PermissionListSerializer(serializers.ModelSerializer):
