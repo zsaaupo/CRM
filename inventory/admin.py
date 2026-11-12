@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.core.exceptions import PermissionDenied
 
-from .models import Brand, Product, ProductCategory, ProductType, Status, UnitOfMeasure
+from .models import Brand, Currency, Product, ProductCategory, ProductType, Status, UnitOfMeasure
 
 
 class CatalogAdmin(admin.ModelAdmin):
@@ -64,13 +64,23 @@ class UnitOfMeasureAdmin(CatalogAdmin):
     list_filter = ['is_active']
 
 
+@admin.register(Currency)
+class CurrencyAdmin(ProductLookupAdmin):
+    list_display = ['name', 'code', 'symbol', 'exchange_rate', 'is_active']
+
+    def formfield_for_dbfield(self, db_field, request, **kwargs):
+        if db_field.name == 'exchange_rate':
+            kwargs['required'] = True
+        return super().formfield_for_dbfield(db_field, request, **kwargs)
+
+
 @admin.register(Product)
 class ProductAdmin(CatalogAdmin):
     list_display = ['sku', 'name', 'product_type', 'status', 'category', 'sale_price', 'currency', 'unit']
     list_filter = ['status', 'product_type', 'category', 'brand']
     search_fields = ['sku', 'name', 'barcode', 'manufacturer_part_number']
-    autocomplete_fields = ['product_type', 'status', 'category', 'brand', 'unit', 'variant_of']
-    list_select_related = ['product_type', 'status', 'category', 'brand', 'unit']
+    autocomplete_fields = ['product_type', 'status', 'category', 'brand', 'unit', 'variant_of', 'currency']
+    list_select_related = ['product_type', 'status', 'category', 'brand', 'unit', 'currency']
     readonly_fields = ['public_id', *CatalogAdmin.readonly_fields]
     fieldsets = [
         ('Identification', {'fields': ('sku', 'name', 'barcode', 'public_id', 'product_type', 'status')}),

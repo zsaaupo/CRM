@@ -1,9 +1,11 @@
 from copy import copy
+from decimal import Decimal
 
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.conf import settings
 from rest_framework import serializers
 
-from .models import Brand, Product, ProductCategory, ProductType, Status, UnitOfMeasure
+from .models import Brand, Currency, Product, ProductCategory, ProductType, Status, UnitOfMeasure
 
 
 AUDIT_FIELDS = ['id', 'created_at', 'updated_at', 'create_by', 'modified_by']
@@ -73,7 +75,22 @@ class StatusSerializer(ProductLookupSerializer):
         read_only_fields = AUDIT_FIELDS
 
 
+class CurrencySerializer(ProductLookupSerializer):
+    base_currency = serializers.SerializerMethodField()
+    exchange_rate = serializers.DecimalField(max_digits=20, decimal_places=8,
+                                             min_value=Decimal('0.00000001'))
+
+    def get_base_currency(self, obj):
+        return settings.INVENTORY_BASE_CURRENCY
+
+    class Meta:
+        model = Currency
+        fields = ['id', 'code', 'name', 'symbol', 'exchange_rate', 'base_currency', 'is_active', *AUDIT_FIELDS[1:]]
+        read_only_fields = AUDIT_FIELDS
+
+
 class ProductSerializer(CatalogSerializer):
+    currency = serializers.SlugRelatedField(slug_field='code', queryset=Currency.objects.all())
     product_type = serializers.SlugRelatedField(slug_field='code', queryset=ProductType.objects.all(), required=False)
     status = serializers.SlugRelatedField(slug_field='code', queryset=Status.objects.all(), required=False)
     image = serializers.ImageField(required=False, allow_null=True)

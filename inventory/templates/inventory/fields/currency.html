@@ -1,0 +1,10 @@
+{% include 'inventory/includes/field.html' with name='name' label='Name' required=True maxlength=100 only %}
+{% include 'inventory/includes/field.html' with name='code' label='Code' required=True maxlength=3 pattern='[A-Z]{3}' hint='Three uppercase letters. The code cannot change after creation.' locked=editing_currency only %}
+{% include 'inventory/includes/field.html' with name='symbol' label='Symbol' maxlength=10 only %}
+<div>
+    <label for="id_exchange_rate" class="form-label">Exchange rate</label>
+    <input id="id_exchange_rate" name="exchange_rate" type="number" min="0.00000001" step="0.00000001" required class="form-input" aria-describedby="id_exchange_rate_hint id_exchange_rate_error">
+    <p id="id_exchange_rate_hint" class="mt-2 text-xs leading-5 text-stone-500">1 unit of this currency equals this many {{ base_currency }}. Use 1 for the base currency. Rates are entered manually.</p>
+    <p id="id_exchange_rate_error" data-error-for="exchange_rate" class="form-error" hidden></p>
+</div>
+{% include 'inventory/includes/field.html' with name='is_active' label='Active' field_type='checkbox' checked=True only %}

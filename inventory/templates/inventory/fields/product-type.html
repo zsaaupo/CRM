@@ -1,0 +1,4 @@
+{% include 'inventory/includes/field.html' with name='name' label='Name' required=True maxlength=100 only %}
+{% include 'inventory/includes/field.html' with name='code' label='Code' required=True maxlength=32 pattern='[a-zA-Z0-9_-]+' hint='A unique code, such as rental. The code cannot change after creation.' locked=lock_code only %}
+{% include 'inventory/includes/field.html' with name='description' label='Description' field_type='textarea' only %}
+{% include 'inventory/includes/field.html' with name='is_active' label='Active' field_type='checkbox' checked=True only %}

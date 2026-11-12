@@ -1,0 +1,40 @@
+<fieldset>
+    <legend class="section-title">Product details</legend>
+    <p class="section-description">Identify the item and choose its catalog references.</p>
+    <div class="user-form-grid">
+        {% include 'inventory/includes/field.html' with name='sku' label='SKU' required=True maxlength=64 only %}
+        {% include 'inventory/includes/field.html' with name='name' label='Name' required=True maxlength=255 only %}
+        {% include 'inventory/includes/field.html' with name='barcode' label='Barcode' maxlength=64 only %}
+        {% include 'inventory/includes/field.html' with name='product_type' label='Product type' field_type='select' required=True value='goods' only %}
+        {% include 'inventory/includes/field.html' with name='status' label='Status' field_type='select' required=True value='draft' only %}
+        {% include 'inventory/includes/field.html' with name='category' label='Category' field_type='select' only %}
+        {% include 'inventory/includes/field.html' with name='brand' label='Brand' field_type='select' only %}
+        {% include 'inventory/includes/field.html' with name='unit' label='Unit' field_type='select' required=True only %}
+        {% include 'inventory/includes/field.html' with name='variant_of' label='Base product' field_type='select' hint='Select a base product only when adding a variant.' only %}
+    </div>
+</fieldset>
+<fieldset class="user-form-section">
+    <legend class="section-title">Description and image</legend>
+    <p class="section-description">Add the details that help people recognize this product.</p>
+    <div class="user-form-grid">
+        {% include 'inventory/includes/field.html' with name='description' label='Description' field_type='textarea' only %}
+        {% include 'inventory/includes/field.html' with name='image' label='Image' field_type='file' only %}
+        {% if inventory_mode == 'edit' %}<div class="user-form-full" data-current-image hidden><p class="form-label">Current image</p><img data-current-image-preview alt="Current product image" class="max-h-32 rounded-lg"><p class="mt-2 text-xs text-stone-500">Choose a new image to replace it. Leave the upload empty to keep it.</p></div>{% endif %}
+        {% include 'inventory/includes/field.html' with name='manufacturer' label='Manufacturer' maxlength=150 only %}
+        {% include 'inventory/includes/field.html' with name='manufacturer_part_number' label='Manufacturer part number' maxlength=100 only %}
+        {% include 'inventory/includes/field.html' with name='attributes' label='Specifications (JSON)' field_type='textarea' json_field=True value='{}' hint='Optional specifications, e.g. {"color": "blue", "size": "M"}.' only %}
+    </div>
+</fieldset>
+<fieldset class="user-form-section">
+    <legend class="section-title">Pricing</legend>
+    <p class="section-description">Set catalog prices and tax defaults in the selected currency.</p>
+    <div class="user-form-grid">
+        {% include 'inventory/includes/field.html' with name='currency' label='Currency' field_type='select' required=True only %}
+        {% include 'inventory/includes/field.html' with name='cost_price' label='Cost price' field_type='number' required=True value='0' only %}
+        {% include 'inventory/includes/field.html' with name='sale_price' label='Sale price' field_type='number' required=True value='0' only %}
+        {% include 'inventory/includes/field.html' with name='minimum_sale_price' label='Minimum sale price' field_type='number' only %}
+        {% include 'inventory/includes/field.html' with name='Whole_sale_price' label='Wholesale price' field_type='number' only %}
+        {% include 'inventory/includes/field.html' with name='product_tax' label='Tax rate (%)' field_type='number' required=True value='0' maximum='100' only %}
+        {% include 'inventory/includes/field.html' with name='is_returnable' label='Returnable' field_type='checkbox' checked=True only %}
+    </div>
+</fieldset>

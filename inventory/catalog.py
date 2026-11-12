@@ -1,7 +1,6 @@
 from dataclasses import dataclass
 
-from .forms import BrandForm, ProductCategoryForm, ProductForm, ProductTypeForm, StatusForm, UnitOfMeasureForm
-from .models import Brand, Product, ProductCategory, ProductType, Status, UnitOfMeasure
+from .models import Brand, Currency, Product, ProductCategory, ProductType, Status, UnitOfMeasure
 
 
 @dataclass(frozen=True)
@@ -11,7 +10,6 @@ class CatalogResource:
     singular: str
     plural: str
     model: type
-    form: type
     columns: tuple
 
     def permission(self, action):
@@ -20,20 +18,23 @@ class CatalogResource:
 
 # Insertion order is also the inventory sidebar order: products first.
 RESOURCES = (
-    CatalogResource('product', 'products', 'product', 'products', Product, ProductForm,
+    CatalogResource('product', 'products', 'product', 'products', Product,
                     (('name', 'Product', 'identity'), ('sku', 'SKU', 'text'),
                      ('product_type', 'Type', 'text'), ('status', 'Status', 'status'),
                      ('sale_price', 'Sale price', 'price'))),
-    CatalogResource('category', 'categories', 'category', 'categories', ProductCategory, ProductCategoryForm,
+    CatalogResource('category', 'categories', 'category', 'categories', ProductCategory,
                     (('name', 'Name', 'text'), ('code', 'Code', 'text'),
                      ('description', 'Description', 'text'), ('is_active', 'Status', 'status'))),
-    CatalogResource('brand', 'brands', 'brand', 'brands', Brand, BrandForm,
+    CatalogResource('brand', 'brands', 'brand', 'brands', Brand,
                     (('name', 'Name', 'text'), ('website', 'Website', 'text'), ('is_active', 'Status', 'status'))),
-    CatalogResource('unit', 'units', 'unit', 'units', UnitOfMeasure, UnitOfMeasureForm,
+    CatalogResource('unit', 'units', 'unit', 'units', UnitOfMeasure,
                     (('name', 'Name', 'text'), ('code', 'Code', 'text'), ('is_active', 'Status', 'status'))),
-    CatalogResource('product-type', 'product-types', 'product type', 'product types', ProductType, ProductTypeForm,
+    CatalogResource('product-type', 'product-types', 'product type', 'product types', ProductType,
                     (('name', 'Name', 'text'), ('code', 'Code', 'text'), ('is_active', 'Status', 'status'))),
-    CatalogResource('status', 'statuses', 'status', 'statuses', Status, StatusForm,
+    CatalogResource('status', 'statuses', 'status', 'statuses', Status,
                     (('name', 'Name', 'text'), ('code', 'Code', 'text'), ('is_active', 'Status', 'status'))),
+    CatalogResource('currency', 'currencies', 'currency', 'currencies', Currency,
+                    (('name', 'Name', 'text'), ('code', 'Code', 'text'), ('symbol', 'Symbol', 'text'),
+                     ('exchange_rate', 'Exchange rate', 'text'), ('is_active', 'Status', 'status'))),
 )
 RESOURCE_MAP = {resource.key: resource for resource in RESOURCES}

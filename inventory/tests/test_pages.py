@@ -3,8 +3,8 @@ from django.contrib.auth.models import Group, Permission
 from django.test import Client, TestCase
 from django.urls import reverse
 
-from .catalog import RESOURCES
-from .models import Product, UnitOfMeasure
+from ..catalog import RESOURCES
+from ..models import Product, UnitOfMeasure
 
 
 class InventoryPageTests(TestCase):
@@ -88,28 +88,28 @@ class InventoryPageTests(TestCase):
         self.assertEqual(self.client.get(url).status_code, 403)
         self.assertNotContains(self.client.get(reverse('dashboard')), 'data-inventory-toggle')
 
-    def test_product_form_uses_current_fields_and_code_based_lookup_options(self):
+    def test_product_page_renders_html_fields_and_loads_options_through_api(self):
         self.grant(RESOURCES[0], 'view', 'add')
         response = self.client.get(reverse('inventory_pages:add-product'))
-        form = response.context['form']
-        self.assertEqual(len(form.fields), 21)
+        self.assertNotIn('form', response.context)
         for name in ['sku', 'unit', 'product_type', 'status', 'image', 'attributes', 'Whole_sale_price']:
             self.assertContains(response, f'name="{name}"')
-        self.assertContains(response, '<option value="goods" selected>')
-        self.assertContains(response, '<option value="draft" selected>')
+        self.assertContains(response, 'data-options-url="/inventory/api/products/options/"')
+        self.assertContains(response, 'data-default="goods"')
+        self.assertContains(response, 'data-default="draft"')
         self.assertContains(response, 'accept="image/*"')
         self.assertContains(response, 'data-json-field="true"')
         self.assertNotContains(response, 'name="create_by"')
         self.assertNotContains(response, 'name="track_inventory"')
-        self.assertFalse(response.context['missing_references'])
+        self.assertNotContains(response, '<option value="BDT"')
 
-    def test_product_save_disabled_without_required_reference_records(self):
+    def test_product_save_starts_disabled_until_options_api_loads(self):
         UnitOfMeasure.objects.all().delete()
         self.grant(RESOURCES[0], 'view', 'add')
         response = self.client.get(reverse('inventory_pages:add-product'))
-        self.assertEqual(response.context['missing_references'], ['unit'])
         self.assertContains(response, 'data-catalog-submit disabled')
-        self.assertContains(response, 'No unit records are available.')
+        self.assertNotIn('missing_references', response.context)
+        self.assertEqual(self.client.get(reverse('inventory:product-options')).json()['unit'], [])
 
     def test_forms_submit_to_existing_csrf_protected_apis_and_records_appear_in_lists(self):
         client = Client(enforce_csrf_checks=True)
@@ -120,6 +120,7 @@ class InventoryPageTests(TestCase):
             'unit': {'name': 'Boxes', 'code': 'BOX', 'is_active': True},
             'product-type': {'name': 'Rental', 'code': 'rental', 'is_active': True},
             'status': {'name': 'Review', 'code': 'review', 'is_active': True},
+            'currency': {'name': 'US dollar', 'code': 'USD', 'exchange_rate': '120', 'is_active': True},
             'product': {'name': 'Sample product', 'sku': 'PAGE-001', 'currency': 'BDT',
                         'unit': self.unit.pk, 'product_type': 'goods', 'status': 'draft',
                         'sale_price': '10.0000', 'attributes': '{"color":"blue"}', 'is_returnable': 'false'},

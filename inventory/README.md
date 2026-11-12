@@ -51,7 +51,7 @@ from inventory.models import Product, ProductType, Status, UnitOfMeasure
 
 unit = UnitOfMeasure.objects.create(name='Pieces', code='PCS')
 product = Product(
-    sku='ITEM-001', name='Example product', currency='BDT', unit=unit,
+    sku='ITEM-001', name='Example product', currency_id='BDT', unit=unit,
     product_type=ProductType.objects.get(code='goods'),
     status=Status.objects.get(code='active'), sale_price=Decimal('1500.00'),
     create_by='operator@example.com', modified_by='operator@example.com',
@@ -67,7 +67,7 @@ the signed-in username and excludes them from editable forms.
 Lookup names and active flags are catalog metadata, not a workflow engine.
 A status named archived does not automatically hide or archive a product.
 Warehouse balances, stock movements, suppliers, price lists, and accounting
-transactions remain future related models. All six catalog models have JSON CRUD
+transactions remain future related models. All seven catalog models have JSON CRUD
 APIs; see [API.md](API.md) for routes, permissions and Postman examples.
 
 ## Inventory pages
@@ -78,6 +78,23 @@ has an Add button when the user has its add permission. Pages reuse the dashboar
 styles and submit to the existing session-authenticated, CSRF-protected APIs.
 Successful creation returns to the corresponding list.
 
+Inventory web pages use HTML inputs and JavaScript rather than Django Form or
+ModelForm classes. Page views render the layout, field templates, API URLs, and
+permission flags. Serializers validate every API submission, including requests
+made outside the browser. `catalog.py` contains only page/navigation/table
+metadata; it does not define fields or import forms. Django admin retains its
+standard built-in editing interface.
+
+Product dropdowns load from `GET /inventory/api/products/options/`. This read-only
+endpoint requires `inventory.add_product` and returns only labels and identifiers
+for related records. It does not grant access to their management APIs. Required
+choices must be available before saving; loading errors and empty required lists
+keep saving disabled and offer a retry. Images use multipart FormData.
+
+Edit pages load the record from the detail API before enabling saving,
+then submit PATCH and redirect to the list. A missing record or revoked permission
+is displayed using the API response; page shells do not preload record values.
+
 | Model | List | Add |
 | --- | --- | --- |
 | Product | `/inventory/products/` | `/inventory/products/add/` |
@@ -86,9 +103,49 @@ Successful creation returns to the corresponding list.
 | UnitOfMeasure | `/inventory/units/` | `/inventory/units/add/` |
 | ProductType | `/inventory/product-types/` | `/inventory/product-types/add/` |
 | Status | `/inventory/statuses/` | `/inventory/statuses/add/` |
+| Currency | `/inventory/currencies/` | `/inventory/currencies/add/` |
 
 Lists require the model's `view` permission. Add pages require both `view` and
 `add`, ensuring the user can open the destination after saving. Group grants and
 superuser access work through Django's standard permissions. Lists support search
 and pagination. Product creation includes an optional image and catalog lookups;
-add at least one unit before creating products.
+add at least one unit and currency before creating products.
+
+Each inventory list has a pencil action for users with that model's change
+permission. It opens `/inventory/<resource>/<id>/edit/`; the page loads the detail
+API and submits PATCH to `/inventory/api/<resource>/<id>/update/`. Successful edits
+return to the matching list. Edit pages require both view and change permission.
+Product type, status, and currency codes are disabled on edit because their APIs
+keep them immutable. Product images are preserved unless a replacement is chosen.
+Replacing an image uses multipart PATCH; optional relationships and prices can
+still be cleared in the same request.
+
+Product edit dropdowns use `/inventory/api/products/<id>/options/`, requiring
+view and change permission rather than add permission. The choices exclude the
+current product as its own base. Products that already have variants cannot
+choose a parent, matching the model's variant rules.
+
+Users with the model's delete permission also see a red trash icon on each list
+row. It opens a confirmation dialog and calls DELETE on the existing detail API
+with CSRF protection. Successful hard deletion refreshes the current search/list;
+deleting the only row on a later page returns to the previous page. Records in
+use and protected defaults show the API's conflict message and remain in the
+list. Edit and delete permissions are independent.
+
+## Currencies and exchange rates
+
+Products reference Currency by its unique uppercase three-letter code using
+PROTECT. ORM callers pass a Currency instance as `currency` or its code as
+`currency_id`; API callers continue sending `"currency": "BDT"`.
+Currency codes cannot be changed through the API, pages, or admin after creation.
+
+Rates are manual: one unit of a currency equals `exchange_rate` units of
+`settings.INVENTORY_BASE_CURRENCY`. The environment setting defaults to BDT;
+configure it before using rates and keep it consistent. The base rate must be 1.
+Changing a rate does not recalculate product prices or create exchange history.
+
+Migration 0004 creates a Currency for each existing product currency code and
+links products without changing prices or codes. It also creates the configured
+base currency with rate 1. Other migrated currencies have an unknown (null) rate
+until edited; no market rates are invented. New currencies require a positive
+rate (up to eight decimal places). Referenced currencies cannot be deleted.

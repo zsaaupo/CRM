@@ -7,7 +7,7 @@ from django.db import IntegrityError, transaction
 from django.db.models.deletion import ProtectedError
 from django.test import RequestFactory, TestCase
 
-from .models import Brand, Product, ProductCategory, ProductType, Status, UnitOfMeasure
+from ..models import Brand, Product, ProductCategory, ProductType, Status, UnitOfMeasure
 
 
 class ProductTests(TestCase):
@@ -16,7 +16,7 @@ class ProductTests(TestCase):
         cls.unit = UnitOfMeasure.objects.create(name='Pieces', code='PCS')
 
     def product(self, **changes):
-        data = {'sku': 'SKU-001', 'name': 'Example product', 'currency': 'BDT',
+        data = {'sku': 'SKU-001', 'name': 'Example product', 'currency_id': 'BDT',
                 'unit': self.unit, 'create_by': 'tester', 'modified_by': 'tester'}
         data.update(changes)
         return Product(**data)
@@ -73,7 +73,7 @@ class ProductTests(TestCase):
         self.assertTrue(status.products.filter(pk=product.pk).exists())
 
     def test_invalid_identifiers_metadata_and_lookup_codes_are_rejected(self):
-        cases = [{'sku': '   '}, {'name': '   '}, {'currency': 'bdt'}, {'currency': ''},
+        cases = [{'sku': '   '}, {'name': '   '}, {'currency_id': 'bdt'}, {'currency_id': ''},
                  {'attributes': []}, {'product_type_id': 'unknown'}, {'status_id': 'unknown'},
                  {'unit_id': self.unit.pk + 999}, {'variant_of_id': 999}]
         for changes in cases:

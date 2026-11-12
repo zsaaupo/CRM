@@ -1,0 +1,3 @@
+{% include 'inventory/includes/field.html' with name='name' label='Name' required=True maxlength=100 only %}
+{% include 'inventory/includes/field.html' with name='code' label='Code' required=True maxlength=20 hint='Examples: PCS, KG, L, HOUR.' only %}
+{% include 'inventory/includes/field.html' with name='is_active' label='Active' field_type='checkbox' checked=True only %}

@@ -3,24 +3,72 @@ from django.db.models import Q
 from django.db.models.deletion import ProtectedError
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import never_cache
+from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.authentication import SessionAuthentication
 from rest_framework.exceptions import APIException, ValidationError
-from rest_framework.generics import ListAPIView, ListCreateAPIView, RetrieveUpdateDestroyAPIView
+from rest_framework.generics import ListAPIView, ListCreateAPIView, RetrieveUpdateDestroyAPIView, UpdateAPIView
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.views import APIView
+from rest_framework.response import Response
 
 from account.permissions import HasRequiredPermissions
-from .models import Brand, Product, ProductCategory, ProductType, Status, UnitOfMeasure
+from .models import Brand, Currency, Product, ProductCategory, ProductType, Status, UnitOfMeasure
 from .serializers import (
-    BrandSerializer, ProductCategorySerializer, ProductSerializer,
+    BrandSerializer, CurrencySerializer, ProductCategorySerializer, ProductSerializer,
     ProductTypeSerializer, StatusSerializer, UnitOfMeasureSerializer,
 )
 
 
 class InventoryPagination(PageNumberPagination):
     page_size = 20
+
+
+@method_decorator(never_cache, name='dispatch')
+class ProductOptionsAPIView(APIView):
+    """Minimal reference data for product creation, without catalog management grants."""
+
+    authentication_classes = [SessionAuthentication]
+    permission_classes = [IsAuthenticated, HasRequiredPermissions]
+    required_permissions = ('inventory.add_product',)
+    http_method_names = ['get', 'head', 'options']
+
+    def get_base_products(self):
+        return Product.objects.filter(variant_of__isnull=True)
+
+    def get(self, request):
+        def choices(model, value_field='pk', include_code=False):
+            fields = [value_field, 'name'] + (['code'] if include_code and value_field != 'code' else [])
+            return [{'value': row[value_field],
+                     'label': f"{row['name']} ({row['code']})" if include_code else row['name']}
+                    for row in model.objects.order_by('name', 'pk').values(*fields)]
+
+        return Response({
+            'product_type': choices(ProductType, 'code'),
+            'status': choices(Status, 'code'),
+            'category': choices(ProductCategory),
+            'brand': choices(Brand),
+            'unit': choices(UnitOfMeasure, include_code=True),
+            'currency': choices(Currency, 'code', include_code=True),
+            'variant_of': [{'value': row['pk'], 'label': f"{row['sku']} — {row['name']}"}
+                           for row in self.get_base_products()
+                           .order_by('name', 'pk').values('pk', 'sku', 'name')],
+        })
+
+
+class ProductEditOptionsAPIView(ProductOptionsAPIView):
+    required_permissions = ('inventory.view_product', 'inventory.change_product')
+
+    def get(self, request, pk):
+        self.product = get_object_or_404(Product, pk=pk)
+        return super().get(request)
+
+    def get_base_products(self):
+        if self.product.variants.exists():
+            return Product.objects.none()
+        return super().get_base_products().exclude(pk=self.product.pk)
 
 
 class RecordInUse(APIException):
@@ -91,13 +139,25 @@ class InventoryListCreateAPIView(InventoryAPIMixin, InventoryListQuerysetMixin, 
         return response
 
 
-@method_decorator(never_cache, name='dispatch')
-class InventoryDetailAPIView(InventoryAPIMixin, RetrieveUpdateDestroyAPIView):
-    http_method_names = ['get', 'put', 'patch', 'delete', 'head', 'options']
-    protected_codes = ()
-
+class InventoryUpdateMixin:
     def perform_update(self, serializer):
         self.save_record(serializer, modified_by=self.request.user.get_username())
+
+
+@method_decorator(never_cache, name='dispatch')
+class InventoryUpdateAPIView(InventoryUpdateMixin, InventoryAPIMixin, UpdateAPIView):
+    http_method_names = ['put', 'patch', 'options']
+
+    @property
+    def required_permissions(self):
+        opts = self.queryset.model._meta
+        return (f'{opts.app_label}.change_{opts.model_name}',)
+
+
+@method_decorator(never_cache, name='dispatch')
+class InventoryDetailAPIView(InventoryUpdateMixin, InventoryAPIMixin, RetrieveUpdateDestroyAPIView):
+    http_method_names = ['get', 'put', 'patch', 'delete', 'head', 'options']
+    protected_codes = ()
 
     def perform_destroy(self, instance):
         if getattr(instance, 'code', None) in self.protected_codes:
@@ -111,14 +171,14 @@ class InventoryDetailAPIView(InventoryAPIMixin, RetrieveUpdateDestroyAPIView):
 
 class ProductListCreateAPIView(InventoryListCreateAPIView):
     serializer_class = ProductSerializer
-    queryset = Product.objects.select_related('product_type', 'status', 'category', 'brand', 'unit', 'variant_of')
+    queryset = Product.objects.select_related('product_type', 'status', 'category', 'brand', 'unit', 'variant_of', 'currency')
     response_key = 'product'
     search_fields = ['name', 'sku', 'barcode', 'manufacturer', 'manufacturer_part_number']
 
 
 class ProductDetailAPIView(InventoryDetailAPIView):
     serializer_class = ProductSerializer
-    queryset = Product.objects.select_related('product_type', 'status', 'category', 'brand', 'unit', 'variant_of')
+    queryset = Product.objects.select_related('product_type', 'status', 'category', 'brand', 'unit', 'variant_of', 'currency')
 
 
 class ProductCategoryListCreateAPIView(InventoryListCreateAPIView):
@@ -184,7 +244,7 @@ class StatusDetailAPIView(InventoryDetailAPIView):
 
 class ProductListAPIView(InventoryListAPIView):
     serializer_class = ProductSerializer
-    queryset = Product.objects.select_related('product_type', 'status', 'category', 'brand', 'unit', 'variant_of')
+    queryset = Product.objects.select_related('product_type', 'status', 'category', 'brand', 'unit', 'variant_of', 'currency')
     search_fields = ['name', 'sku', 'barcode', 'manufacturer', 'manufacturer_part_number']
 
 
@@ -215,3 +275,56 @@ class StatusListAPIView(InventoryListAPIView):
     serializer_class = StatusSerializer
     queryset = Status.objects.all()
     search_fields = ['name', 'code']
+
+
+class CurrencyListCreateAPIView(InventoryListCreateAPIView):
+    serializer_class = CurrencySerializer
+    queryset = Currency.objects.all()
+    response_key = 'currency'
+    search_fields = ['name', 'code', 'symbol']
+
+
+class CurrencyListAPIView(InventoryListAPIView):
+    serializer_class = CurrencySerializer
+    queryset = Currency.objects.all()
+    search_fields = ['name', 'code', 'symbol']
+
+
+class CurrencyDetailAPIView(InventoryDetailAPIView):
+    serializer_class = CurrencySerializer
+    queryset = Currency.objects.all()
+
+
+class ProductUpdateAPIView(InventoryUpdateAPIView):
+    serializer_class = ProductSerializer
+    queryset = ProductDetailAPIView.queryset
+
+
+class ProductCategoryUpdateAPIView(InventoryUpdateAPIView):
+    serializer_class = ProductCategorySerializer
+    queryset = ProductCategoryDetailAPIView.queryset
+
+
+class BrandUpdateAPIView(InventoryUpdateAPIView):
+    serializer_class = BrandSerializer
+    queryset = BrandDetailAPIView.queryset
+
+
+class UnitOfMeasureUpdateAPIView(InventoryUpdateAPIView):
+    serializer_class = UnitOfMeasureSerializer
+    queryset = UnitOfMeasureDetailAPIView.queryset
+
+
+class ProductTypeUpdateAPIView(InventoryUpdateAPIView):
+    serializer_class = ProductTypeSerializer
+    queryset = ProductTypeDetailAPIView.queryset
+
+
+class StatusUpdateAPIView(InventoryUpdateAPIView):
+    serializer_class = StatusSerializer
+    queryset = StatusDetailAPIView.queryset
+
+
+class CurrencyUpdateAPIView(InventoryUpdateAPIView):
+    serializer_class = CurrencySerializer
+    queryset = CurrencyDetailAPIView.queryset

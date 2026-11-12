@@ -117,6 +117,9 @@ USE_I18N = True
 
 USE_TZ = True
 
+# Exchange rates express base-currency units per one unit of the selected currency.
+INVENTORY_BASE_CURRENCY = os.environ.get('INVENTORY_BASE_CURRENCY', 'BDT').strip().upper()
+
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/6.1/howto/static-files/

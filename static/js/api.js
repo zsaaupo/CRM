@@ -38,6 +38,14 @@ export async function patchJSON(url, data, csrfToken) {
     });
 }
 
+export async function patchFormData(url, data, csrfToken) {
+    return requestJSON(url, {
+        method: "PATCH",
+        headers: { "X-CSRFToken": csrfToken },
+        body: data,
+    });
+}
+
 export async function putJSON(url, data, csrfToken) {
     return requestJSON(url, {
         method: "PUT",

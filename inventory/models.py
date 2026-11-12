@@ -76,6 +76,33 @@ class Status(TimeStampedModel):
         return self.name
 
 
+class Currency(TimeStampedModel):
+    code = models.CharField(max_length=3, unique=True, validators=[RegexValidator(
+        r'\A[A-Z]{3}\Z', 'Use a three-letter uppercase currency code, e.g. BDT or USD.')])
+    name = models.CharField(max_length=100)
+    symbol = models.CharField(max_length=10, blank=True)
+    # NULL preserves legacy currencies whose exchange rate is not yet known.
+    exchange_rate = models.DecimalField(max_digits=20, decimal_places=8, null=True, blank=True,
+                                        validators=[MinValueValidator(Decimal('0.00000001'))])
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ['name', 'pk']
+        verbose_name_plural = 'currencies'
+        constraints = [models.CheckConstraint(
+            condition=Q(exchange_rate__isnull=True) | Q(exchange_rate__gt=0),
+            name='inventory_currency_rate_positive')]
+
+    def clean(self):
+        super().clean()
+        from django.conf import settings
+        if self.code == settings.INVENTORY_BASE_CURRENCY and self.exchange_rate != Decimal('1'):
+            raise ValidationError({'exchange_rate': 'The base currency exchange rate must be 1.'})
+
+    def __str__(self):
+        return f'{self.name} ({self.code})'
+
+
 class Product(TimeStampedModel):
     # Identification and classification. Each sellable variant gets its own SKU.
     public_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
@@ -95,7 +122,7 @@ class Product(TimeStampedModel):
     attributes = models.JSONField(default=dict, blank=True, help_text='Variant/specification values, e.g. {"color": "blue", "size": "M"}.')
 
     # Catalog defaults. Transaction prices and tax rules belong on order/invoice lines.
-    currency = models.CharField(max_length=3, validators=[RegexValidator(r'\A[A-Z]{3}\Z', 'Use a three-letter uppercase currency code, e.g. BDT or USD.')])
+    currency = models.ForeignKey(Currency, to_field='code', on_delete=models.PROTECT, related_name='products')
     cost_price = models.DecimalField(max_digits=18, decimal_places=4, default=Decimal('0'), validators=[MinValueValidator(0)])
     sale_price = models.DecimalField(max_digits=18, decimal_places=4, default=Decimal('0'), validators=[MinValueValidator(0)])
     minimum_sale_price = models.DecimalField(max_digits=18, decimal_places=4, null=True, blank=True, validators=[MinValueValidator(0)])

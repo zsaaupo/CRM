@@ -11,8 +11,8 @@ from django.urls import reverse
 from PIL import Image
 from rest_framework.test import APIClient
 
-from .models import Brand, Product, ProductCategory, ProductType, Status, UnitOfMeasure
-from .serializers import ProductSerializer
+from ..models import Brand, Product, ProductCategory, ProductType, Status, UnitOfMeasure
+from ..serializers import ProductSerializer
 
 
 User = get_user_model()
@@ -114,7 +114,7 @@ class InventoryAPITests(TestCase):
         self.assertEqual(self.client.get(reverse('inventory:brand-list')).status_code, 403)
 
     def test_partial_product_validation_does_not_persist_invalid_changes(self):
-        product = Product.objects.create(sku='P-001', name='Product', currency='BDT', unit=self.unit,
+        product = Product.objects.create(sku='P-001', name='Product', currency_id='BDT', unit=self.unit,
                                          sale_price=20, minimum_sale_price=15)
         self.grant(Product, 'change')
         detail = reverse('inventory:product-detail', args=[product.pk])
@@ -133,9 +133,9 @@ class InventoryAPITests(TestCase):
         category = ProductCategory.objects.create(code='REF', name='Referenced category')
         product_type = ProductType.objects.create(code='physical', name='Physical')
         product_status = Status.objects.create(code='review', name='Review')
-        parent = Product.objects.create(sku='P-001', name='Parent', currency='BDT', unit=self.unit,
+        parent = Product.objects.create(sku='P-001', name='Parent', currency_id='BDT', unit=self.unit,
                                         brand=brand, category=category, product_type=product_type, status=product_status)
-        Product.objects.create(sku='P-002', name='Variant', currency='BDT', unit=self.unit,
+        Product.objects.create(sku='P-002', name='Variant', currency_id='BDT', unit=self.unit,
                                product_type=product_type, variant_of=parent)
         records = [(Brand, 'brand', brand), (ProductCategory, 'category', category),
                    (UnitOfMeasure, 'unit', self.unit), (ProductType, 'product-type', product_type),
@@ -179,7 +179,7 @@ class InventoryAPITests(TestCase):
 
     def test_case_insensitive_duplicates_are_validation_errors(self):
         self.grant(Product, 'add')
-        Product.objects.create(sku='SKU-001', name='Existing', currency='BDT', unit=self.unit)
+        Product.objects.create(sku='SKU-001', name='Existing', currency_id='BDT', unit=self.unit)
         response = self.client.post(reverse('inventory:product-list'), {
             'sku': ' sku-001 ', 'name': 'Duplicate', 'currency': 'BDT', 'unit': self.unit.pk,
         }, format='json')
@@ -207,9 +207,9 @@ class InventoryAPITests(TestCase):
         self.assertEqual(search.data['results'][0]['id'], self.unit.pk)
 
     def test_product_serialization_fetches_related_models_in_one_query(self):
-        Product.objects.create(sku='P-001', name='Product', currency='BDT', unit=self.unit)
+        Product.objects.create(sku='P-001', name='Product', currency_id='BDT', unit=self.unit)
         with self.assertNumQueries(1):
             rows = ProductSerializer(Product.objects.select_related(
-                'product_type', 'status', 'category', 'brand', 'unit', 'variant_of'), many=True).data
+                'product_type', 'status', 'category', 'brand', 'unit', 'variant_of', 'currency'), many=True).data
         self.assertEqual(rows[0]['product_type'], 'goods')
         self.assertEqual(rows[0]['status'], 'draft')

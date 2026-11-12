@@ -1,4 +1,4 @@
-import { APIError, postJSON, postFormData } from "../../js/api.js";
+import { APIError, getJSON, postJSON, postFormData, patchJSON, patchFormData } from "../../js/api.js";
 
 const form = document.querySelector("[data-catalog-form]");
 if (form) {
@@ -7,9 +7,86 @@ if (form) {
     const label = form.querySelector("[data-submit-label]");
     const originalLabel = label.textContent;
     const spinner = form.querySelector("[data-submit-spinner]");
-    const controls = [...form.querySelectorAll("input, select, textarea")]
+    const fields = [...form.querySelectorAll("input, select, textarea")]
         .filter((input) => input.name && input.name !== "csrfmiddlewaretoken");
+    const controls = fields.filter((input) => !input.disabled);
     const csrf = form.elements.namedItem("csrfmiddlewaretoken").value;
+    const retry = form.querySelector("[data-catalog-load-retry]");
+    let ready = !form.dataset.optionsUrl && !form.dataset.detailUrl;
+    let loading = false;
+
+    function setDisabled(disabled) {
+        for (const input of [...controls, submit]) input.disabled = disabled;
+    }
+
+    async function initialize() {
+        if (loading) return;
+        loading = true;
+        ready = false;
+        setDisabled(true);
+        retry.hidden = true;
+        status.dataset.tone = "info";
+        status.textContent = "Loading details...";
+        status.hidden = false;
+        form.setAttribute("aria-busy", "true");
+        try {
+            const [options, record] = await Promise.all([
+                form.dataset.optionsUrl ? getJSON(form.dataset.optionsUrl) : null,
+                form.dataset.detailUrl ? getJSON(form.dataset.detailUrl) : null,
+            ]);
+            if (form.dataset.optionsUrl) {
+                const selects = [...form.querySelectorAll("[data-options-field]")];
+                for (const select of selects) {
+                    if (!Array.isArray(options[select.name])) throw new Error("Could not load catalog choices. Please try again.");
+                }
+                const missing = [];
+                for (const select of selects) {
+                    const placeholder = document.createElement("option");
+                    placeholder.value = "";
+                    placeholder.textContent = select.required ? `Select ${select.dataset.label.toLowerCase()}` : "None";
+                    select.replaceChildren(placeholder);
+                    for (const record of options[select.name]) {
+                        const option = document.createElement("option");
+                        option.value = String(record.value);
+                        option.textContent = record.label;
+                        select.append(option);
+                    }
+                    const value = select.dataset.default;
+                    if (value && options[select.name].some((item) => String(item.value) === value)) select.value = value;
+                    if (select.required && options[select.name].length === 0) missing.push(select.dataset.label.toLowerCase());
+                }
+                if (missing.length) throw new Error(`No ${missing.join(", ")} records are available. Add the missing records or ask your administrator, then try loading again.`);
+            }
+            if (form.dataset.detailUrl) {
+                if (!record || typeof record !== "object" || !record.id) throw new Error("Could not load this record. Please try again.");
+                for (const input of fields) {
+                    if (!(input.name in record) || input.type === "file") continue;
+                    if (input.type === "checkbox") input.checked = record[input.name];
+                    else input.value = input.dataset.jsonField ? JSON.stringify(record[input.name] ?? {}) : record[input.name] ?? "";
+                }
+                const image = form.querySelector("[data-current-image-preview]");
+                if (image && record.image) {
+                    image.src = record.image;
+                    form.querySelector("[data-current-image]").hidden = false;
+                }
+            }
+            ready = true;
+            status.hidden = true;
+            setDisabled(false);
+        } catch (error) {
+            status.dataset.tone = "error";
+            status.textContent = error.status === 404 ? "This record could not be found. Return to the list."
+                : error.status === 403 ? "Your session or permissions have changed. Refresh this page and try again."
+                : error.message || "Could not load details. Please try again.";
+            retry.hidden = false;
+        } finally {
+            loading = false;
+            form.setAttribute("aria-busy", "false");
+        }
+    }
+
+    retry.addEventListener("click", initialize);
+    if (!ready) initialize();
 
     function fieldError(name, message) {
         const input = form.elements.namedItem(name);
@@ -29,7 +106,7 @@ if (form) {
 
     form.addEventListener("submit", async (event) => {
         event.preventDefault();
-        if (form.dataset.busy === "true" || submit.disabled) return;
+        if (!ready || form.dataset.busy === "true" || submit.disabled) return;
         status.hidden = true;
         for (const box of form.querySelectorAll("[data-error-for]")) box.hidden = true;
         let invalid = null;
@@ -65,11 +142,15 @@ if (form) {
             return;
         }
         const fileInputs = controls.filter((input) => input.type === "file");
+        const isPatch = form.dataset.method === "PATCH";
+        const multipart = fileInputs.some((input) => input.files[0]) || (!isPatch && fileInputs.length > 0);
         let data = payload;
-        if (fileInputs.length) {
+        if (multipart) {
             data = new FormData();
             for (const [name, value] of Object.entries(payload)) {
-                if (value !== null) data.append(name, typeof value === "object" ? JSON.stringify(value) : String(value));
+                if (value === null) {
+                    if (isPatch) data.append(name, "");
+                } else data.append(name, typeof value === "object" ? JSON.stringify(value) : String(value));
             }
             for (const input of fileInputs) if (input.files[0]) data.append(input.name, input.files[0]);
         }
@@ -79,7 +160,9 @@ if (form) {
         label.textContent = "Saving...";
         spinner.hidden = false;
         try {
-            if (fileInputs.length) await postFormData(form.action, data, csrf);
+            if (isPatch && multipart) await patchFormData(form.action, data, csrf);
+            else if (isPatch) await patchJSON(form.action, payload, csrf);
+            else if (multipart) await postFormData(form.action, data, csrf);
             else await postJSON(form.action, payload, csrf);
             status.dataset.tone = "success";
             status.textContent = "Saved. Opening the list...";

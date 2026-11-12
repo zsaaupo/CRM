@@ -1,8 +1,10 @@
-"""Inventory JSON API routes."""
-
 from django.urls import path
 
 from .api_views import (
+    BrandUpdateAPIView, CurrencyUpdateAPIView, ProductCategoryUpdateAPIView,
+    ProductTypeUpdateAPIView, ProductUpdateAPIView, StatusUpdateAPIView, UnitOfMeasureUpdateAPIView,
+    ProductOptionsAPIView, ProductEditOptionsAPIView,
+    CurrencyDetailAPIView, CurrencyListAPIView, CurrencyListCreateAPIView,
     BrandDetailAPIView, BrandListCreateAPIView,
     ProductCategoryDetailAPIView, ProductCategoryListCreateAPIView,
     ProductDetailAPIView, ProductListCreateAPIView,
@@ -17,6 +19,18 @@ from .api_views import (
 app_name = 'inventory'
 
 urlpatterns = [
+    path('products/<int:pk>/options/', ProductEditOptionsAPIView.as_view(), name='product-edit-options'),
+    path('products/<int:pk>/update/', ProductUpdateAPIView.as_view(), name='product-update'),
+    path('categories/<int:pk>/update/', ProductCategoryUpdateAPIView.as_view(), name='category-update'),
+    path('brands/<int:pk>/update/', BrandUpdateAPIView.as_view(), name='brand-update'),
+    path('units/<int:pk>/update/', UnitOfMeasureUpdateAPIView.as_view(), name='unit-update'),
+    path('product-types/<int:pk>/update/', ProductTypeUpdateAPIView.as_view(), name='product-type-update'),
+    path('statuses/<int:pk>/update/', StatusUpdateAPIView.as_view(), name='status-update'),
+    path('currencies/<int:pk>/update/', CurrencyUpdateAPIView.as_view(), name='currency-update'),
+    path('products/options/', ProductOptionsAPIView.as_view(), name='product-options'),
+    path('currencies/', CurrencyListCreateAPIView.as_view(), name='currency-list'),
+    path('currencies/list/', CurrencyListAPIView.as_view(), name='currency-list-view'),
+    path('currencies/<int:pk>/', CurrencyDetailAPIView.as_view(), name='currency-detail'),
     path('products/', ProductListCreateAPIView.as_view(), name='product-list'),
     path('products/list/', ProductListAPIView.as_view(), name='product-list-view'),
     path('products/<int:pk>/', ProductDetailAPIView.as_view(), name='product-detail'),

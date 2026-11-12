@@ -1,4 +1,5 @@
 from django.core.exceptions import ImproperlyConfigured
+from django.conf import settings
 from django.urls import reverse
 
 from account.page_views import ProtectedAccountPageView
@@ -19,6 +20,8 @@ class InventoryPageView(ProtectedAccountPageView):
         permissions = [self.resource.permission('view')]
         if self.mode == 'add':
             permissions.append(self.resource.permission('add'))
+        elif self.mode == 'edit':
+            permissions.append(self.resource.permission('change'))
         return permissions
 
     def get_context_data(self, **kwargs):
@@ -35,8 +38,20 @@ class InventoryPageView(ProtectedAccountPageView):
             'list_api_url': reverse(f'inventory:{resource.key}-list-view'),
             'create_api_url': reverse(f'inventory:{resource.key}-list'),
             'can_add': self.request.user.has_perm(resource.permission('add')),
+            'can_delete': self.request.user.has_perm(resource.permission('delete')),
             'columns': [{'key': key, 'label': label, 'type': kind} for key, label, kind in resource.columns],
         })
+        can_change = self.request.user.has_perm(resource.permission('change'))
+        if can_change or context['can_delete']:
+            context['columns'].append({'key': 'actions', 'label': 'Actions', 'type': 'edit'})
+        if can_change:
+            context['edit_url_template'] = reverse(f'inventory_pages:edit-{resource.key}', args=[0])
+        if context['can_delete']:
+            context['delete_url_template'] = reverse(f'inventory:{resource.key}-detail', args=[0])
+        if resource.key == 'currency':
+            for column in context['columns']:
+                if column['key'] == 'exchange_rate':
+                    column['label'] = f'Rate ({settings.INVENTORY_BASE_CURRENCY} per unit)'
         return context
 
 
@@ -50,28 +65,30 @@ class InventoryAddPageView(InventoryPageView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        form = self.resource.form()
-        if self.resource_key == 'product':
-            groups = [
-                ('Product details', 'Identify the item and choose its catalog references.',
-                 ['sku', 'name', 'barcode', 'product_type', 'status', 'category', 'brand', 'unit', 'variant_of']),
-                ('Description and image', 'Add the details that help people recognize this product.',
-                 ['description', 'image', 'manufacturer', 'manufacturer_part_number', 'attributes']),
-                ('Pricing', 'Set catalog prices and tax defaults in the selected currency.',
-                 ['currency', 'cost_price', 'sale_price', 'minimum_sale_price', 'Whole_sale_price', 'product_tax', 'is_returnable']),
-            ]
-        else:
-            groups = [(f'{self.resource.singular.capitalize()} details',
-                       'Enter a clear name and the details below.', list(form.fields))]
-        missing = []
-        for name, field in form.fields.items():
-            if field.required and hasattr(field, 'queryset') and not field.queryset.exists():
-                missing.append(field.label.lower())
         context.update({
-            'form': form,
-            'sections': [{'title': title, 'description': description, 'fields': [form[name] for name in names]}
-                         for title, description, names in groups],
+            'fields_template': f'inventory/fields/{self.resource.key}.html',
             'is_product': self.resource_key == 'product',
-            'missing_references': missing,
+            'form_heading': f'Add {self.resource.singular}',
+            'save_label': f'Add {self.resource.singular}',
+            'base_currency': settings.INVENTORY_BASE_CURRENCY,
+            'options_api_url': reverse('inventory:product-options') if self.resource_key == 'product' else '',
         })
+        return context
+
+
+class InventoryEditPageView(InventoryAddPageView):
+    mode = 'edit'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context.update({
+            'page_label': f'Edit {self.resource.singular}', 'form_heading': f'Edit {self.resource.singular}',
+            'save_label': 'Save changes', 'form_method': 'PATCH',
+            'create_api_url': reverse(f'inventory:{self.resource.key}-update', args=[self.kwargs['pk']]),
+            'detail_api_url': reverse(f'inventory:{self.resource.key}-detail', args=[self.kwargs['pk']]),
+            'editing_currency': self.resource_key == 'currency',
+            'lock_code': self.resource_key in ('product-type', 'status', 'currency'),
+        })
+        if self.resource_key == 'product':
+            context['options_api_url'] = reverse('inventory:product-edit-options', args=[self.kwargs['pk']])
         return context

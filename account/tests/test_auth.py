@@ -11,10 +11,10 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from .emails import _send_mail_in_background, send_mail, thread_send_email
-from .models import Account
-from .serializers import AccountSerializer, SignUpSerializer
-from .utils import generate_otp, otp_matches
+from ..emails import _send_mail_in_background, send_mail, thread_send_email
+from ..models import Account
+from ..serializers import AccountSerializer, SignUpSerializer
+from ..utils import generate_otp, otp_matches
 
 
 User = get_user_model()

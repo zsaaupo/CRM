@@ -42,7 +42,7 @@
         </button>
         <div id="inventory-submenu" class="sidebar-submenu" {% if page_section != 'inventory' %}hidden{% endif %}>
             {% for item in inventory_menu %}
-            <a href="{{ item.list_url }}" data-nav-item class="sidebar-sub-link {% if inventory_key == item.key and inventory_mode == 'list' %}is-current{% endif %}" {% if inventory_key == item.key and inventory_mode == 'list' %}aria-current="page"{% endif %}>{{ item.label }}</a>
+            <a href="{{ item.list_url }}" data-nav-item class="sidebar-sub-link {% if inventory_key == item.key and inventory_mode != 'add' %}is-current{% endif %}" {% if inventory_key == item.key and inventory_mode != 'add' %}aria-current="page"{% endif %}>{{ item.label }}</a>
             {% if item.key == 'product' and item.can_add %}<a href="{{ item.add_url }}" data-nav-item class="sidebar-sub-link {% if inventory_key == 'product' and inventory_mode == 'add' %}is-current{% endif %}" {% if inventory_key == 'product' and inventory_mode == 'add' %}aria-current="page"{% endif %}>Add product</a>{% endif %}
             {% endfor %}
         </div>

@@ -4,7 +4,7 @@ from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
 
-from .models import Brand, Product, ProductCategory, ProductType, Status, UnitOfMeasure
+from ..models import Brand, Product, ProductCategory, ProductType, Status, UnitOfMeasure
 
 
 class InventoryListAPITests(TestCase):
@@ -15,7 +15,7 @@ class InventoryListAPITests(TestCase):
         brand = Brand.objects.create(name='List brand')
         product_type = ProductType.objects.create(name='List type', code='list-type')
         status = Status.objects.create(name='List status', code='list-status')
-        product = Product.objects.create(sku='LIST-PRODUCT', name='List product', currency='BDT',
+        product = Product.objects.create(sku='LIST-PRODUCT', name='List product', currency_id='BDT',
                                          unit=unit, category=category, brand=brand,
                                          product_type=product_type, status=status,
                                          image='products_image/example.png')

@@ -1,11 +1,45 @@
-import { getJSON } from "../../js/api.js";
+import { getJSON, deleteJSON } from "../../js/api.js";
 
-export function catalogRow(record, columns) {
+function actionIcon(pathData) {
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    for (const [name, value] of Object.entries({width: "18", height: "18", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", "stroke-width": "1.7", "aria-hidden": "true"})) svg.setAttribute(name, value);
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.setAttribute("d", pathData);
+    path.setAttribute("stroke-linejoin", "round");
+    path.setAttribute("stroke-linecap", "round");
+    svg.append(path);
+    return svg;
+}
+
+export function catalogRow(record, columns, editUrlTemplate = "", onDelete = null) {
     const row = document.createElement("tr");
     for (const column of columns) {
         const cell = document.createElement("td");
         const value = record[column.key];
-        if (column.type === "identity") {
+        if (column.key === "actions") {
+            const actions = document.createElement("div");
+            actions.className = "flex items-center gap-1";
+            if (editUrlTemplate) {
+                const link = document.createElement("a");
+                link.href = editUrlTemplate.replace("/0/", `/${encodeURIComponent(record.id)}/`);
+                link.className = "icon-button";
+                link.setAttribute("aria-label", `Edit ${record.name || record.code}`);
+                link.title = `Edit ${record.name || record.code}`;
+                link.append(actionIcon("m16 3 5 5-12 12-6 1 1-6L16 3ZM13 6l5 5"));
+                actions.append(link);
+            }
+            if (onDelete) {
+                const remove = document.createElement("button");
+                remove.type = "button";
+                remove.className = "icon-button inventory-delete-button";
+                remove.title = `Delete ${record.name || record.code}`;
+                remove.setAttribute("aria-label", remove.title);
+                remove.append(actionIcon("M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"));
+                remove.addEventListener("click", () => onDelete(record, remove));
+                actions.append(remove);
+            }
+            cell.append(actions);
+        } else if (column.type === "identity") {
             const identity = document.createElement("div");
             identity.className = "user-table-identity";
             const avatar = document.createElement("span");
@@ -50,6 +84,18 @@ if (panel) {
     let version = 0;
     let hasPrevious = false;
     let hasNext = false;
+    let visibleCount = 0;
+    const deleteDialog = find("delete-dialog");
+    const deleteForm = find("delete-form");
+    let pendingDelete = null;
+
+    function openDelete(record, trigger) {
+        pendingDelete = {record, trigger};
+        find("delete-name").textContent = record.name || record.code;
+        find("delete-error").hidden = true;
+        deleteDialog.showModal();
+        find("delete-cancel").focus();
+    }
 
     async function load(requestedPage = 1) {
         const current = ++version;
@@ -68,7 +114,8 @@ if (panel) {
             const data = await getJSON(url.href);
             if (current !== version) return;
             if (!Array.isArray(data.results)) throw new Error("Could not load records. Please try again.");
-            find("rows").replaceChildren(...data.results.map((record) => catalogRow(record, columns)));
+            visibleCount = data.results.length;
+            find("rows").replaceChildren(...data.results.map((record) => catalogRow(record, columns, panel.dataset.editUrlTemplate, deleteDialog && panel.dataset.deleteUrlTemplate ? openDelete : null)));
             find("count").textContent = String(data.count);
             find("count").hidden = false;
             find("table").hidden = data.results.length === 0;
@@ -84,6 +131,10 @@ if (panel) {
             find("range").textContent = `Showing ${start}\u2013${start + data.results.length - 1} of ${data.count}`;
         } catch (error) {
             if (current !== version) return;
+            if (error.status === 404 && requestedPage > 1) {
+                await load(1);
+                return;
+            }
             if (error.status === 401) {
                 window.location.replace(panel.dataset.loginUrl);
                 return;
@@ -106,5 +157,57 @@ if (panel) {
     find("previous").addEventListener("click", () => { if (hasPrevious) load(page - 1); });
     find("next").addEventListener("click", () => { if (hasNext) load(page + 1); });
     find("retry").addEventListener("click", () => load(page));
+    if (deleteForm) {
+        const button = find("delete-submit");
+        const cancel = find("delete-cancel");
+        const originalLabel = button.textContent;
+        const csrf = deleteForm.elements.namedItem("csrfmiddlewaretoken").value;
+        cancel.addEventListener("click", () => deleteDialog.close());
+        deleteDialog.addEventListener("cancel", (event) => {
+            if (deleteForm.dataset.busy === "true") event.preventDefault();
+        });
+        deleteDialog.addEventListener("close", () => {
+            if (pendingDelete?.trigger.isConnected) pendingDelete.trigger.focus();
+        });
+        deleteForm.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            if (!pendingDelete || deleteForm.dataset.busy === "true") return;
+            const record = pendingDelete.record;
+            const currentPage = page;
+            const nextPage = visibleCount === 1 && currentPage > 1 ? currentPage - 1 : currentPage;
+            deleteForm.dataset.busy = "true";
+            deleteForm.setAttribute("aria-busy", "true");
+            button.disabled = true;
+            cancel.disabled = true;
+            button.textContent = "Deleting...";
+            find("delete-error").hidden = true;
+            try {
+                const url = panel.dataset.deleteUrlTemplate.replace("/0/", `/${encodeURIComponent(record.id)}/`);
+                await deleteJSON(url, csrf);
+                deleteDialog.close();
+                find("feedback").dataset.tone = "success";
+                find("feedback").textContent = `${record.name || record.code} deleted.`;
+                find("feedback").hidden = false;
+                await load(nextPage);
+                find("feedback").focus();
+            } catch (error) {
+                if (error.status === 401) {
+                    window.location.replace(panel.dataset.loginUrl);
+                    return;
+                }
+                find("delete-error").textContent = error.status === 403
+                    ? "Your session or permissions have changed. Refresh this page and try again."
+                    : error.status === 404 ? "This record no longer exists. Cancel and refresh the list."
+                    : error.message || "Could not delete this record. Please try again.";
+                find("delete-error").hidden = false;
+            } finally {
+                deleteForm.dataset.busy = "false";
+                deleteForm.setAttribute("aria-busy", "false");
+                button.disabled = false;
+                cancel.disabled = false;
+                button.textContent = originalLabel;
+            }
+        });
+    }
     load();
 }

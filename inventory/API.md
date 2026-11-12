@@ -11,6 +11,7 @@ The inventory app follows the account app's `serializers.py`, `api_views.py` and
 | UnitOfMeasure | `units/` | `units/<id>/` | `unitofmeasure` |
 | ProductType | `product-types/` | `product-types/<id>/` | `producttype` |
 | Status | `statuses/` | `statuses/<id>/` | `status` |
+| Currency | `currencies/` | `currencies/<id>/` | `currency` |
 
 - List: GET. Responses contain `count`, `next`, `previous`, `results` (20 per page).
 - Create: POST. Returns 201 with `message` and the created resource object.
@@ -22,7 +23,59 @@ The inventory app follows the account app's `serializers.py`, `api_views.py` and
 Create response keys are `product`, `category`, `brand`, `unit`, `product_type`
 and `status`, respectively. Detail URLs use numeric primary keys.
 
-## Dedicated read-only list views
+## Dedicated update endpoints
+
+These endpoints accept PUT, PATCH, and OPTIONS. They require an active session,
+`inventory.change_<model>` (directly or through a group), and CSRF for writes.
+They do not require separate view/add/delete grants. OPTIONS also requires the
+change permission. GET, HEAD, POST, and DELETE return 405 for authenticated users.
+
+| Model | Update URL |
+| --- | --- |
+| Product | `/inventory/api/products/<id>/update/` |
+| ProductCategory | `/inventory/api/categories/<id>/update/` |
+| Brand | `/inventory/api/brands/<id>/update/` |
+| UnitOfMeasure | `/inventory/api/units/<id>/update/` |
+| ProductType | `/inventory/api/product-types/<id>/update/` |
+| Status | `/inventory/api/statuses/<id>/update/` |
+| Currency | `/inventory/api/currencies/<id>/update/` |
+
+Use PATCH for selected fields; PUT must include the serializer's required fields.
+Both return 200 with the updated object, without a message/resource wrapper.
+The server sets modified_by; id, public_id, and audit fields are not writable.
+Product type, status, and currency codes remain immutable. Validation errors return
+400 and missing records return 404. Product image uploads support multipart data;
+PATCH `{"image": null}` as JSON clears the product image reference.
+
+Example: `PATCH /inventory/api/brands/1/update/`
+
+```json
+{
+  "name": "Updated brand",
+  "is_active": true
+}
+```
+
+The existing detail endpoints retain their GET/PUT/PATCH/DELETE behavior, so
+existing clients and currency edit pages continue to work.
+
+## Reference options and read-only lists
+
+Product editing uses `GET /inventory/api/products/<id>/options/`. It requires
+both `inventory.view_product` and `inventory.change_product`, without requiring
+add permission. It returns the same minimal reference fields as creation options.
+The current product is excluded from base-product choices; a product with
+existing variants receives no base-product choices. Missing products return 404.
+
+Product creation uses `GET /inventory/api/products/options/` for dropdown data.
+It requires `inventory.add_product` (including group grants) and accepts only
+GET/HEAD/OPTIONS. It returns `product_type`, `status`, `category`, `brand`, `unit`,
+`currency`, and `variant_of` arrays. Each item has only `value` and `label`;
+types/statuses/currencies use string codes, while other values are numeric IDs.
+Base-product choices exclude variants. All choices retain the catalog's existing
+behavior of including inactive records. Empty reference tables return empty
+arrays. This permission does not authorize management of those models, and the
+endpoint returns no prices, exchange rates, audit fields, or specifications.
 
 These endpoints use ListAPIView and accept only GET, HEAD and OPTIONS:
 
@@ -34,6 +87,7 @@ These endpoints use ListAPIView and accept only GET, HEAD and OPTIONS:
 | UnitOfMeasure | `/inventory/api/units/list/` |
 | ProductType | `/inventory/api/product-types/list/` |
 | Status | `/inventory/api/statuses/list/` |
+| Currency | `/inventory/api/currencies/list/` |
 
 They require the corresponding `inventory.view_<model>` permission and an active
 session, using the same permission classes as the existing endpoints. Search
@@ -139,3 +193,36 @@ ProductType and Status codes cannot be changed after creation, matching the admi
 rules. The default goods/draft records cannot be deleted. Records referenced by
 products or variants cannot be deleted either: these conflicts return 409.
 Names, descriptions and active flags remain editable with change permission.
+
+## Currencies
+
+POST `/inventory/api/currencies/` creates a currency:
+
+```json
+{
+  "code": "USD",
+  "name": "US dollar",
+  "symbol": "$",
+  "exchange_rate": "120.00000000",
+  "is_active": true
+}
+```
+
+This rate is an illustrative value entered by the operator, not a live market
+quote. One currency unit equals `exchange_rate` base-currency units. The base
+currency comes from `INVENTORY_BASE_CURRENCY` (default BDT) and is returned in
+`base_currency`. Its own rate must be 1. Rates must be positive, with at most
+eight decimal places; new currencies require a rate. Unknown migrated rates
+remain null until updated.
+
+Create responses use `{"message": "...", "currency": {...}}`. GET, PUT, PATCH,
+and DELETE use `/inventory/api/currencies/<id>/`. PATCH may change the name,
+symbol, exchange_rate, or is_active; code is immutable. GET lists require
+`inventory.view_currency`, POST requires `inventory.add_currency`, PUT/PATCH
+require `inventory.change_currency`, and DELETE requires `inventory.delete_currency`.
+All writes require session authentication and CSRF. Deleting a referenced
+currency returns 409.
+
+Product payloads still use `"currency": "USD"`, but the code must now exist in
+Currency. Currency detail URLs use numeric IDs. Product prices stay in their
+selected currency; updating a rate does not automatically convert prices.

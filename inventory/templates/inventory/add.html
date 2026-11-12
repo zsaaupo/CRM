@@ -1,38 +1,27 @@
 {% extends "layouts/dashboard.html" %}
 {% load static %}
-{% block title %}Add {{ resource.singular }} | eManager{% endblock %}
+{% block title %}{{ form_heading }} | eManager{% endblock %}
 {% block content %}
 <div class="workspace-content">
     <div class="page-heading">
-        <div><p class="page-eyebrow">Inventory</p><h1 class="page-title">Add {{ resource.singular }}<span class="text-emerald-600">.</span></h1><p class="page-description">A new entry for a more organized catalog.</p></div>
+        <div><p class="page-eyebrow">Inventory</p><h1 class="page-title">{{ form_heading }}<span class="text-emerald-600">.</span></h1><p class="page-description">{% if inventory_mode == 'edit' %}Update your catalog details.{% else %}A new entry for a more organized catalog.{% endif %}</p></div>
         <a href="{{ list_url }}" class="secondary-button">Back to {{ resource.plural }} <span aria-hidden="true">&rarr;</span></a>
     </div>
     <div{% if is_product %} class="user-form-layout"{% endif %}>
-        <form method="post" action="{{ create_api_url }}" enctype="multipart/form-data" class="user-form-card{% if not is_product %} max-w-2xl{% endif %}" data-catalog-form data-success-url="{{ list_url }}" novalidate>
+        <form method="post" action="{{ create_api_url }}" enctype="multipart/form-data" class="user-form-card{% if not is_product %} max-w-2xl{% endif %}" data-catalog-form data-options-url="{{ options_api_url }}" data-detail-url="{{ detail_api_url }}" data-method="{{ form_method|default:'POST' }}" data-success-url="{{ list_url }}" novalidate>
             {% csrf_token %}
             <div class="form-status mb-7" data-catalog-form-status role="status" aria-live="polite" tabindex="-1" hidden></div>
-            {% if missing_references %}<p class="permission-preview-note" role="status">No {{ missing_references|join:", " }} records are available. Ask your administrator to add them before creating a {{ resource.singular }}.</p>{% endif %}
-            {% for section in sections %}
-            <fieldset{% if not forloop.first %} class="user-form-section"{% endif %}>
-                <legend class="section-title">{{ section.title }}</legend>
-                <p class="section-description">{{ section.description }}</p>
-                <div class="user-form-grid">
-                    {% for field in section.fields %}
-                    <div{% if field.field.widget.attrs.rows or field.field.widget.input_type == 'file' %} class="user-form-full"{% endif %}>
-                        {% if field.field.widget.input_type == 'checkbox' %}
-                        <label for="{{ field.id_for_label }}" class="inventory-check-label">{{ field }}<span>{{ field.label }}</span></label>
-                        {% else %}
-                        <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}{% if not field.field.required %}<span class="ml-1 font-normal text-stone-400">Optional</span>{% endif %}</label>
-                        {{ field }}
-                        {% endif %}
-                        <p id="{{ field.auto_id }}_hint" class="mt-2 text-xs leading-5 text-stone-500">{{ field.help_text }}</p>
-                        <p id="{{ field.auto_id }}_error" data-error-for="{{ field.name }}" class="form-error" hidden></p>
-                    </div>
-                    {% endfor %}
-                </div>
+            <button type="button" class="secondary-button mb-5" data-catalog-load-retry hidden>Try loading again</button>
+            {% if is_product %}
+                {% include fields_template %}
+            {% else %}
+            <fieldset>
+                <legend class="section-title">{{ resource.singular|capfirst }} details</legend>
+                <p class="section-description">Enter a clear name and the details below.</p>
+                <div class="user-form-grid">{% include fields_template %}</div>
             </fieldset>
-            {% endfor %}
-            <div class="user-form-actions"><a href="{{ list_url }}" class="secondary-button">Cancel</a><button type="submit" class="primary-button compact-primary" data-catalog-submit{% if missing_references %} disabled{% endif %}><span data-submit-label>Add {{ resource.singular }}</span><span class="button-spinner" data-submit-spinner hidden aria-hidden="true"></span></button></div>
+            {% endif %}
+            <div class="user-form-actions"><a href="{{ list_url }}" class="secondary-button">Cancel</a><button type="submit" class="primary-button compact-primary" data-catalog-submit{% if is_product or detail_api_url %} disabled{% endif %}><span data-submit-label>{{ save_label }}</span><span class="button-spinner" data-submit-spinner hidden aria-hidden="true"></span></button></div>
             <noscript><p class="form-error">Enable JavaScript to save this {{ resource.singular }}.</p></noscript>
         </form>
         {% if is_product %}<aside class="user-form-aside"><span class="user-aside-icon" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m12 3 9 5-9 5-9-5 9-5ZM3 8v9l9 5 9-5V8M12 13v9M7.5 5.5l9 5" stroke-linejoin="round"/></svg></span><h2>A place in your catalog</h2><p>Use a unique SKU and choose the unit, type and status that describe this product.</p><div class="user-aside-note"><span class="status-dot" aria-hidden="true"></span><span>Product images are optional. You can add extra specifications such as color or size.</span></div><p class="mt-5">Prices use the currency you enter. Review the details before adding your product.</p></aside>{% endif %}

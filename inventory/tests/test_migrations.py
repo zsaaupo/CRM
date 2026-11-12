@@ -10,7 +10,8 @@ class ProductLookupMigrationTests(TransactionTestCase):
     new_target = [('inventory', '0003_producttype_status_and_more')]
 
     def restore_schema(self):
-        MigrationExecutor(connection).migrate(self.new_target)
+        executor = MigrationExecutor(connection)
+        executor.migrate(executor.loader.graph.leaf_nodes())
 
     def test_legacy_codes_and_sales_tax_are_preserved(self):
         executor = MigrationExecutor(connection)
