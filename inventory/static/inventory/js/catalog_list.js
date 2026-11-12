@@ -11,7 +11,7 @@ function actionIcon(pathData) {
     return svg;
 }
 
-export function catalogRow(record, columns, editUrlTemplate = "", onDelete = null) {
+export function catalogRow(record, columns, editUrlTemplate = "", onDelete = null, stockUrlTemplate = "") {
     const row = document.createElement("tr");
     for (const column of columns) {
         const cell = document.createElement("td");
@@ -19,6 +19,15 @@ export function catalogRow(record, columns, editUrlTemplate = "", onDelete = nul
         if (column.key === "actions") {
             const actions = document.createElement("div");
             actions.className = "flex items-center gap-1";
+            if (stockUrlTemplate) {
+                const stock = document.createElement("a");
+                stock.href = stockUrlTemplate.replace("__warehouse__", encodeURIComponent(record.id));
+                stock.className = "icon-button inventory-stock-button";
+                stock.title = `Add stock to ${record.name || record.code}`;
+                stock.setAttribute("aria-label", stock.title);
+                stock.append(actionIcon("M12 5v14M5 12h14"));
+                actions.append(stock);
+            }
             if (editUrlTemplate) {
                 const link = document.createElement("a");
                 link.href = editUrlTemplate.replace("/0/", `/${encodeURIComponent(record.id)}/`);
@@ -115,7 +124,7 @@ if (panel) {
             if (current !== version) return;
             if (!Array.isArray(data.results)) throw new Error("Could not load records. Please try again.");
             visibleCount = data.results.length;
-            find("rows").replaceChildren(...data.results.map((record) => catalogRow(record, columns, panel.dataset.editUrlTemplate, deleteDialog && panel.dataset.deleteUrlTemplate ? openDelete : null)));
+            find("rows").replaceChildren(...data.results.map((record) => catalogRow(record, columns, panel.dataset.editUrlTemplate, deleteDialog && panel.dataset.deleteUrlTemplate ? openDelete : null, panel.dataset.stockUrlTemplate)));
             find("count").textContent = String(data.count);
             find("count").hidden = false;
             find("table").hidden = data.results.length === 0;

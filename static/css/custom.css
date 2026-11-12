@@ -140,6 +140,9 @@ button:focus-visible { outline: 2px solid #059669; outline-offset: 3px; }
 .inventory-delete-button { color: #dc2626; }
 .inventory-delete-button:hover { background: #fef2f2; color: #b91c1c; }
 .inventory-delete-button:focus-visible { outline: 2px solid #dc2626; outline-offset: 2px; }
+.inventory-stock-button { color: #047857; }
+.inventory-stock-button:hover { background: #ecfdf5; color: #065f46; }
+.inventory-stock-button:focus-visible { outline: 2px solid #059669; outline-offset: 2px; }
 .sidebar-toggle, .sidebar-close { display: none; }
 .sidebar-overlay { position: fixed; inset: 0; z-index: 40; background: #0c0a0966; }
 .user-menu { position: relative; min-width: 0; }

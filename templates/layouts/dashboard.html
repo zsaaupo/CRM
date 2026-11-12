@@ -47,6 +47,17 @@
             {% endfor %}
         </div>
         {% endif %}
+        {% if warehouse_access.view %}
+        <button type="button" class="sidebar-link sidebar-group-toggle {% if page_section == 'warehouses' %}is-current{% endif %}" data-nav-toggle data-warehouses-toggle aria-controls="warehouses-submenu" aria-expanded="{% if page_section == 'warehouses' %}true{% else %}false{% endif %}">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="m3 10 9-7 9 7v11H3V10Z" stroke-linejoin="round"/><path d="M8 21V11h8v10M8 15h8M8 18h8"/></svg>
+            <span>Warehouses</span>
+            <svg class="sidebar-chevron" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m9 5 7 7-7 7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <div id="warehouses-submenu" class="sidebar-submenu" {% if page_section != 'warehouses' %}hidden{% endif %}>
+            {% if warehouse_access.view %}<a href="{% url 'warehouse_pages:warehouse-list' %}" data-nav-item class="sidebar-sub-link {% if page_section == 'warehouses' and page_mode != 'add' and page_mode != 'add-stock' %}is-current{% endif %}" {% if page_section == 'warehouses' and page_mode != 'add' and page_mode != 'add-stock' %}aria-current="page"{% endif %}>Warehouse list</a>{% endif %}
+            {% if warehouse_access.add %}<a href="{% url 'warehouse_pages:add-warehouse' %}" data-nav-item class="sidebar-sub-link {% if page_section == 'warehouses' and page_mode == 'add' %}is-current{% endif %}" {% if page_section == 'warehouses' and page_mode == 'add' %}aria-current="page"{% endif %}>Add warehouse</a>{% endif %}
+        </div>
+        {% endif %}
     </nav>
     <div class="sidebar-footer"><span class="status-dot" aria-hidden="true"></span> A little more clarity, every day.</div>
 </aside>

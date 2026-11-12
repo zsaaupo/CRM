@@ -32,6 +32,7 @@ class InventoryPageView(ProtectedAccountPageView):
             'page_section': 'inventory',
             'inventory_key': resource.key,
             'inventory_mode': self.mode,
+            'page_mode': self.mode,
             'page_label': f'Add {resource.singular}' if self.mode == 'add' else f'{resource.singular.capitalize()} list',
             'list_url': reverse(f'inventory_pages:{resource.key}-list'),
             'add_url': reverse(f'inventory_pages:add-{resource.key}'),

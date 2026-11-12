@@ -2,9 +2,9 @@
 {% load static %}
 {% block title %}{{ page_label }} | eManager{% endblock %}
 {% block content %}
-<div class="workspace-content" data-inventory-list data-api-url="{{ list_api_url }}" data-edit-url-template="{{ edit_url_template }}" data-delete-url-template="{{ delete_url_template }}" data-login-url="{% url 'account_pages:login' %}">
+<div class="workspace-content" data-inventory-list data-api-url="{{ list_api_url }}" data-edit-url-template="{{ edit_url_template }}" data-delete-url-template="{{ delete_url_template }}" data-stock-url-template="{{ stock_url_template }}" data-login-url="{% url 'account_pages:login' %}">
     <div class="page-heading">
-        <div><p class="page-eyebrow">Inventory</p><h1 class="page-title">{{ resource.plural|capfirst }}<span class="text-emerald-600">.</span></h1><p class="page-description">Keep your {{ resource.plural }} organized and easy to find.</p></div>
+        <div><p class="page-eyebrow">{{ section_label|default:'Inventory' }}</p><h1 class="page-title">{{ resource.plural|capfirst }}<span class="text-emerald-600">.</span></h1><p class="page-description">Keep your {{ resource.plural }} organized and easy to find.</p></div>
         {% if can_add %}<a href="{{ add_url }}" class="primary-button compact-primary"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke-linecap="round"/></svg>Add {{ resource.singular }}</a>{% endif %}
     </div>
     <p class="form-status mb-5" data-catalog-feedback role="status" aria-live="polite" tabindex="-1" hidden></p>

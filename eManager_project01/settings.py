@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     'account',
     'inventory',
     'common',
+    'warehouse',
 ]
 
 MIDDLEWARE = [
@@ -64,6 +65,7 @@ TEMPLATES = [
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
                 'inventory.context_processors.inventory_navigation',
+                'warehouse.context_processors.warehouse_navigation',
             ],
         },
     },

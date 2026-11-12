@@ -4,9 +4,9 @@
     {% else %}
     <label for="id_{{ name }}" class="form-label">{{ label }}{% if not required %}<span class="ml-1 font-normal text-stone-400">Optional</span>{% endif %}</label>
     {% if field_type == 'textarea' %}
-    <textarea id="id_{{ name }}" name="{{ name }}" rows="3" class="form-input" aria-describedby="id_{{ name }}_hint id_{{ name }}_error"{% if json_field %} data-json-field="true"{% endif %}>{{ value }}</textarea>
+    <textarea id="id_{{ name }}" name="{{ name }}" rows="3" class="form-input" aria-describedby="id_{{ name }}_hint id_{{ name }}_error"{% if required %} required{% endif %}{% if maxlength %} maxlength="{{ maxlength }}"{% endif %}{% if json_field %} data-json-field="true"{% endif %}>{{ value }}</textarea>
     {% elif field_type == 'select' %}
-    <select id="id_{{ name }}" name="{{ name }}" class="form-input" data-options-field="{{ name }}" data-default="{{ value }}" data-label="{{ label }}" aria-describedby="id_{{ name }}_hint id_{{ name }}_error"{% if required %} required{% else %} data-nullable-field="true"{% endif %}><option value="">Loading options...</option></select>
+    <select id="id_{{ name }}" name="{{ name }}" class="form-input" data-options-field="{{ name }}" data-default="{{ value }}" data-label="{{ label }}" aria-describedby="id_{{ name }}_hint id_{{ name }}_error"{% if required %} required{% else %} data-nullable-field="true"{% endif %}{% if locked %} disabled data-locked="true"{% endif %}><option value="">Loading options...</option></select>
     {% else %}
     <input id="id_{{ name }}" name="{{ name }}" type="{{ field_type|default:'text' }}" class="form-input" aria-describedby="id_{{ name }}_hint id_{{ name }}_error"{% if required %} required{% endif %}{% if maxlength %} maxlength="{{ maxlength }}"{% endif %}{% if pattern %} pattern="{{ pattern }}"{% endif %}{% if field_type == 'file' %} accept="image/*"{% else %} value="{{ value }}"{% endif %}{% if field_type == 'number' %} min="{{ minimum|default:'0' }}" step="{{ step|default:'0.0001' }}"{% if maximum %} max="{{ maximum }}"{% endif %}{% endif %}{% if locked %} disabled{% endif %}>
     {% endif %}

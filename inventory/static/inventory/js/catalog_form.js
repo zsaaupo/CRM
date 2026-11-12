@@ -9,14 +9,14 @@ if (form) {
     const spinner = form.querySelector("[data-submit-spinner]");
     const fields = [...form.querySelectorAll("input, select, textarea")]
         .filter((input) => input.name && input.name !== "csrfmiddlewaretoken");
-    const controls = fields.filter((input) => !input.disabled);
+    const controls = fields.filter((input) => !input.disabled || input.dataset.locked === "true");
     const csrf = form.elements.namedItem("csrfmiddlewaretoken").value;
     const retry = form.querySelector("[data-catalog-load-retry]");
     let ready = !form.dataset.optionsUrl && !form.dataset.detailUrl;
     let loading = false;
 
     function setDisabled(disabled) {
-        for (const input of [...controls, submit]) input.disabled = disabled;
+        for (const input of [...controls, submit]) input.disabled = disabled || input.dataset.locked === "true";
     }
 
     async function initialize() {
@@ -53,6 +53,9 @@ if (form) {
                     }
                     const value = select.dataset.default;
                     if (value && options[select.name].some((item) => String(item.value) === value)) select.value = value;
+                    if (select.dataset.locked === "true" && !select.value) {
+                        throw new Error(`The selected ${select.dataset.label.toLowerCase()} is unavailable. Return to the list and choose a valid entry.`);
+                    }
                     if (select.required && options[select.name].length === 0) missing.push(select.dataset.label.toLowerCase());
                 }
                 if (missing.length) throw new Error(`No ${missing.join(", ")} records are available. Add the missing records or ask your administrator, then try loading again.`);
@@ -156,7 +159,7 @@ if (form) {
         }
         form.dataset.busy = "true";
         form.setAttribute("aria-busy", "true");
-        for (const input of [...controls, submit]) input.disabled = true;
+        setDisabled(true);
         label.textContent = "Saving...";
         spinner.hidden = false;
         try {
@@ -185,7 +188,7 @@ if (form) {
         } finally {
             form.dataset.busy = "false";
             form.setAttribute("aria-busy", "false");
-            for (const input of [...controls, submit]) input.disabled = false;
+            setDisabled(false);
             label.textContent = originalLabel;
             spinner.hidden = true;
         }

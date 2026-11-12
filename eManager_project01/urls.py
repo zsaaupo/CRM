@@ -12,7 +12,9 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('account/api/', include('account.api_urls')),
     path('inventory/api/', include('inventory.api_urls')),
+    path('warehouse/api/', include('warehouse.api_urls')),
     path('inventory/', include('inventory.page_urls')),
+    path('warehouse/', include('warehouse.page_urls')),
     path('account/', include('account.page_urls')),
 ]
 

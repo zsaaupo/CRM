@@ -3,6 +3,10 @@
 The inventory app follows the account app's `serializers.py`, `api_views.py` and
 `api_urls.py` structure. All URLs below begin with `/inventory/api/`.
 
+Model views inherit `BaseListCreateAPIView`, `BaseListAPIView`,
+`BaseDetailAPIView`, and `BaseUpdateAPIView` from `common/view.py`. Shared model
+validation and audit field definitions live in `common/serializers.py`.
+
 | Model | List / create | Detail / update / delete | Permission model name |
 | --- | --- | --- | --- |
 | Product | `products/` | `products/<id>/` | `product` |

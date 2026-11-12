@@ -1,0 +1,28 @@
+{% extends "layouts/dashboard.html" %}
+{% load static %}
+{% block title %}Add stock | eManager{% endblock %}
+{% block content %}
+<div class="workspace-content">
+    <div class="page-heading">
+        <div><p class="page-eyebrow">Warehouses</p><h1 class="page-title">Add stock<span class="text-emerald-600">.</span></h1><p class="page-description">Set the quantity of a product in a warehouse.</p></div>
+        <a href="{{ return_url }}" class="secondary-button">{{ return_label }} <span aria-hidden="true">&rarr;</span></a>
+    </div>
+    <form method="post" action="{{ create_api_url }}" class="user-form-card max-w-2xl" data-catalog-form data-method="POST" data-options-url="{{ options_api_url }}" data-success-url="{{ return_url }}" novalidate>
+        {% csrf_token %}
+        <div class="form-status mb-7" data-catalog-form-status role="status" aria-live="polite" tabindex="-1" hidden></div>
+        <button type="button" class="secondary-button mb-5" data-catalog-load-retry hidden>Try loading again</button>
+        <fieldset>
+            <legend class="section-title">Stock details</legend>
+            <p class="section-description">Create one entry per product and warehouse. Existing entries cannot be added again.</p>
+            <div class="user-form-grid">
+                {% include 'inventory/includes/field.html' with name='warehouse' label='Warehouse' field_type='select' required=True value=selected_warehouse locked=True only %}
+                {% include 'inventory/includes/field.html' with name='product' label='Product' field_type='select' required=True only %}
+                {% include 'inventory/includes/field.html' with name='quantity' label='Quantity' field_type='number' required=True value='0' step='0.000001' hint='Enter the quantity in the selected product’s unit. Up to six decimal places.' only %}
+            </div>
+        </fieldset>
+        <div class="user-form-actions"><a href="{{ return_url }}" class="secondary-button">Cancel</a><button type="submit" class="primary-button compact-primary" data-catalog-submit disabled><span data-submit-label>Add stock</span><span class="button-spinner" data-submit-spinner hidden aria-hidden="true"></span></button></div>
+        <noscript><p class="form-error">Enable JavaScript to load products and warehouses and add stock.</p></noscript>
+    </form>
+</div>
+{% endblock %}
+{% block workspace_js %}<script type="module" src="{% static 'inventory/js/catalog_form.js' %}"></script>{% endblock %}
