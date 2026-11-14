@@ -58,6 +58,40 @@
             {% if warehouse_access.add %}<a href="{% url 'warehouse_pages:add-warehouse' %}" data-nav-item class="sidebar-sub-link {% if page_section == 'warehouses' and page_mode == 'add' %}is-current{% endif %}" {% if page_section == 'warehouses' and page_mode == 'add' %}aria-current="page"{% endif %}>Add warehouse</a>{% endif %}
         </div>
         {% endif %}
+        {% if purchase_access.view %}
+        <button type="button" class="sidebar-link sidebar-group-toggle {% if page_section == 'purchase' %}is-current{% endif %}" data-nav-toggle data-purchase-toggle aria-controls="purchase-submenu" aria-expanded="{% if page_section == 'purchase' %}true{% else %}false{% endif %}">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M9 5H5v16h14V5h-4M9 3h6v4H9V3ZM8 12h8M8 16h5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span>Purchase</span>
+            <svg class="sidebar-chevron" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m9 5 7 7-7 7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <div id="purchase-submenu" class="sidebar-submenu" {% if page_section != 'purchase' %}hidden{% endif %}>
+            <a href="{% url 'purchase_pages:purchase-list' %}" data-nav-item class="sidebar-sub-link {% if page_section == 'purchase' and page_mode != 'add' %}is-current{% endif %}" {% if page_section == 'purchase' and page_mode != 'add' %}aria-current="page"{% endif %}>Purchase list</a>
+            {% if purchase_access.add %}<a href="{% url 'purchase_pages:create-purchase' %}" data-nav-item class="sidebar-sub-link {% if page_section == 'purchase' and page_mode == 'add' %}is-current{% endif %}" {% if page_section == 'purchase' and page_mode == 'add' %}aria-current="page"{% endif %}>Create purchase</a>{% endif %}
+        </div>
+        {% endif %}
+        {% if people_menu %}
+        <button type="button" class="sidebar-link sidebar-group-toggle {% if page_section == 'people' %}is-current{% endif %}" data-nav-toggle data-people-toggle aria-controls="people-submenu" aria-expanded="{% if page_section == 'people' %}true{% else %}false{% endif %}">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3 21v-2a6 6 0 0 1 12 0v2M16 5a3 3 0 0 1 0 6M18 15a5 5 0 0 1 3 4v2" stroke-linecap="round"/></svg>
+            <span>People</span>
+            <svg class="sidebar-chevron" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m9 5 7 7-7 7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <div id="people-submenu" class="sidebar-submenu" {% if page_section != 'people' %}hidden{% endif %}>
+            {% for item in people_menu %}
+            <a href="{{ item.list_url }}" data-nav-item class="sidebar-sub-link {% if people_role == item.role and page_mode != 'add' %}is-current{% endif %}" {% if people_role == item.role and page_mode != 'add' %}aria-current="page"{% endif %}>{{ item.label }}</a>
+            {% if item.can_add %}<a href="{{ item.add_url }}" data-nav-item class="sidebar-sub-link {% if people_role == item.role and page_mode == 'add' %}is-current{% endif %}" {% if people_role == item.role and page_mode == 'add' %}aria-current="page"{% endif %}>{{ item.add_label }}</a>{% endif %}
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% if sale_access.view %}
+        <button type="button" class="sidebar-link sidebar-group-toggle {% if page_section == 'sale' %}is-current{% endif %}" data-nav-toggle data-sales-toggle aria-controls="sales-submenu" aria-expanded="{% if page_section == 'sale' %}true{% else %}false{% endif %}">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M3 3h2l3 12h10l3-8H6M9 20h.01M18 20h.01" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span>Sales</span><svg class="sidebar-chevron" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m9 5 7 7-7 7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <div id="sales-submenu" class="sidebar-submenu" {% if page_section != 'sale' %}hidden{% endif %}>
+            <a href="{% url 'sale_pages:sale-list' %}" data-nav-item class="sidebar-sub-link {% if page_section == 'sale' and page_mode != 'add' %}is-current{% endif %}" {% if page_section == 'sale' and page_mode != 'add' %}aria-current="page"{% endif %}>Sales list</a>
+            {% if sale_access.add %}<a href="{% url 'sale_pages:create-sale' %}" data-nav-item class="sidebar-sub-link {% if page_section == 'sale' and page_mode == 'add' %}is-current{% endif %}" {% if page_section == 'sale' and page_mode == 'add' %}aria-current="page"{% endif %}>Create sale</a>{% endif %}
+        </div>
+        {% endif %}
     </nav>
     <div class="sidebar-footer"><span class="status-dot" aria-hidden="true"></span> A little more clarity, every day.</div>
 </aside>

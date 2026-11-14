@@ -4,7 +4,7 @@
 {% block content %}
 <div class="workspace-content">
     <div class="page-heading">
-        <div><p class="page-eyebrow">{{ section_label|default:'Inventory' }}</p><h1 class="page-title">{{ form_heading }}<span class="text-emerald-600">.</span></h1><p class="page-description">{% if page_mode == 'edit' %}Update your catalog details.{% else %}A new entry for a more organized catalog.{% endif %}</p></div>
+        <div><p class="page-eyebrow">{{ section_label|default:'Inventory' }}</p><h1 class="page-title">{{ form_heading }}<span class="text-emerald-600">.</span></h1><p class="page-description">{% if form_description %}{{ form_description }}{% elif page_mode == 'edit' %}Update your catalog details.{% else %}A new entry for a more organized catalog.{% endif %}</p></div>
         <a href="{{ list_url }}" class="secondary-button">Back to {{ resource.plural }} <span aria-hidden="true">&rarr;</span></a>
     </div>
     <div{% if is_product %} class="user-form-layout"{% endif %}>

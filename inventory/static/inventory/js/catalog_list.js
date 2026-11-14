@@ -11,7 +11,7 @@ function actionIcon(pathData) {
     return svg;
 }
 
-export function catalogRow(record, columns, editUrlTemplate = "", onDelete = null, stockUrlTemplate = "") {
+export function catalogRow(record, columns, editUrlTemplate = "", onDelete = null, stockUrlTemplate = "", viewUrlTemplate = "") {
     const row = document.createElement("tr");
     for (const column of columns) {
         const cell = document.createElement("td");
@@ -19,6 +19,15 @@ export function catalogRow(record, columns, editUrlTemplate = "", onDelete = nul
         if (column.key === "actions") {
             const actions = document.createElement("div");
             actions.className = "flex items-center gap-1";
+            if (viewUrlTemplate) {
+                const view = document.createElement("a");
+                view.href = viewUrlTemplate.replace("/0/", `/${encodeURIComponent(record.id)}/`);
+                view.className = "icon-button";
+                view.title = `View ${record.name || record.order_number || record.code || record.id}`;
+                view.setAttribute("aria-label", view.title);
+                view.append(actionIcon("M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12ZM15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"));
+                actions.append(view);
+            }
             if (stockUrlTemplate) {
                 const stock = document.createElement("a");
                 stock.href = stockUrlTemplate.replace("__warehouse__", encodeURIComponent(record.id));
@@ -124,7 +133,7 @@ if (panel) {
             if (current !== version) return;
             if (!Array.isArray(data.results)) throw new Error("Could not load records. Please try again.");
             visibleCount = data.results.length;
-            find("rows").replaceChildren(...data.results.map((record) => catalogRow(record, columns, panel.dataset.editUrlTemplate, deleteDialog && panel.dataset.deleteUrlTemplate ? openDelete : null, panel.dataset.stockUrlTemplate)));
+            find("rows").replaceChildren(...data.results.map((record) => catalogRow(record, columns, panel.dataset.editUrlTemplate, deleteDialog && panel.dataset.deleteUrlTemplate ? openDelete : null, panel.dataset.stockUrlTemplate, panel.dataset.viewUrlTemplate)));
             find("count").textContent = String(data.count);
             find("count").hidden = false;
             find("table").hidden = data.results.length === 0;

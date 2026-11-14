@@ -135,6 +135,8 @@ class CurrencyMigrationTests(TransactionTestCase):
         apps = executor.loader.project_state(self.before).apps
         Unit = apps.get_model('inventory', 'UnitOfMeasure')
         OldProduct = apps.get_model('inventory', 'Product')
+        apps.get_model('inventory', 'ProductType').objects.get_or_create(code='goods', defaults={'name': 'Physical goods'})
+        apps.get_model('inventory', 'Status').objects.get_or_create(code='draft', defaults={'name': 'Draft'})
         unit = Unit.objects.create(name='Migration unit', code='MIG')
         ids = [OldProduct.objects.create(name=f'Legacy {index}', sku=f'CUR-{index}', unit=unit,
                                         currency=code, sale_price='123.4567').pk

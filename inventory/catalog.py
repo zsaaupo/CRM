@@ -1,6 +1,7 @@
+from common.models import Status
 from dataclasses import dataclass
 
-from .models import Brand, Currency, Product, ProductCategory, ProductType, Status, UnitOfMeasure
+from .models import Brand, Currency, Product, ProductCategory, ProductType, UnitOfMeasure
 
 
 @dataclass(frozen=True)

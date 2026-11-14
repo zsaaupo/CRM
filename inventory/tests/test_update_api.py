@@ -1,3 +1,4 @@
+from common.models import Status
 from io import BytesIO
 from tempfile import TemporaryDirectory
 
@@ -9,7 +10,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from PIL import Image
 from rest_framework.test import APIClient
 
-from ..models import Brand, Currency, Product, ProductCategory, ProductType, Status, UnitOfMeasure
+from ..models import Brand, Currency, Product, ProductCategory, ProductType, UnitOfMeasure
 
 
 class InventoryUpdateAPITests(TestCase):
@@ -36,7 +37,7 @@ class InventoryUpdateAPITests(TestCase):
         self.client.credentials(HTTP_X_CSRFTOKEN=self.token)
 
     def permission(self, record, action='change'):
-        return Permission.objects.get(content_type__app_label='inventory',
+        return Permission.objects.get(content_type__app_label=record._meta.app_label,
                                       codename=f'{action}_{record._meta.model_name}')
 
     def grant(self, record, action='change'):

@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.core.exceptions import PermissionDenied
 
-from .models import Brand, Currency, Product, ProductCategory, ProductType, Status, UnitOfMeasure
+from .models import Brand, Currency, Product, ProductCategory, ProductType, UnitOfMeasure
 
 
 class CatalogAdmin(admin.ModelAdmin):
@@ -36,11 +36,6 @@ class ProductLookupAdmin(CatalogAdmin):
 @admin.register(ProductType)
 class ProductTypeAdmin(ProductLookupAdmin):
     default_codes = ('goods',)
-
-
-@admin.register(Status)
-class StatusAdmin(ProductLookupAdmin):
-    default_codes = ('draft',)
 
 
 @admin.register(ProductCategory)

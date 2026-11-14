@@ -18,7 +18,7 @@ class InventoryPageTests(TestCase):
 
     def grant(self, resource, *actions):
         self.user.user_permissions.add(*Permission.objects.filter(
-            content_type__app_label='inventory',
+            content_type__app_label=resource.model._meta.app_label,
             codename__in=[f'{action}_{resource.model._meta.model_name}' for action in actions],
         ))
 

@@ -1,13 +1,16 @@
 # Product catalog
 
 Products use separate ProductType and Status tables rather than TextChoices.
+Status is defined in `common.models` and is shared with purchase orders. Migration
+0005 preserves existing status data and moves status permission grants to the
+common app. Status API/page routes remain under inventory for compatibility.
 Both have a unique stable code, display name, description, active flag and the
 shared common TimeStampedModel audit fields. Manage them through Django admin.
 
 The migration seeds these records:
 
 - ProductType: goods, service, digital.
-- Status: draft, active, discontinued, archived.
+- Status: draft, active, discontinued, archived, confirmed, closed, cancelled.
 
 New products still default to goods and draft. Product foreign keys reference
 lookup codes, so existing text values retain their meaning. The public Python

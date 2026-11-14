@@ -1,0 +1,62 @@
+{% extends "layouts/dashboard.html" %}
+{% load static %}
+{% block title %}{{ form_heading|default:'Create sale' }} | eManager{% endblock %}
+{% block content %}
+<div class="workspace-content">
+    <div class="page-heading">
+        <div><p class="page-eyebrow">Sales</p><h1 class="page-title">{{ form_heading|default:'Create sale' }}<span class="text-emerald-600">.</span></h1><p class="page-description">Record a customer order and its products.</p></div>
+        <a href="{{ list_url }}" class="secondary-button">Back to sales <span aria-hidden="true">&rarr;</span></a>
+    </div>
+    <form method="post" action="{{ create_api_url }}" data-sale-form data-method="{{ form_method|default:'POST' }}" data-detail-url="{{ detail_api_url }}" data-items-url="{{ items_api_url }}" data-options-url="{{ options_api_url }}" data-success-url="{{ list_url }}" novalidate>
+        {% csrf_token %}
+        <div class="form-status mb-5" data-sale-status role="status" aria-live="polite" tabindex="-1" hidden></div>
+        <button type="button" class="secondary-button mb-5" data-sale-retry hidden>Try loading again</button>
+        <fieldset class="user-form-card" data-sale-header disabled>
+            <legend class="sr-only">Sales details</legend>
+            <h2 class="section-title">Sales details</h2>
+            <p class="section-description">The order number is generated automatically. Customer details are optional.</p>
+            <div class="user-form-grid">
+                {% include 'inventory/includes/field.html' with name='customer' label='Customer' field_type='select' hint='Only parties marked as customers are listed.' only %}
+                {% include 'inventory/includes/field.html' with name='customer_reference' label='Customer reference' maxlength='100' only %}
+                {% include 'inventory/includes/field.html' with name='warehouse' label='Warehouse' field_type='select' hint='Optional while preparing the order.' only %}
+                {% include 'inventory/includes/field.html' with name='order_date' label='Order date' field_type='date' required=True value=today|date:'Y-m-d' only %}
+                {% include 'inventory/includes/field.html' with name='expected_delivery_date' label='Expected date' field_type='date' only %}
+                {% include 'inventory/includes/field.html' with name='currency' label='Currency' field_type='select' required=True value=base_currency only %}
+                {% include 'inventory/includes/field.html' with name='exchange_rate' label='Exchange rate' field_type='number' required=True minimum='0.00000001' step='0.00000001' hint='Base-currency units per one order-currency unit. Review the rate for this sale.' only %}
+                {% include 'inventory/includes/field.html' with name='status' label='Status' field_type='select' required=True value='draft' only %}
+                {% include 'inventory/includes/field.html' with name='shipping_cost' label='Shipping cost' field_type='number' required=True value='0.0000' step='0.0001' only %}
+                {% include 'inventory/includes/field.html' with name='notes' label='Notes' field_type='textarea' only %}
+                {% include 'inventory/includes/field.html' with name='billing_address' label='Billing address' field_type='textarea' only %}
+                {% include 'inventory/includes/field.html' with name='shipping_address' label='Shipping address' field_type='textarea' only %}
+            </div>
+        </fieldset>
+        <section class="user-form-card mt-6" aria-labelledby="sale-items-heading">
+            <div class="flex items-center justify-between gap-4">
+                <h2 id="sale-items-heading" class="section-title">Products</h2>
+                <button type="button" class="secondary-button" data-sale-add-line disabled><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke-linecap="round"/></svg>Add item</button>
+            </div>
+            <p class="section-description">Add at least one product. Prices and shipping use the selected order currency. Totals are calculated when you save.</p>
+            <div class="space-y-6" data-sale-lines></div>
+        </section>
+        <div class="user-form-actions"><a href="{{ list_url }}" class="secondary-button">Cancel</a><button type="submit" class="primary-button compact-primary" data-sale-submit disabled><span data-submit-label>{{ save_label|default:'Create sale' }}</span><span class="button-spinner" data-submit-spinner hidden aria-hidden="true"></span></button></div>
+        <noscript><p class="form-error">Enable JavaScript to load choices and create a sale.</p></noscript>
+    </form>
+    <template id="sale-line-template">
+        <fieldset class="rounded-xl border border-stone-200 p-5" data-sale-line>
+            <legend class="sr-only" data-line-legend>Sales item</legend>
+            <div class="mb-5 flex items-center justify-between gap-4"><h3 class="section-title" data-line-heading>Item</h3><button type="button" class="icon-button inventory-delete-button" data-line-remove title="Remove item" aria-label="Remove item"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div>
+            <p class="form-error mb-4" data-line-error="non_field_errors" hidden></p>
+            <div class="user-form-grid">
+                {% include 'sale/includes/line_field.html' with name='product' label='Product' field_type='select' only %}
+                <div><label class="form-label" data-line-label="unit">Unit</label><input class="form-input" data-line-unit-label readonly><input type="hidden" data-line-field="unit"><p class="form-error" data-line-error="unit" hidden></p></div>
+                {% include 'sale/includes/line_field.html' with name='quantity' label='Quantity' value='1' minimum='0.000001' step='0.000001' only %}
+                {% include 'sale/includes/line_field.html' with name='unit_price' label='Unit price' value='0.0000' only %}
+                {% include 'sale/includes/line_field.html' with name='discount_amount' label='Line discount' value='0.0000' only %}
+                {% include 'sale/includes/line_field.html' with name='tax_rate' label='Tax (%)' value='0' maximum='100' only %}
+                {% include 'sale/includes/line_field.html' with name='description' label='Description' field_type='text' optional=True only %}
+            </div>
+        </fieldset>
+    </template>
+</div>
+{% endblock %}
+{% block workspace_js %}<script type="module" src="{% static 'sale/js/sales_form.js' %}"></script>{% endblock %}

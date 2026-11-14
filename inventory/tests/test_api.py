@@ -1,3 +1,4 @@
+from common.models import Status
 from io import BytesIO
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
@@ -11,7 +12,7 @@ from django.urls import reverse
 from PIL import Image
 from rest_framework.test import APIClient
 
-from ..models import Brand, Product, ProductCategory, ProductType, Status, UnitOfMeasure
+from ..models import Brand, Product, ProductCategory, ProductType, UnitOfMeasure
 from ..serializers import ProductSerializer
 
 
@@ -30,7 +31,7 @@ class InventoryAPITests(TestCase):
         self.client.credentials(HTTP_X_CSRFTOKEN=self.token)
 
     def permission(self, model, action):
-        return Permission.objects.get(content_type__app_label='inventory',
+        return Permission.objects.get(content_type__app_label=model._meta.app_label,
                                       codename=f'{action}_{model._meta.model_name}')
 
     def grant(self, model, *actions):

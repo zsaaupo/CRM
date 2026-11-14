@@ -1,6 +1,6 @@
 <div{% if field_type == 'textarea' or field_type == 'file' %} class="user-form-full"{% endif %}>
     {% if field_type == 'checkbox' %}
-    <label for="id_{{ name }}" class="inventory-check-label"><input id="id_{{ name }}" name="{{ name }}" type="checkbox" class="inventory-check-input" aria-describedby="id_{{ name }}_error"{% if checked %} checked{% endif %}><span>{{ label }}</span></label>
+    <label for="id_{{ name }}" class="inventory-check-label"><input id="id_{{ name }}" name="{{ name }}" type="checkbox" class="inventory-check-input" aria-describedby="id_{{ name }}_error"{% if checked %} checked{% endif %}{% if locked %} disabled data-locked="true"{% endif %}><span>{{ label }}</span></label>
     {% else %}
     <label for="id_{{ name }}" class="form-label">{{ label }}{% if not required %}<span class="ml-1 font-normal text-stone-400">Optional</span>{% endif %}</label>
     {% if field_type == 'textarea' %}

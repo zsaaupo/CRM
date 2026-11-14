@@ -1,10 +1,11 @@
+from common.models import Status
 from decimal import Decimal
 
 from django.conf import settings
 from rest_framework import serializers
 
 from common.serializers import AUDIT_FIELDS, CatalogSerializer
-from .models import Brand, Currency, Product, ProductCategory, ProductType, Status, UnitOfMeasure
+from .models import Brand, Currency, Product, ProductCategory, ProductType, UnitOfMeasure
 
 
 class ProductCategorySerializer(CatalogSerializer):
@@ -79,3 +80,19 @@ class ProductSerializer(CatalogSerializer):
             'product_tax', 'is_returnable', *AUDIT_FIELDS[1:],
         ]
         read_only_fields = [*AUDIT_FIELDS, 'public_id']
+
+
+class ProductDetailSerializer(ProductSerializer):
+    product_type_name = serializers.CharField(source='product_type.name', read_only=True)
+    status_name = serializers.CharField(source='status.name', read_only=True)
+    category_name = serializers.CharField(source='category.name', read_only=True, default=None)
+    brand_name = serializers.CharField(source='brand.name', read_only=True, default=None)
+    unit_name = serializers.CharField(source='unit.name', read_only=True)
+    unit_code = serializers.CharField(source='unit.code', read_only=True)
+    currency_name = serializers.CharField(source='currency.name', read_only=True)
+    variant_of_name = serializers.CharField(source='variant_of.name', read_only=True, default=None)
+    variant_of_sku = serializers.CharField(source='variant_of.sku', read_only=True, default=None)
+
+    class Meta(ProductSerializer.Meta):
+        fields = [*ProductSerializer.Meta.fields, 'product_type_name', 'status_name', 'category_name',
+                  'brand_name', 'unit_name', 'unit_code', 'currency_name', 'variant_of_name', 'variant_of_sku']

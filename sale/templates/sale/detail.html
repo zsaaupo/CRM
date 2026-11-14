@@ -1,0 +1,52 @@
+{% extends "layouts/dashboard.html" %}
+{% load static %}
+{% block title %}Sales details | eManager{% endblock %}
+{% block content %}
+<div class="workspace-content" data-record-detail data-api-url="{{ detail_api_url }}" data-title-field="order_number" data-login-url="{% url 'account_pages:login' %}">
+    <div class="page-heading">
+        <div class="min-w-0 max-w-full"><p class="page-eyebrow">Sales</p><h1 class="page-title break-all"><span data-record-title>Sales details</span><span class="text-emerald-600">.</span></h1><p class="page-description">Order information, products and totals.</p></div>
+        <div class="flex gap-3"><a href="{{ list_url }}" class="secondary-button">Back to sales <span aria-hidden="true">&rarr;</span></a>{% if edit_url %}<a href="{{ edit_url }}" class="primary-button compact-primary">Edit sale</a>{% endif %}</div>
+    </div>
+    {% include 'includes/detail_status.html' %}
+    <div data-record-content hidden>
+        <section class="user-form-card mb-6" aria-labelledby="sale-information-heading">
+            <h2 id="sale-information-heading" class="section-title mb-6">Sales information</h2>
+            <dl class="profile-grid">
+                {% include 'includes/detail_field.html' with name='order_number' label='Order number' only %}
+                {% include 'includes/detail_field.html' with name='status_name' label='Status' only %}
+                {% include 'includes/detail_field.html' with name='customer_name' label='Customer' only %}
+                {% include 'includes/detail_field.html' with name='customer_code' label='Customer code' only %}
+                {% include 'includes/detail_field.html' with name='warehouse_name' label='Warehouse' only %}
+                {% include 'includes/detail_field.html' with name='billing_address' label='Billing address' full=True only %}
+                {% include 'includes/detail_field.html' with name='shipping_address' label='Shipping address' full=True only %}
+                {% include 'includes/detail_field.html' with name='customer_reference' label='Customer reference' only %}
+                {% include 'includes/detail_field.html' with name='order_date' label='Order date' only %}
+                {% include 'includes/detail_field.html' with name='expected_delivery_date' label='Expected date' only %}
+                {% include 'includes/detail_field.html' with name='currency_name' label='Currency' only %}
+                {% include 'includes/detail_field.html' with name='currency' label='Currency code' only %}
+                {% include 'includes/detail_field.html' with name='exchange_rate' label='Exchange rate ('|add:base_currency|add:' per order-currency unit)' only %}
+                {% include 'includes/detail_field.html' with name='notes' label='Notes' full=True only %}
+            </dl>
+        </section>
+        <section class="users-panel mb-6" aria-labelledby="sale-line-heading"{% if can_view_items %} data-sale-items data-api-url="{{ items_api_url }}" data-product-url-template="{{ product_url_template }}"{% endif %}>
+            <div class="users-toolbar"><div><h2 id="sale-line-heading" class="section-title">Salesd products</h2><p class="mt-1 text-xs text-stone-400">Quantity, price, discount and tax for each order line.</p></div></div>
+            {% if can_view_items %}
+            <p class="users-list-status" data-items-status role="status" aria-live="polite">Loading products...</p>
+            <div class="users-list-error" data-items-error role="alert" hidden><p data-items-error-message></p><button type="button" class="text-button mt-3" data-items-retry>Try again <span aria-hidden="true">&rarr;</span></button></div>
+            <p class="users-empty" data-items-empty hidden>No products have been added to this sale.</p>
+            <div class="users-table-scroll" data-items-table hidden><table class="users-table"><caption class="sr-only">Sales order items</caption><thead><tr><th scope="col">Line</th><th scope="col">Product</th><th scope="col">Description</th><th scope="col">Unit</th><th scope="col">Quantity</th><th scope="col">Unit price</th><th scope="col">Discount</th><th scope="col">Net amount</th><th scope="col">Tax (%)</th><th scope="col">Tax amount</th><th scope="col">Total</th></tr></thead><tbody data-items-rows></tbody></table></div>
+            <div class="users-pagination" data-items-pagination hidden><p data-items-range></p><div class="flex gap-2"><button type="button" class="secondary-button" data-items-previous>Previous</button><button type="button" class="secondary-button" data-items-next>Next</button></div></div>
+            {% else %}<p class="users-list-status">You do not have permission to view sale order items. Contact your administrator for access.</p>{% endif %}
+        </section>
+        <section class="user-form-card mb-6" aria-labelledby="sale-totals-heading"><h2 id="sale-totals-heading" class="section-title mb-6">Order totals</h2><dl class="profile-grid">
+            {% include 'includes/detail_field.html' with name='subtotal' label='Subtotal' kind='money' only %}
+            {% include 'includes/detail_field.html' with name='tax_total' label='Tax total' kind='money' only %}
+            {% include 'includes/detail_field.html' with name='shipping_cost' label='Shipping cost' kind='money' only %}
+            {% include 'includes/detail_field.html' with name='grand_total' label='Grand total' kind='money' only %}
+        </dl></section>
+        {% include 'includes/detail_audit.html' %}
+    </div>
+    <noscript><p class="form-error">Enable JavaScript to load sale details.</p></noscript>
+</div>
+{% endblock %}
+{% block workspace_js %}<script type="module" src="{% static 'sale/js/sales_detail.js' %}"></script>{% endblock %}

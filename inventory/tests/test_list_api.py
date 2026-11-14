@@ -1,10 +1,11 @@
+from common.models import Status
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group, Permission
 from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
 
-from ..models import Brand, Product, ProductCategory, ProductType, Status, UnitOfMeasure
+from ..models import Brand, Product, ProductCategory, ProductType, UnitOfMeasure
 
 
 class InventoryListAPITests(TestCase):
@@ -27,7 +28,7 @@ class InventoryListAPITests(TestCase):
 
     def grant(self, model, *actions):
         self.user.user_permissions.add(*[
-            Permission.objects.get(content_type__app_label='inventory',
+            Permission.objects.get(content_type__app_label=model._meta.app_label,
                                    codename=f'{action}_{model._meta.model_name}')
             for action in actions
         ])

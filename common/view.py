@@ -52,6 +52,7 @@ class BaseAPIMixin:
 class BaseListQuerysetMixin:
     pagination_class = BasePagination
     search_fields = ['name']
+    ordering = ['name', 'pk']
 
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -61,7 +62,7 @@ class BaseListQuerysetMixin:
             for field in self.search_fields:
                 condition |= Q(**{f'{field}__icontains': query})
             queryset = queryset.filter(condition)
-        return queryset.order_by('name', 'pk')
+        return queryset.order_by(*self.ordering)
 
 
 @method_decorator(never_cache, name='dispatch')

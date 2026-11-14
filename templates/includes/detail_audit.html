@@ -1,0 +1,9 @@
+<section class="user-form-card" aria-labelledby="record-audit-heading">
+    <h2 id="record-audit-heading" class="section-title mb-6">Record history</h2>
+    <dl class="profile-grid">
+        {% include 'includes/detail_field.html' with name='created_at' label='Created at' kind='datetime' only %}
+        {% include 'includes/detail_field.html' with name='create_by' label='Created by' only %}
+        {% include 'includes/detail_field.html' with name='updated_at' label='Updated at' kind='datetime' only %}
+        {% include 'includes/detail_field.html' with name='modified_by' label='Modified by' only %}
+    </dl>
+</section>

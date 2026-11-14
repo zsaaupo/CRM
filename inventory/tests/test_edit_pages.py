@@ -1,3 +1,4 @@
+from common.models import Status
 from html.parser import HTMLParser
 from io import BytesIO
 from tempfile import TemporaryDirectory
@@ -10,7 +11,7 @@ from django.urls import reverse
 from PIL import Image
 from rest_framework.test import APIClient
 
-from ..models import Brand, Currency, Product, ProductCategory, ProductType, Status, UnitOfMeasure
+from ..models import Brand, Currency, Product, ProductCategory, ProductType, UnitOfMeasure
 
 
 class InputAttributes(HTMLParser):
@@ -46,7 +47,7 @@ class InventoryEditPageTests(TestCase):
         self.client.force_login(self.user)
 
     def grant(self, record, *actions):
-        self.user.user_permissions.add(*Permission.objects.filter(content_type__app_label='inventory',
+        self.user.user_permissions.add(*Permission.objects.filter(content_type__app_label=record._meta.app_label,
             codename__in=[f'{action}_{record._meta.model_name}' for action in actions]))
 
     def test_each_list_edit_action_page_and_api_save_destination(self):
@@ -57,7 +58,7 @@ class InventoryEditPageTests(TestCase):
                 self.assertRedirects(Client().get(edit), reverse('account_pages:login'))
                 self.assertEqual(self.client.get(edit).status_code, 403)
                 self.grant(record, 'view')
-                self.assertNotContains(self.client.get(listing), '"type": "edit"')
+                self.assertNotIn('edit_url_template', self.client.get(listing).context)
                 self.assertEqual(self.client.get(edit).status_code, 403)
                 self.grant(record, 'change')
                 response = self.client.get(listing)
@@ -138,4 +139,4 @@ class InventoryEditPageTests(TestCase):
         self.assertEqual(self.client.get(url).status_code, 200)
         role.permissions.remove(Permission.objects.get(content_type__app_label='inventory', codename='change_product'))
         self.assertEqual(self.client.get(url).status_code, 403)
-        self.assertNotContains(self.client.get(reverse('inventory_pages:product-list')), '"type": "edit"')
+        self.assertNotIn('edit_url_template', self.client.get(reverse('inventory_pages:product-list')).context)

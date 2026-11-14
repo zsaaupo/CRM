@@ -1,0 +1,9 @@
+<div>
+    <label class="form-label" data-line-label="{{ name }}">{{ label }}{% if optional %}<span class="ml-1 font-normal text-stone-400">Optional</span>{% endif %}</label>
+    {% if field_type == 'select' %}
+    <select class="form-input" data-line-field="{{ name }}" required><option value="">Select a product</option></select>
+    {% else %}
+    <input type="{{ field_type|default:'number' }}" class="form-input" data-line-field="{{ name }}" value="{{ value }}"{% if not optional %} required{% endif %}{% if field_type != 'text' %} min="{{ minimum|default:'0' }}" step="{{ step|default:'0.0001' }}"{% if maximum %} max="{{ maximum }}"{% endif %}{% endif %}>
+    {% endif %}
+    <p class="form-error" data-line-error="{{ name }}" hidden></p>
+</div>

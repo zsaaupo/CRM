@@ -1,3 +1,4 @@
+from common.models import Status
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import never_cache
 from django.shortcuts import get_object_or_404
@@ -8,10 +9,10 @@ from rest_framework.response import Response
 
 from account.permissions import HasRequiredPermissions
 from common.view import BaseDetailAPIView, BaseListAPIView, BaseListCreateAPIView, BaseUpdateAPIView
-from .models import Brand, Currency, Product, ProductCategory, ProductType, Status, UnitOfMeasure
+from .models import Brand, Currency, Product, ProductCategory, ProductType, UnitOfMeasure
 from .serializers import (
     BrandSerializer, CurrencySerializer, ProductCategorySerializer, ProductSerializer,
-    ProductTypeSerializer, StatusSerializer, UnitOfMeasureSerializer,
+    ProductDetailSerializer, ProductTypeSerializer, StatusSerializer, UnitOfMeasureSerializer,
 )
 
 
@@ -68,7 +69,7 @@ class ProductListCreateAPIView(BaseListCreateAPIView):
 
 
 class ProductDetailAPIView(BaseDetailAPIView):
-    serializer_class = ProductSerializer
+    serializer_class = ProductDetailSerializer
     queryset = Product.objects.select_related('product_type', 'status', 'category', 'brand', 'unit', 'variant_of', 'currency')
 
 

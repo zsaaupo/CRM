@@ -40,6 +40,9 @@ INSTALLED_APPS = [
     'inventory',
     'common',
     'warehouse',
+    'purchase',
+    'sale',
+    'people',
 ]
 
 MIDDLEWARE = [
@@ -66,6 +69,9 @@ TEMPLATES = [
                 'django.contrib.messages.context_processors.messages',
                 'inventory.context_processors.inventory_navigation',
                 'warehouse.context_processors.warehouse_navigation',
+                'purchase.context_processors.purchase_navigation',
+                'sale.context_processors.sale_navigation',
+                'people.context_processors.people_navigation',
             ],
         },
     },

@@ -1,0 +1,40 @@
+{% extends "layouts/dashboard.html" %}
+{% load static %}
+{% block title %}{{ page_label }} | eManager{% endblock %}
+{% block content %}
+<div class="workspace-content" data-record-detail data-api-url="{{ detail_api_url }}" data-title-field="name" data-login-url="{% url 'account_pages:login' %}">
+    <div class="page-heading">
+        <div class="min-w-0 max-w-full"><p class="page-eyebrow">People</p><h1 class="page-title break-all"><span data-record-title>{{ page_label }}</span><span class="text-emerald-600">.</span></h1><p class="page-description">Contact and business details for this {{ resource.singular }}.</p></div>
+        <div class="flex flex-wrap gap-3"><a href="{{ list_url }}" class="secondary-button">Back to {{ resource.plural }} <span aria-hidden="true">&rarr;</span></a>{% if edit_url %}<a href="{{ edit_url }}" class="primary-button compact-primary">Edit {{ resource.singular }}</a>{% endif %}</div>
+    </div>
+    {% include 'includes/detail_status.html' %}
+    <div data-record-content hidden>
+        <figure class="user-form-card mb-6" data-record-image-wrapper hidden><img data-record-image class="max-h-72 max-w-full rounded-xl object-contain" alt=""></figure>
+        <section class="user-form-card mb-6" aria-labelledby="party-details-heading">
+            <h2 id="party-details-heading" class="section-title mb-6">{{ resource.singular|capfirst }} details</h2>
+            <dl class="profile-grid">
+                {% include 'includes/detail_field.html' with name='code' label='Code' only %}
+                {% include 'includes/detail_field.html' with name='name' label='Name' only %}
+                {% include 'includes/detail_field.html' with name='is_supplier' label='Supplier' kind='boolean' only %}
+                {% include 'includes/detail_field.html' with name='is_customer' label='Customer' kind='boolean' only %}
+                {% include 'includes/detail_field.html' with name='is_active' label='Active' kind='boolean' only %}
+                {% include 'includes/detail_field.html' with name='contact_person' label='Contact person' only %}
+                {% include 'includes/detail_field.html' with name='phone' label='Phone' only %}
+                {% include 'includes/detail_field.html' with name='alternate_phone' label='Alternate phone' only %}
+                {% include 'includes/detail_field.html' with name='email' label='Email' only %}
+                {% include 'includes/detail_field.html' with name='website' label='Website' only %}
+                {% include 'includes/detail_field.html' with name='tax_number' label='Tax number' only %}
+                {% include 'includes/detail_field.html' with name='address' label='Address' full=True only %}
+                {% include 'includes/detail_field.html' with name='city' label='City' only %}
+                {% include 'includes/detail_field.html' with name='state' label='State / division' only %}
+                {% include 'includes/detail_field.html' with name='postal_code' label='Postal code' only %}
+                {% include 'includes/detail_field.html' with name='country' label='Country' only %}
+                {% include 'includes/detail_field.html' with name='notes' label='Notes' full=True only %}
+            </dl>
+        </section>
+        {% include 'includes/detail_audit.html' %}
+    </div>
+    <noscript><p class="form-error">Enable JavaScript to load {{ resource.singular }} details.</p></noscript>
+</div>
+{% endblock %}
+{% block workspace_js %}<script type="module" src="{% static 'people/js/party_detail.js' %}"></script>{% endblock %}

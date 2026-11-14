@@ -1,0 +1,26 @@
+{% include 'inventory/includes/field.html' with name='code' label='Code' required=True maxlength='40' hint='Use a unique party code. Codes remain reserved after deletion.' only %}
+{% include 'inventory/includes/field.html' with name='name' label='Name' required=True maxlength='200' only %}
+{% include 'inventory/includes/field.html' with name='image' label='Picture' field_type='file' hint='Choose an image to upload. Leave empty to keep the current picture when editing.' only %}
+{% if page_mode == 'edit' %}
+<div class="user-form-full" data-current-image hidden><p class="form-label">Current picture</p><img data-current-image-preview alt="Current {{ resource.singular }} picture" class="max-h-32 max-w-full rounded-lg object-contain"><p class="mt-2 text-xs text-stone-500">Choose a new image above to replace this picture.</p></div>
+{% endif %}
+{% if people_role == 'supplier' %}
+    {% include 'inventory/includes/field.html' with name='is_supplier' label='Supplier' field_type='checkbox' checked=True locked=True hint='This party is listed as a supplier.' only %}
+    {% include 'inventory/includes/field.html' with name='is_customer' label='Also a customer' field_type='checkbox' only %}
+{% else %}
+    {% include 'inventory/includes/field.html' with name='is_customer' label='Customer' field_type='checkbox' checked=True locked=True hint='This party is listed as a customer.' only %}
+    {% include 'inventory/includes/field.html' with name='is_supplier' label='Also a supplier' field_type='checkbox' only %}
+{% endif %}
+{% include 'inventory/includes/field.html' with name='contact_person' label='Contact person' maxlength='150' only %}
+{% include 'inventory/includes/field.html' with name='phone' label='Phone' field_type='tel' maxlength='32' only %}
+{% include 'inventory/includes/field.html' with name='alternate_phone' label='Alternate phone' field_type='tel' maxlength='32' only %}
+{% include 'inventory/includes/field.html' with name='email' label='Email' field_type='email' maxlength='254' only %}
+{% include 'inventory/includes/field.html' with name='website' label='Website' field_type='url' maxlength='200' only %}
+{% include 'inventory/includes/field.html' with name='tax_number' label='Tax number' maxlength='64' only %}
+{% include 'inventory/includes/field.html' with name='address' label='Address' field_type='textarea' only %}
+{% include 'inventory/includes/field.html' with name='city' label='City' maxlength='100' only %}
+{% include 'inventory/includes/field.html' with name='state' label='State / division' maxlength='100' only %}
+{% include 'inventory/includes/field.html' with name='postal_code' label='Postal code' maxlength='20' only %}
+{% include 'inventory/includes/field.html' with name='country' label='Country' maxlength='100' only %}
+{% include 'inventory/includes/field.html' with name='notes' label='Notes' field_type='textarea' only %}
+{% include 'inventory/includes/field.html' with name='is_active' label='Active' field_type='checkbox' checked=True only %}

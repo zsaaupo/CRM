@@ -1,0 +1,52 @@
+{% extends "layouts/dashboard.html" %}
+{% load static %}
+{% block title %}Product details | eManager{% endblock %}
+{% block content %}
+<div class="workspace-content" data-record-detail data-api-url="{{ detail_api_url }}" data-title-field="name" data-login-url="{% url 'account_pages:login' %}">
+    <div class="page-heading">
+        <div class="min-w-0 max-w-full"><p class="page-eyebrow">Inventory</p><h1 class="page-title break-all"><span data-record-title>Product details</span><span class="text-emerald-600">.</span></h1><p class="page-description">Product information, pricing and specifications.</p></div>
+        <div class="flex flex-wrap gap-3"><a href="{{ list_url }}" class="secondary-button">Back to products <span aria-hidden="true">&rarr;</span></a>{% if edit_url %}<a href="{{ edit_url }}" class="primary-button compact-primary">Edit product</a>{% endif %}</div>
+    </div>
+    {% include 'includes/detail_status.html' %}
+    <div data-record-content hidden>
+        <figure class="user-form-card mb-6" data-record-image-wrapper hidden><img data-record-image class="max-h-72 max-w-full rounded-xl object-contain" alt=""></figure>
+        <section class="user-form-card mb-6" aria-labelledby="product-information-heading">
+            <h2 id="product-information-heading" class="section-title mb-6">Product information</h2>
+            <dl class="profile-grid">
+                {% include 'includes/detail_field.html' with name='name' label='Name' only %}
+                {% include 'includes/detail_field.html' with name='sku' label='SKU' only %}
+                {% include 'includes/detail_field.html' with name='barcode' label='Barcode' only %}
+                {% include 'includes/detail_field.html' with name='public_id' label='Public ID' only %}
+                {% include 'includes/detail_field.html' with name='product_type_name' label='Product type' only %}
+                {% include 'includes/detail_field.html' with name='status_name' label='Status' only %}
+                {% include 'includes/detail_field.html' with name='category_name' label='Category' only %}
+                {% include 'includes/detail_field.html' with name='brand_name' label='Brand' only %}
+                {% include 'includes/detail_field.html' with name='unit_name' label='Unit' only %}
+                {% include 'includes/detail_field.html' with name='unit_code' label='Unit code' only %}
+                {% include 'includes/detail_field.html' with name='variant_of_name' label='Base product' only %}
+                {% include 'includes/detail_field.html' with name='variant_of_sku' label='Base product SKU' only %}
+                {% include 'includes/detail_field.html' with name='manufacturer' label='Manufacturer' only %}
+                {% include 'includes/detail_field.html' with name='manufacturer_part_number' label='Manufacturer part number' only %}
+                {% include 'includes/detail_field.html' with name='description' label='Description' full=True only %}
+            </dl>
+        </section>
+        <section class="user-form-card mb-6" aria-labelledby="product-pricing-heading">
+            <h2 id="product-pricing-heading" class="section-title mb-6">Pricing</h2>
+            <dl class="profile-grid">
+                {% include 'includes/detail_field.html' with name='currency_name' label='Currency' only %}
+                {% include 'includes/detail_field.html' with name='currency' label='Currency code' only %}
+                {% include 'includes/detail_field.html' with name='cost_price' label='Cost price' kind='money' only %}
+                {% include 'includes/detail_field.html' with name='sale_price' label='Sale price' kind='money' only %}
+                {% include 'includes/detail_field.html' with name='minimum_sale_price' label='Minimum sale price' kind='money' only %}
+                {% include 'includes/detail_field.html' with name='Whole_sale_price' label='Wholesale price' kind='money' only %}
+                {% include 'includes/detail_field.html' with name='product_tax' label='Product tax' kind='percent' only %}
+                {% include 'includes/detail_field.html' with name='is_returnable' label='Returnable' kind='boolean' only %}
+            </dl>
+        </section>
+        <section class="user-form-card mb-6" aria-labelledby="product-specifications-heading"><h2 id="product-specifications-heading" class="section-title mb-6">Specifications</h2><dl class="profile-grid">{% include 'includes/detail_field.html' with name='attributes' label='Attributes' kind='json' full=True only %}</dl></section>
+        {% include 'includes/detail_audit.html' %}
+    </div>
+    <noscript><p class="form-error">Enable JavaScript to load product details.</p></noscript>
+</div>
+{% endblock %}
+{% block workspace_js %}<script type="module" src="{% static 'inventory/js/product_detail.js' %}"></script>{% endblock %}

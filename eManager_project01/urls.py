@@ -13,8 +13,14 @@ urlpatterns = [
     path('account/api/', include('account.api_urls')),
     path('inventory/api/', include('inventory.api_urls')),
     path('warehouse/api/', include('warehouse.api_urls')),
+    path('purchase/api/', include('purchase.api_urls')),
+    path('sale/api/', include('sale.api_urls')),
+    path('people/api/', include('people.api_urls')),
     path('inventory/', include('inventory.page_urls')),
     path('warehouse/', include('warehouse.page_urls')),
+    path('purchase/', include('purchase.page_urls')),
+    path('sale/', include('sale.page_urls')),
+    path('people/', include('people.page_urls')),
     path('account/', include('account.page_urls')),
 ]
 

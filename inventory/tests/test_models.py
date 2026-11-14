@@ -1,3 +1,4 @@
+from common.models import Status
 from decimal import Decimal
 
 from django.contrib import admin
@@ -7,7 +8,7 @@ from django.db import IntegrityError, transaction
 from django.db.models.deletion import ProtectedError
 from django.test import RequestFactory, TestCase
 
-from ..models import Brand, Product, ProductCategory, ProductType, Status, UnitOfMeasure
+from ..models import Brand, Product, ProductCategory, ProductType, UnitOfMeasure
 
 
 class ProductTests(TestCase):

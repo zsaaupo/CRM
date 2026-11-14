@@ -6,7 +6,7 @@ from django.core.validators import MaxValueValidator, MinValueValidator, RegexVa
 from django.db import models
 from django.db.models import F, Q
 from django.db.models.functions import Lower, Trim
-from common.models import TimeStampedModel
+from common.models import Status, TimeStampedModel
 
 
 class ProductCategory(TimeStampedModel):
@@ -56,21 +56,6 @@ class ProductType(TimeStampedModel):
 
     class Meta:
         ordering = ['name', 'pk']
-
-    def __str__(self):
-        return self.name
-
-
-class Status(TimeStampedModel):
-    code = models.SlugField(max_length=32, unique=True)
-    name = models.CharField(max_length=100)
-    description = models.TextField(blank=True)
-    is_active = models.BooleanField(default=True)
-
-    class Meta:
-        ordering = ['name', 'pk']
-        verbose_name = 'product status'
-        verbose_name_plural = 'product statuses'
 
     def __str__(self):
         return self.name

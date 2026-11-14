@@ -1,10 +1,11 @@
+from common.models import Status
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
 from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
 
-from ..models import Brand, Currency, Product, ProductCategory, ProductType, Status, UnitOfMeasure
+from ..models import Brand, Currency, Product, ProductCategory, ProductType, UnitOfMeasure
 
 
 class InventoryDeleteUITests(TestCase):
@@ -25,7 +26,7 @@ class InventoryDeleteUITests(TestCase):
         self.client.force_login(self.user)
 
     def grant(self, record, action):
-        permission = Permission.objects.get(content_type__app_label='inventory',
+        permission = Permission.objects.get(content_type__app_label=record._meta.app_label,
                                             codename=f'{action}_{record._meta.model_name}')
         self.user.user_permissions.add(permission)
 

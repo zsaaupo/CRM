@@ -43,8 +43,10 @@ class InventoryPageView(ProtectedAccountPageView):
             'columns': [{'key': key, 'label': label, 'type': kind} for key, label, kind in resource.columns],
         })
         can_change = self.request.user.has_perm(resource.permission('change'))
-        if can_change or context['can_delete']:
+        if resource.key == 'product' or can_change or context['can_delete']:
             context['columns'].append({'key': 'actions', 'label': 'Actions', 'type': 'edit'})
+        if resource.key == 'product':
+            context['view_url_template'] = reverse('inventory_pages:product-detail', args=[0])
         if can_change:
             context['edit_url_template'] = reverse(f'inventory_pages:edit-{resource.key}', args=[0])
         if context['can_delete']:
@@ -58,6 +60,22 @@ class InventoryPageView(ProtectedAccountPageView):
 
 class InventoryListPageView(InventoryPageView):
     template_name = 'inventory/list.html'
+
+
+class ProductDetailPageView(InventoryPageView):
+    template_name = 'inventory/product_detail.html'
+    resource_key = 'product'
+    mode = 'detail'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context.update({
+            'page_label': 'Product details',
+            'detail_api_url': reverse('inventory:product-detail', args=[self.kwargs['pk']]),
+        })
+        if self.request.user.has_perm('inventory.change_product'):
+            context['edit_url'] = reverse('inventory_pages:edit-product', args=[self.kwargs['pk']])
+        return context
 
 
 class InventoryAddPageView(InventoryPageView):

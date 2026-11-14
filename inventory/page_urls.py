@@ -1,12 +1,14 @@
 from django.urls import path
 
 from .catalog import RESOURCES
-from .page_views import InventoryAddPageView, InventoryEditPageView, InventoryListPageView
+from .page_views import InventoryAddPageView, InventoryEditPageView, InventoryListPageView, ProductDetailPageView
 
 
 app_name = 'inventory_pages'
 
-urlpatterns = []
+urlpatterns = [
+    path('products/<int:pk>/', ProductDetailPageView.as_view(), name='product-detail'),
+]
 for resource in RESOURCES:
     urlpatterns += [
         path(f'{resource.path}/', InventoryListPageView.as_view(resource_key=resource.key), name=f'{resource.key}-list'),

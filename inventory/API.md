@@ -7,6 +7,13 @@ Model views inherit `BaseListCreateAPIView`, `BaseListAPIView`,
 `BaseDetailAPIView`, and `BaseUpdateAPIView` from `common/view.py`. Shared model
 validation and audit field definitions live in `common/serializers.py`.
 
+Status is shared with purchase orders and lives in `common.models.Status`.
+Existing `/inventory/api/statuses/` routes remain available, but their permissions
+are `common.view_status`, `common.add_status`, `common.change_status`, and
+`common.delete_status`. The migration preserves existing status records and
+permission grants. Referenced statuses and the default draft status cannot be
+deleted. Status codes remain immutable through the APIs.
+
 | Model | List / create | Detail / update / delete | Permission model name |
 | --- | --- | --- | --- |
 | Product | `products/` | `products/<id>/` | `product` |
@@ -230,3 +237,17 @@ currency returns 409.
 Product payloads still use `"currency": "USD"`, but the code must now exist in
 Currency. Currency detail URLs use numeric IDs. Product prices stay in their
 selected currency; updating a rate does not automatically convert prices.
+
+## Product detail page
+
+Each product list row has an eye icon linking to `/inventory/products/<id>/`.
+The page loads `/inventory/api/products/<id>/` and requires
+`inventory.view_product`. It shows identification, classification, image,
+manufacturing details, specifications, prices, tax and record history. The edit
+link additionally requires `inventory.change_product`.
+
+The product detail API includes read-only `product_type_name`, `status_name`,
+`category_name`, `brand_name`, `unit_name`, `unit_code`, `currency_name`,
+`variant_of_name` and `variant_of_sku` alongside the existing relation codes/IDs.
+Optional relation labels are null when not set. These labels do not require
+catalog-management permissions and cannot be changed through product writes.

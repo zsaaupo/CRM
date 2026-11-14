@@ -9,3 +9,17 @@ class TimeStampedModel(models.Model):
 
     class Meta:
         abstract = True
+
+
+class Status(TimeStampedModel):
+    code = models.SlugField(max_length=32, unique=True)
+    name = models.CharField(max_length=100)
+    description = models.TextField(blank=True)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ['name', 'pk']
+        verbose_name_plural = 'statuses'
+
+    def __str__(self):
+        return self.name
