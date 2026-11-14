@@ -1,4 +1,4 @@
-from common.models import Status
+from common.models import ProductStatus
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import never_cache
 from django.shortcuts import get_object_or_404
@@ -37,7 +37,7 @@ class ProductOptionsAPIView(APIView):
 
         return Response({
             'product_type': choices(ProductType, 'code'),
-            'status': choices(Status, 'code'),
+            'status': choices(ProductStatus, 'code'),
             'category': choices(ProductCategory),
             'brand': choices(Brand),
             'unit': choices(UnitOfMeasure, include_code=True),
@@ -123,14 +123,14 @@ class ProductTypeDetailAPIView(BaseDetailAPIView):
 
 class StatusListCreateAPIView(BaseListCreateAPIView):
     serializer_class = StatusSerializer
-    queryset = Status.objects.all()
+    queryset = ProductStatus.objects.all()
     response_key = 'status'
     search_fields = ['name', 'code']
 
 
 class StatusDetailAPIView(BaseDetailAPIView):
     serializer_class = StatusSerializer
-    queryset = Status.objects.all()
+    queryset = ProductStatus.objects.all()
     protected_codes = ('draft',)
 
 
@@ -165,7 +165,7 @@ class ProductTypeListAPIView(BaseListAPIView):
 
 class StatusListAPIView(BaseListAPIView):
     serializer_class = StatusSerializer
-    queryset = Status.objects.all()
+    queryset = ProductStatus.objects.all()
     search_fields = ['name', 'code']
 
 

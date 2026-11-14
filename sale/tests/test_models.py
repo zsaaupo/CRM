@@ -7,7 +7,7 @@ from django.db.models.deletion import ProtectedError
 from django.test import TestCase
 
 from inventory.models import Currency, Product, UnitOfMeasure
-from common.models import Status
+from common.models import TradeStatus
 from people.models import Party
 from sale.models import SalesOrder, SalesOrderItem
 from warehouse.models import Stock
@@ -75,7 +75,7 @@ class SalesModelTests(TestCase):
             self.assertEqual(order.customer, value)
 
     def test_sale_uses_shared_status_model_and_allows_new_status_codes(self):
-        status = Status.objects.create(code='awaiting-approval', name='Awaiting approval')
+        status = TradeStatus.objects.create(code='awaiting-approval', name='Awaiting approval')
         order = self.order()
         order.status = status
         order.full_clean()

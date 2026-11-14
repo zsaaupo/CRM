@@ -45,13 +45,13 @@ class SharedStatusMigrationTests(TransactionTestCase):
         self.restore()
         executor = MigrationExecutor(connection)
         apps = executor.loader.project_state(executor.loader.graph.leaf_nodes()).apps
-        Status = apps.get_model('common', 'Status')
+        Status = apps.get_model('common', 'ProductStatus')
         NewProduct = apps.get_model('inventory', 'Product')
         new_status = Status.objects.get(pk=status.pk)
         for field in ['code', 'name', 'description', 'is_active', 'create_by', 'modified_by', 'created_at', 'updated_at']:
             self.assertEqual(getattr(new_status, field), getattr(status, field))
         self.assertEqual(NewProduct.objects.select_related('status').get(pk=product.pk).status.pk, status.pk)
-        moved = apps.get_model('contenttypes', 'ContentType').objects.get(app_label='common', model='status')
+        moved = apps.get_model('contenttypes', 'ContentType').objects.get(app_label='common', model='productstatus')
         self.assertEqual(moved.pk, content_type.pk)
         self.assertTrue(apps.get_model('auth', 'Group').objects.get(pk=role.pk).permissions.filter(pk=permission.pk).exists())
         self.assertTrue(apps.get_model('auth', 'User').objects.get(pk=user.pk).user_permissions.filter(pk=permission.pk).exists())

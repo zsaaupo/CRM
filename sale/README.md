@@ -11,6 +11,10 @@ Party with is_customer=True; a party with both roles is eligible. Inactive
 customers remain eligible, matching the existing purchase supplier policy.
 Soft-deleted customers remain linked to existing order history.
 
+SalesOrder.status references common.TradeStatus, a proxy subclass of
+common.ProductStatus with no added fields or table. Products use ProductStatus;
+purchase and sales orders use TradeStatus. All share existing status codes/rows.
+
 Quantities use six decimal places; prices, discounts, tax rates and calculated
 amounts use four. Discounts apply to the whole line. Units must match products.
 Totals use Decimal and ROUND_HALF_UP, matching purchase orders. Later product

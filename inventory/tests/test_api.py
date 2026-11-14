@@ -1,4 +1,4 @@
-from common.models import Status
+from common.models import ProductStatus
 from io import BytesIO
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
@@ -43,7 +43,7 @@ class InventoryAPITests(TestCase):
             (Brand, 'brand', 'brand', {'name': 'API brand', 'website': 'https://example.com'}),
             (UnitOfMeasure, 'unit', 'unit', {'code': 'API-UNIT', 'name': 'API unit'}),
             (ProductType, 'product-type', 'product_type', {'code': 'rental', 'name': 'API type'}),
-            (Status, 'status', 'status', {'code': 'review', 'name': 'API status'}),
+            (ProductStatus, 'status', 'status', {'code': 'review', 'name': 'API status'}),
             (Product, 'product', 'product', {'sku': 'API-001', 'name': 'API product', 'currency': 'BDT',
                                           'unit': self.unit.pk, 'product_type': 'goods', 'status': 'draft',
                                           'sale_price': '20.0000', 'attributes': {'color': 'blue'}}),
@@ -133,16 +133,16 @@ class InventoryAPITests(TestCase):
         brand = Brand.objects.create(name='Referenced brand')
         category = ProductCategory.objects.create(code='REF', name='Referenced category')
         product_type = ProductType.objects.create(code='physical', name='Physical')
-        product_status = Status.objects.create(code='review', name='Review')
+        product_status = ProductStatus.objects.create(code='review', name='Review')
         parent = Product.objects.create(sku='P-001', name='Parent', currency_id='BDT', unit=self.unit,
                                         brand=brand, category=category, product_type=product_type, status=product_status)
         Product.objects.create(sku='P-002', name='Variant', currency_id='BDT', unit=self.unit,
                                product_type=product_type, variant_of=parent)
         records = [(Brand, 'brand', brand), (ProductCategory, 'category', category),
                    (UnitOfMeasure, 'unit', self.unit), (ProductType, 'product-type', product_type),
-                   (Status, 'status', product_status), (Product, 'product', parent),
+                   (ProductStatus, 'status', product_status), (Product, 'product', parent),
                    (ProductType, 'product-type', ProductType.objects.get(code='goods')),
-                   (Status, 'status', Status.objects.get(code='draft'))]
+                   (ProductStatus, 'status', ProductStatus.objects.get(code='draft'))]
         for model, route, record in records:
             self.grant(model, 'delete')
             response = self.client.delete(reverse(f'inventory:{route}-detail', args=[record.pk]))
@@ -150,7 +150,7 @@ class InventoryAPITests(TestCase):
             self.assertTrue(model.objects.filter(pk=record.pk).exists())
 
     def test_product_type_and_status_codes_cannot_be_changed(self):
-        for model, route, code in [(ProductType, 'product-type', 'goods'), (Status, 'status', 'draft')]:
+        for model, route, code in [(ProductType, 'product-type', 'goods'), (ProductStatus, 'status', 'draft')]:
             self.grant(model, 'change')
             record = model.objects.get(code=code)
             response = self.client.patch(reverse(f'inventory:{route}-detail', args=[record.pk]),

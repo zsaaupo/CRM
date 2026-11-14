@@ -16,8 +16,9 @@ null. Rollback copies the linked party name back to the text field and retains
 imported Party records.
 
 Order numbers default to PO- followed by a UUID hex string, protected by a unique
-constraint. Status is a protected foreign key to common.Status, referencing its
-unique code; products use the same model. Draft, confirmed, closed and cancelled
+constraint. Status is a protected foreign key to common.TradeStatus, referencing its
+unique code. TradeStatus inherits ProductStatus as a fieldless proxy and shares
+its records; products reference ProductStatus directly. Draft, confirmed, closed and cancelled
 are seeded records, not hard-coded choices. New statuses need no schema change.
 Dates, positive exchange rates, nonnegative shipping, and valid status references
 have database constraints.

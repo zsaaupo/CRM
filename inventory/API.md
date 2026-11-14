@@ -7,10 +7,11 @@ Model views inherit `BaseListCreateAPIView`, `BaseListAPIView`,
 `BaseDetailAPIView`, and `BaseUpdateAPIView` from `common/view.py`. Shared model
 validation and audit field definitions live in `common/serializers.py`.
 
-Status is shared with purchase orders and lives in `common.models.Status`.
+Products use `common.models.ProductStatus`. Purchases and sales use its fieldless
+`TradeStatus` proxy subclass; both models share the same status records.
 Existing `/inventory/api/statuses/` routes remain available, but their permissions
-are `common.view_status`, `common.add_status`, `common.change_status`, and
-`common.delete_status`. The migration preserves existing status records and
+are `common.view_productstatus`, `common.add_productstatus`, `common.change_productstatus`, and
+`common.delete_productstatus`. The rename migration preserves existing records and
 permission grants. Referenced statuses and the default draft status cannot be
 deleted. Status codes remain immutable through the APIs.
 

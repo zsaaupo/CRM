@@ -1,7 +1,7 @@
 # Product catalog
 
-Products use separate ProductType and Status tables rather than TextChoices.
-Status is defined in `common.models` and is shared with purchase orders. Migration
+Products use ProductType and ProductStatus tables rather than TextChoices.
+ProductStatus is defined in `common.models`; its fieldless TradeStatus proxy is used by purchases and sales. Migration
 0005 preserves existing status data and moves status permission grants to the
 common app. Status API/page routes remain under inventory for compatibility.
 Both have a unique stable code, display name, description, active flag and the
@@ -50,13 +50,14 @@ forms perform model validation. Programmatic callers should validate explicitly:
 
 ```python
 from decimal import Decimal
-from inventory.models import Product, ProductType, Status, UnitOfMeasure
+from common.models import ProductStatus
+from inventory.models import Product, ProductType, UnitOfMeasure
 
 unit = UnitOfMeasure.objects.create(name='Pieces', code='PCS')
 product = Product(
     sku='ITEM-001', name='Example product', currency_id='BDT', unit=unit,
     product_type=ProductType.objects.get(code='goods'),
-    status=Status.objects.get(code='active'), sale_price=Decimal('1500.00'),
+    status=ProductStatus.objects.get(code='active'), sale_price=Decimal('1500.00'),
     create_by='operator@example.com', modified_by='operator@example.com',
 )
 product.full_clean()

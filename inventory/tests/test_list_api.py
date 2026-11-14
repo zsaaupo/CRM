@@ -1,4 +1,4 @@
-from common.models import Status
+from common.models import ProductStatus
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group, Permission
 from django.test import TestCase
@@ -15,14 +15,14 @@ class InventoryListAPITests(TestCase):
         category = ProductCategory.objects.create(name='List category', code='LIST-CATEGORY')
         brand = Brand.objects.create(name='List brand')
         product_type = ProductType.objects.create(name='List type', code='list-type')
-        status = Status.objects.create(name='List status', code='list-status')
+        status = ProductStatus.objects.create(name='List status', code='list-status')
         product = Product.objects.create(sku='LIST-PRODUCT', name='List product', currency_id='BDT',
                                          unit=unit, category=category, brand=brand,
                                          product_type=product_type, status=status,
                                          image='products_image/example.png')
         self.resources = [('product', Product, product), ('category', ProductCategory, category),
                           ('brand', Brand, brand), ('unit', UnitOfMeasure, unit),
-                          ('product-type', ProductType, product_type), ('status', Status, status)]
+                          ('product-type', ProductType, product_type), ('status', ProductStatus, status)]
         self.client = APIClient(enforce_csrf_checks=True)
         self.client.force_login(self.user)
 

@@ -1,4 +1,4 @@
-from common.models import Status
+from common.models import ProductStatus
 from decimal import Decimal
 
 from django.conf import settings
@@ -45,7 +45,7 @@ class ProductTypeSerializer(ProductLookupSerializer):
 
 class StatusSerializer(ProductLookupSerializer):
     class Meta:
-        model = Status
+        model = ProductStatus
         fields = ['id', 'code', 'name', 'description', 'is_active', *AUDIT_FIELDS[1:]]
         read_only_fields = AUDIT_FIELDS
 
@@ -67,7 +67,7 @@ class CurrencySerializer(ProductLookupSerializer):
 class ProductSerializer(CatalogSerializer):
     currency = serializers.SlugRelatedField(slug_field='code', queryset=Currency.objects.all())
     product_type = serializers.SlugRelatedField(slug_field='code', queryset=ProductType.objects.all(), required=False)
-    status = serializers.SlugRelatedField(slug_field='code', queryset=Status.objects.all(), required=False)
+    status = serializers.SlugRelatedField(slug_field='code', queryset=ProductStatus.objects.all(), required=False)
     image = serializers.ImageField(required=False, allow_null=True)
 
     class Meta:

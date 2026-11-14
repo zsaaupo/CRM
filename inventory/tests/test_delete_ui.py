@@ -1,4 +1,4 @@
-from common.models import Status
+from common.models import ProductStatus
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
 from django.test import TestCase
@@ -19,7 +19,7 @@ class InventoryDeleteUITests(TestCase):
             ('brand', Brand.objects.create(name='Delete brand')),
             ('unit', unit),
             ('product-type', ProductType.objects.create(name='Rental', code='rental')),
-            ('status', Status.objects.create(name='Review', code='review')),
+            ('status', ProductStatus.objects.create(name='Review', code='review')),
             ('currency', Currency.objects.create(name='Euro', code='EUR', exchange_rate='130')),
         ]
         self.client = APIClient(enforce_csrf_checks=True)
@@ -68,7 +68,7 @@ class InventoryDeleteUITests(TestCase):
             ('category', category), ('brand', brand), ('unit', self.product.unit),
             ('currency', Currency.objects.get(code='BDT')),
             ('product-type', ProductType.objects.get(code='goods')),
-            ('status', Status.objects.get(code='draft')), ('product', self.product),
+            ('status', ProductStatus.objects.get(code='draft')), ('product', self.product),
         ]
         token = self.client.get(reverse('account:login')).data['csrfToken']
         self.client.credentials(HTTP_X_CSRFTOKEN=token)
@@ -79,7 +79,7 @@ class InventoryDeleteUITests(TestCase):
             self.assertTrue(type(record).objects.filter(pk=record.pk).exists())
         variant.delete()
         self.product.delete()
-        for route, model, code in [('product-type', ProductType, 'goods'), ('status', Status, 'draft')]:
+        for route, model, code in [('product-type', ProductType, 'goods'), ('status', ProductStatus, 'draft')]:
             record = model.objects.get(code=code)
             self.assertEqual(self.client.delete(reverse(f'inventory:{route}-detail', args=[record.pk])).status_code, 409)
 

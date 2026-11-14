@@ -1,4 +1,4 @@
-from common.models import Status
+from common.models import ProductStatus
 from html.parser import HTMLParser
 from io import BytesIO
 from tempfile import TemporaryDirectory
@@ -40,7 +40,7 @@ class InventoryEditPageTests(TestCase):
         self.resources = [
             ('product', self.product), ('category', category), ('brand', brand), ('unit', unit),
             ('product-type', ProductType.objects.create(name='Rental', code='rental')),
-            ('status', Status.objects.create(name='Review', code='review')),
+            ('status', ProductStatus.objects.create(name='Review', code='review')),
             ('currency', Currency.objects.create(name='US dollar', code='USD', exchange_rate='120')),
         ]
         self.client = APIClient(enforce_csrf_checks=True)

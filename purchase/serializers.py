@@ -2,7 +2,7 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from rest_framework import serializers
 
-from common.models import Status
+from common.models import TradeStatus
 from common.serializers import AUDIT_FIELDS, CatalogSerializer
 from inventory.models import Currency
 from people.models import Party
@@ -16,7 +16,7 @@ class PurchaseOrderSerializer(CatalogSerializer):
     supplier_name = serializers.CharField(source='supplier.name', read_only=True, default=None)
     supplier_code = serializers.CharField(source='supplier.code', read_only=True, default=None)
     currency = serializers.SlugRelatedField(slug_field='code', queryset=Currency.objects.all())
-    status = serializers.SlugRelatedField(slug_field='code', queryset=Status.objects.all(), required=False)
+    status = serializers.SlugRelatedField(slug_field='code', queryset=TradeStatus.objects.all(), required=False)
     subtotal = serializers.DecimalField(max_digits=40, decimal_places=4, read_only=True)
     tax_total = serializers.DecimalField(max_digits=40, decimal_places=4, read_only=True)
     grand_total = serializers.DecimalField(max_digits=40, decimal_places=4, read_only=True)

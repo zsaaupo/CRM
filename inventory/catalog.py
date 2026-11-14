@@ -1,4 +1,4 @@
-from common.models import Status
+from common.models import ProductStatus
 from dataclasses import dataclass
 
 from .models import Brand, Currency, Product, ProductCategory, ProductType, UnitOfMeasure
@@ -32,7 +32,7 @@ RESOURCES = (
                     (('name', 'Name', 'text'), ('code', 'Code', 'text'), ('is_active', 'Status', 'status'))),
     CatalogResource('product-type', 'product-types', 'product type', 'product types', ProductType,
                     (('name', 'Name', 'text'), ('code', 'Code', 'text'), ('is_active', 'Status', 'status'))),
-    CatalogResource('status', 'statuses', 'status', 'statuses', Status,
+    CatalogResource('status', 'statuses', 'status', 'statuses', ProductStatus,
                     (('name', 'Name', 'text'), ('code', 'Code', 'text'), ('is_active', 'Status', 'status'))),
     CatalogResource('currency', 'currencies', 'currency', 'currencies', Currency,
                     (('name', 'Name', 'text'), ('code', 'Code', 'text'), ('symbol', 'Symbol', 'text'),

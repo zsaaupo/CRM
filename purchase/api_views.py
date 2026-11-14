@@ -5,7 +5,7 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from common.models import Status
+from common.models import TradeStatus
 from common.view import BaseAPIMixin, BaseDetailAPIView, BaseListAPIView, BaseListCreateAPIView, BaseUpdateAPIView
 from inventory.models import Currency, Product
 from people.models import Party
@@ -104,7 +104,7 @@ class PurchaseOptionsAPIView(BaseAPIMixin, APIView):
             ],
             'status': [
                 {'value': row.code, 'label': row.name}
-                for row in Status.objects.order_by('name', 'pk')
+                for row in TradeStatus.objects.order_by('name', 'pk')
             ],
             'product': [
                 {'value': row.pk, 'label': f'{row.sku} — {row.name}', 'unit': row.unit_id,

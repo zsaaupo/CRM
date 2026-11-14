@@ -1,4 +1,4 @@
-from common.models import Status
+from common.models import ProductStatus
 from decimal import Decimal
 
 from django.contrib import admin
@@ -26,7 +26,7 @@ class ProductTests(TestCase):
         category = ProductCategory.objects.create(name='Electronics', code='ELEC')
         brand = Brand.objects.create(name='Example brand')
         product = self.product(category=category, brand=brand, sale_price=Decimal('1500.1234'),
-                               attributes={'color': 'blue'}, status=Status.objects.get(code='active'))
+                               attributes={'color': 'blue'}, status=ProductStatus.objects.get(code='active'))
         product.full_clean()
         product.save()
         product.refresh_from_db()
@@ -63,7 +63,7 @@ class ProductTests(TestCase):
 
     def test_lookup_tables_allow_new_types_and_statuses_without_model_changes(self):
         product_type = ProductType.objects.create(code='rental', name='Rental')
-        status = Status.objects.create(code='awaiting-review', name='Awaiting review')
+        status = ProductStatus.objects.create(code='awaiting-review', name='Awaiting review')
         product = self.product(product_type=product_type, status=status)
         product.full_clean()
         product.save()
@@ -122,7 +122,7 @@ class ProductTests(TestCase):
         root = get_user_model().objects.create_superuser(username='root@example.com', password=None)
         request = RequestFactory().get('/admin/')
         request.user = root
-        for model, code in [(ProductType, 'goods'), (Status, 'draft')]:
+        for model, code in [(ProductType, 'goods'), (ProductStatus, 'draft')]:
             model_admin = admin.site._registry[model]
             obj = model.objects.get(code=code)
             self.assertIn('code', model_admin.get_readonly_fields(request, obj))

@@ -3,6 +3,8 @@ from copy import copy
 from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 
+from .models import TradeStatus
+
 
 AUDIT_FIELDS = ['id', 'created_at', 'updated_at', 'create_by', 'modified_by']
 
@@ -27,3 +29,15 @@ class CatalogSerializer(serializers.ModelSerializer):
             if name in attrs:
                 attrs[name] = getattr(candidate, name)
         return attrs
+
+
+class TradeStatusSerializer(CatalogSerializer):
+    def validate_code(self, value):
+        if self.instance and value != self.instance.code:
+            raise serializers.ValidationError('The code cannot be changed after creation.')
+        return value
+
+    class Meta:
+        model = TradeStatus
+        fields = ['id', 'name', 'code', 'description', 'is_active', *AUDIT_FIELDS[1:]]
+        read_only_fields = AUDIT_FIELDS

@@ -7,7 +7,7 @@ from django.db import models
 from django.db.models import F, Q
 from django.utils import timezone
 
-from common.models import Status, TimeStampedModel
+from common.models import TradeStatus, TimeStampedModel
 
 
 MONEY_PRECISION = Decimal('0.0001')
@@ -30,7 +30,7 @@ class SalesOrder(TimeStampedModel):
     exchange_rate = models.DecimalField(max_digits=20, decimal_places=8,
                                         validators=[MinValueValidator(Decimal('0.00000001'))],
                                         help_text='Snapshot: base-currency units per one order-currency unit.')
-    status = models.ForeignKey(Status, to_field='code', on_delete=models.PROTECT,
+    status = models.ForeignKey(TradeStatus, to_field='code', on_delete=models.PROTECT,
                                default='draft', related_name='sales_orders')
     customer_reference = models.CharField(max_length=100, blank=True)
     billing_address = models.TextField(blank=True)

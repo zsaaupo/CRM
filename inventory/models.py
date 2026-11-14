@@ -6,7 +6,7 @@ from django.core.validators import MaxValueValidator, MinValueValidator, RegexVa
 from django.db import models
 from django.db.models import F, Q
 from django.db.models.functions import Lower, Trim
-from common.models import Status, TimeStampedModel
+from common.models import ProductStatus, TimeStampedModel
 
 
 class ProductCategory(TimeStampedModel):
@@ -95,7 +95,7 @@ class Product(TimeStampedModel):
     name = models.CharField(max_length=255, db_index=True)
     barcode = models.CharField(max_length=64, blank=True)
     product_type = models.ForeignKey(ProductType, to_field='code', on_delete=models.PROTECT, default='goods', related_name='products')
-    status = models.ForeignKey(Status, to_field='code', on_delete=models.PROTECT, default='draft', related_name='products')
+    status = models.ForeignKey(ProductStatus, to_field='code', on_delete=models.PROTECT, default='draft', related_name='products')
     category = models.ForeignKey(ProductCategory, on_delete=models.PROTECT, null=True, blank=True, related_name='products')
     brand = models.ForeignKey(Brand, on_delete=models.PROTECT, null=True, blank=True, related_name='products')
     unit = models.ForeignKey(UnitOfMeasure, on_delete=models.PROTECT, related_name='products')

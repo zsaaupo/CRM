@@ -1,11 +1,11 @@
 from django.contrib import admin
 from django.core.exceptions import PermissionDenied
 
-from .models import Status
+from .models import ProductStatus, TradeStatus
 
 
-@admin.register(Status)
-class StatusAdmin(admin.ModelAdmin):
+@admin.register(ProductStatus, TradeStatus)
+class ProductStatusAdmin(admin.ModelAdmin):
     list_display = ['name', 'code', 'is_active']
     search_fields = ['name', 'code']
     list_filter = ['is_active']

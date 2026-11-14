@@ -1,4 +1,4 @@
-from common.models import Status
+from common.models import ProductStatus
 from io import BytesIO
 from tempfile import TemporaryDirectory
 
@@ -27,7 +27,7 @@ class InventoryUpdateAPITests(TestCase):
             ('brand', Brand.objects.create(name='Brand'), {}),
             ('unit', unit, {'code': 'PCS'}),
             ('product-type', ProductType.objects.create(name='Rental', code='rental'), {'code': 'rental'}),
-            ('status', Status.objects.create(name='Review', code='review'), {'code': 'review'}),
+            ('status', ProductStatus.objects.create(name='Review', code='review'), {'code': 'review'}),
             ('currency', Currency.objects.create(name='Dollar', code='USD', exchange_rate='120'),
              {'code': 'USD', 'exchange_rate': '120'}),
         ]

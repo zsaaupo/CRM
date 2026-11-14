@@ -9,7 +9,7 @@ from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
 
-from common.models import Status
+from common.models import TradeStatus
 from inventory.models import Currency, Product, UnitOfMeasure
 from people.models import Party
 from purchase.models import PurchaseOrder, PurchaseOrderItem
@@ -96,7 +96,7 @@ class PurchaseAPITests(TestCase):
             response = self.client.post(url, self.order_payload(supplier=supplier), format='json')
             self.assertEqual(response.status_code, 201, response.data)
             self.assertEqual(response.data['purchase_order']['supplier'], supplier)
-        status = Status.objects.create(code='review-required', name='Review required')
+        status = TradeStatus.objects.create(code='review-required', name='Review required')
         response = self.client.patch(reverse('purchase:purchase-order-update', args=[self.order.pk]),
                                      {'status': status.code}, format='json')
         self.assertEqual(response.status_code, 200, response.data)
