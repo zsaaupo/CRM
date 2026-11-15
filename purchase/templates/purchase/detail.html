@@ -14,6 +14,8 @@
             <dl class="profile-grid">
                 {% include 'includes/detail_field.html' with name='order_number' label='Order number' only %}
                 {% include 'includes/detail_field.html' with name='status_name' label='Status' only %}
+                {% include 'includes/detail_field.html' with name='is_received' label='Received (read-only)' kind='boolean' only %}
+                {% include 'includes/detail_field.html' with name='warehouse_name' label='Receiving warehouse' only %}
                 {% include 'includes/detail_field.html' with name='supplier_name' label='Supplier' only %}
                 {% include 'includes/detail_field.html' with name='supplier_code' label='Supplier code' only %}
                 {% include 'includes/detail_field.html' with name='supplier_reference' label='Supplier reference' only %}

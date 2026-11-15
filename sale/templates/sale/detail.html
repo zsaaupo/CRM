@@ -5,13 +5,15 @@
 <div class="workspace-content" data-record-detail data-api-url="{{ detail_api_url }}" data-title-field="order_number" data-login-url="{% url 'account_pages:login' %}">
     <div class="page-heading">
         <div class="min-w-0 max-w-full"><p class="page-eyebrow">Sales</p><h1 class="page-title break-all"><span data-record-title>Sales details</span><span class="text-emerald-600">.</span></h1><p class="page-description">Order information, products and totals.</p></div>
-        <div class="flex gap-3"><a href="{{ list_url }}" class="secondary-button">Back to sales <span aria-hidden="true">&rarr;</span></a>{% if edit_url %}<a href="{{ edit_url }}" class="primary-button compact-primary">Edit sale</a>{% endif %}</div>
+        <div class="flex gap-3"><a href="{{ list_url }}" class="secondary-button">Back to sales <span aria-hidden="true">&rarr;</span></a>{% if edit_url %}<a href="{{ edit_url }}" class="primary-button compact-primary" data-sale-edit hidden>Edit sale</a>{% endif %}</div>
     </div>
     {% include 'includes/detail_status.html' %}
     <div data-record-content hidden>
         <section class="user-form-card mb-6" aria-labelledby="sale-information-heading">
             <h2 id="sale-information-heading" class="section-title mb-6">Sales information</h2>
             <dl class="profile-grid">
+                {% include 'includes/detail_field.html' with name='is_completed' label='Completed' only %}
+                {% include 'includes/detail_field.html' with name='fulfilled_at' label='Completed at' kind='datetime' only %}
                 {% include 'includes/detail_field.html' with name='order_number' label='Order number' only %}
                 {% include 'includes/detail_field.html' with name='status_name' label='Status' only %}
                 {% include 'includes/detail_field.html' with name='customer_name' label='Customer' only %}

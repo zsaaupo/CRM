@@ -23,6 +23,9 @@ class PurchaseOrder(TimeStampedModel):
                                  related_name='purchase_orders')
     order_date = models.DateField(default=timezone.localdate)
     expected_date = models.DateField(null=True, blank=True)
+    warehouse = models.ForeignKey('warehouse.WareHouse', on_delete=models.PROTECT, null=True, blank=True,
+                                  related_name='purchase_orders')
+    is_received = models.BooleanField(default=False, editable=False)
     currency = models.ForeignKey('inventory.Currency', to_field='code', on_delete=models.PROTECT,
                                  related_name='purchase_orders')
     exchange_rate = models.DecimalField(max_digits=20, decimal_places=8,

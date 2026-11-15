@@ -49,8 +49,9 @@ JSON, form-encoded, and multipart requests are accepted, matching inventory APIs
 
 ## Web pages
 
-The sidebar includes a Warehouses section for users with view permission. It
-links to the list and, when add permission is granted, Add warehouse.
+The sidebar includes a Warehouses section for users with warehouse or stock view
+permission. Warehouse links require warehouse view permission; Stock list requires
+stock view permission. Add warehouse is shown when its add permission is granted.
 
 | URL | Page | Required permissions |
 | --- | --- | --- |
@@ -100,3 +101,35 @@ warehouse/product pairs return 400; this endpoint creates a balance and does not
 increment or overwrite an existing balance. Writes require session cookies and
 CSRF. Only POST/OPTIONS are supported by the creation endpoint. Options are
 read-only (GET/HEAD/OPTIONS). All responses are marked no-store.
+
+## Stock list and details
+
+Stock navigation, pages and read APIs require `warehouse.view_stock` (direct or
+through a role). Warehouse/product management permissions are not required to
+read stock labels and quantities. Anonymous page requests redirect to login;
+unauthorized API/page requests return 403.
+
+| URL | Methods | Purpose |
+| --- | --- | --- |
+| `/warehouse/api/stocks/list/` | GET, HEAD, OPTIONS | Read stock balances |
+| `/warehouse/api/stocks/<id>/` | GET, HEAD, OPTIONS | Read one stock record |
+| `/warehouse/stocks/` | GET | Stock list page |
+| `/warehouse/stocks/<id>/` | GET | Stock details page |
+
+The list reuses the current table design, search and 20-row pagination. It shows
+warehouse, product SKU/name, quantity and unit. Each row has only the eye icon
+linking to its stock detail page, including for superusers. No add, edit, delete,
+receive or stock-operation actions are shown on this list. Details reuse the
+shared record-detail loader, loading/error/retry UI, audit section and dashboard
+layout, with a link back to Stock list.
+
+List responses use count/next/previous/results, ordered by warehouse name,
+product name and ID. Search `?q=term` matches warehouse name/code and product
+name/SKU. Optional `?warehouse=<id>` and `?product=<id>` filters accept positive
+IDs; invalid filters return 400. Missing detail records return 404. Read APIs
+reject POST/PUT/PATCH/DELETE with 405 and never cache responses.
+
+Read records include the stock ID, warehouse/product IDs, warehouse name/code,
+product name/SKU, six-decimal quantity, unit name/code and audit fields. Related
+labels are loaded in the stock query. Purchase receipts update the existing
+Stock balance, so the next list/detail request shows the new quantity.

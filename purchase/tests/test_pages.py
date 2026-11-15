@@ -86,7 +86,7 @@ class PurchasePageTests(TestCase):
         self.assertContains(response, 'data-purchase-submit disabled')
         self.assertContains(response, 'data-purchase-add-line disabled')
         self.assertContains(response, 'data-line-unit-label readonly')
-        for name in ['supplier', 'order_date', 'expected_date', 'currency', 'exchange_rate', 'status', 'shipping_cost', 'notes']:
+        for name in ['supplier', 'warehouse', 'order_date', 'expected_date', 'currency', 'exchange_rate', 'status', 'shipping_cost', 'notes']:
             self.assertContains(response, f'name="{name}"')
         for name in ['product', 'unit', 'quantity', 'unit_price', 'discount_amount', 'tax_rate', 'description']:
             self.assertContains(response, f'data-line-field="{name}"')

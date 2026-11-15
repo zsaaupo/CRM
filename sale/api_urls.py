@@ -3,13 +3,14 @@ from django.urls import path
 from .api_views import (
     SalesOrderDetailAPIView, SalesOrderItemDetailAPIView, SalesOrderItemListAPIView,
     SalesOrderItemListCreateAPIView, SalesOrderItemUpdateAPIView, SalesOrderListAPIView,
-    SalesEditOptionsAPIView, SalesOptionsAPIView, SalesOrderListCreateAPIView, SalesOrderUpdateAPIView,
+    SalesEditOptionsAPIView, SalesOptionsAPIView, SalesOrderListCreateAPIView, SalesOrderUpdateAPIView, SaleCompleteAPIView,
 )
 
 
 app_name = 'sale'
 
 urlpatterns = [
+    path('sales-orders/complete/', SaleCompleteAPIView.as_view(), name='sales-order-complete'),
     path('sales-orders/edit-options/', SalesEditOptionsAPIView.as_view(), name='sales-edit-options'),
     path('sales-orders/options/', SalesOptionsAPIView.as_view(), name='sale-options'),
     path('sales-orders/', SalesOrderListCreateAPIView.as_view(), name='sales-order-list'),

@@ -1,14 +1,16 @@
-import { getJSON, postJSON } from "../../js/api.js";
+import { getJSON, postJSON, patchJSON } from "../../js/api.js";
 
-const headerFields = ["supplier", "supplier_reference", "order_date", "expected_date", "currency", "exchange_rate", "status", "shipping_cost", "notes"];
+const headerFields = ["supplier", "warehouse", "supplier_reference", "order_date", "expected_date", "currency", "exchange_rate", "status", "shipping_cost", "notes"];
 const lineFields = ["product", "unit", "quantity", "unit_price", "discount_amount", "tax_rate", "description"];
 
 export function purchasePayload(form) {
     const payload = Object.fromEntries(headerFields.map((name) => [name, form.elements.namedItem(name).value]));
     payload.expected_date ||= null;
     payload.supplier ||= null;
+    payload.warehouse ||= null;
     payload.items = [...form.querySelectorAll("[data-purchase-line]")].map((row, index) => ({
         line_number: index + 1,
+        ...(row.dataset.itemId ? {id: Number(row.dataset.itemId)} : {}),
         ...Object.fromEntries(lineFields.map((name) => [name, row.querySelector(`[data-line-field="${name}"]`).value])),
     }));
     return payload;
@@ -31,6 +33,10 @@ export function initializePurchaseForm(form) {
     const spinner = form.querySelector("[data-submit-spinner]");
     const label = form.querySelector("[data-submit-label]");
     const field = (name) => form.elements.namedItem(name);
+    const isEdit = form.dataset.method === "PATCH";
+    const saveLabel = label.textContent;
+    let originalSupplier = null;
+    let readOnly = false;
     let options = null;
     let ready = false;
     let loading = false;
@@ -68,7 +74,7 @@ export function initializePurchaseForm(form) {
         });
     }
 
-    function addLine(focus = false) {
+    function addLine(focus = false, item = null) {
         if (!ready || busy) return;
         const row = document.getElementById("purchase-line-template").content.firstElementChild.cloneNode(true);
         const prefix = `purchase-item-${++lineId}`;
@@ -93,6 +99,11 @@ export function initializePurchaseForm(form) {
             updateLineNumbers();
             addButton.focus();
         });
+        if (item) {
+            row.dataset.itemId = String(item.id);
+            for (const name of lineFields) row.querySelector(`[data-line-field="${name}"]`).value = item[name] ?? "";
+            row.querySelector('[data-line-unit-label]').value = item.unit_code || item.unit_name || "";
+        }
         lines.append(row);
         updateLineNumbers();
         if (focus) product.focus();
@@ -105,16 +116,40 @@ export function initializePurchaseForm(form) {
         field("exchange_rate").readOnly = base;
     }
 
+    async function loadItems() {
+        const items = [];
+        if (!isEdit) return items;
+        const url = new URL(form.dataset.itemsUrl, window.location.origin);
+        let page = 1;
+        while (true) {
+            url.searchParams.set("page", String(page++));
+            const data = await getJSON(url.href);
+            if (!Array.isArray(data.results)) throw new Error("Could not load purchase items. Please try again.");
+            items.push(...data.results);
+            if (!data.next) return items;
+        }
+    }
+
     async function load() {
         if (loading || busy) return;
         loading = true;
         ready = false;
+        readOnly = false;
         header.disabled = submit.disabled = addButton.disabled = true;
         retry.hidden = true;
         form.setAttribute("aria-busy", "true");
         message("Loading purchase choices...", "info");
         try {
-            const data = await getJSON(form.dataset.optionsUrl);
+            const [data, record, items] = await Promise.all([
+                getJSON(form.dataset.optionsUrl),
+                isEdit ? getJSON(form.dataset.detailUrl) : null,
+                loadItems(),
+            ]);
+            if (isEdit && !record?.id) throw new Error("Could not load this purchase. Return to the purchase list.");
+            if (record?.is_received === true) {
+                readOnly = true;
+                throw new Error("This purchase has been received and is read-only. Return to the purchase list.");
+            }
             for (const name of ["currency", "status", "product"]) {
                 if (!Array.isArray(data[name])) throw new Error("Could not load purchase choices. Please try again.");
                 if (!data[name].length) throw new Error(`No ${name} records are available. Add the missing records or contact your administrator, then try again.`);
@@ -122,19 +157,40 @@ export function initializePurchaseForm(form) {
             options = data;
             if (!Array.isArray(options.supplier)) throw new Error('Could not load suppliers. Please try again.');
             choices(field("supplier"), options.supplier, "No supplier");
+            if (!Array.isArray(options.warehouse)) throw new Error('Could not load warehouses. Please try again.');
+            choices(field("warehouse"), options.warehouse, "Choose a warehouse before receiving");
             choices(field("currency"), options.currency, "Select currency");
             choices(field("status"), options.status, "Select status");
             field("currency").value = options.currency.some((row) => row.value === options.base_currency) ? options.base_currency : "";
             field("status").value = options.status.some((row) => row.value === "draft") ? "draft" : "";
             updateCurrency();
+            if (record) {
+                originalSupplier = record.supplier;
+                for (const [name, records, text] of [["supplier", options.supplier, record.supplier_name],
+                                                    ["warehouse", options.warehouse, record.warehouse_name]]) {
+                    if (record[name] && !records.some((row) => String(row.value) === String(record[name]))) {
+                        const historical = document.createElement("option");
+                        historical.value = String(record[name]);
+                        historical.textContent = `${text || name} (existing selection)`;
+                        field(name).append(historical);
+                    }
+                }
+                for (const name of headerFields) field(name).value = record[name] ?? "";
+                field("exchange_rate").readOnly = record.currency === options.base_currency;
+            }
+            field("expected_date").min = field("order_date").value;
             ready = true;
+            if (isEdit) {
+                lines.replaceChildren();
+                for (const item of items) addLine(false, item);
+            }
             if (!lines.children.length) addLine();
             header.disabled = submit.disabled = addButton.disabled = false;
             status.hidden = true;
         } catch (error) {
             message(error.status === 403 ? "Your session or permissions have changed. Refresh this page and try again."
                 : error.message || "Could not load purchase choices. Please try again.");
-            retry.hidden = false;
+            retry.hidden = readOnly;
         } finally {
             loading = false;
             form.setAttribute("aria-busy", "false");
@@ -184,28 +240,37 @@ export function initializePurchaseForm(form) {
             return;
         }
         const payload = purchasePayload(form);
+        if (isEdit && String(payload.supplier ?? "") === String(originalSupplier ?? "")) delete payload.supplier;
         busy = true;
         header.disabled = submit.disabled = addButton.disabled = true;
         for (const row of lines.children) row.disabled = true;
         form.setAttribute("aria-busy", "true");
-        label.textContent = "Creating purchase...";
+        label.textContent = isEdit ? "Saving changes..." : "Creating purchase...";
         spinner.hidden = false;
         try {
-            await postJSON(form.action, payload, field("csrfmiddlewaretoken").value);
+            if (isEdit) await patchJSON(form.action, payload, field("csrfmiddlewaretoken").value);
+            else await postJSON(form.action, payload, field("csrfmiddlewaretoken").value);
             window.location.assign(form.dataset.successUrl);
         } catch (error) {
+            if (isEdit && error.status === 409) {
+                try { readOnly = (await getJSON(form.dataset.detailUrl)).is_received === true; }
+                catch { /* Keep the original API error if the session has changed. */ }
+                if (readOnly) ready = false;
+            }
             showErrors(error.errors);
-            message(error.status === 403 ? "Your session or permissions have changed. Refresh this page and try again."
+            message(readOnly ? "This purchase has been received and is read-only. Return to the purchase list."
+                : error.status === 403 ? "Your session or permissions have changed. Refresh this page and try again."
+                : error.status === 404 ? "This purchase could not be found. Return to the purchase list."
                 : error.status === 400 ? `Please check the purchase details. ${errorText(error.errors)}`
                 : error.message || "Could not save the purchase. Please try again.");
             status.focus();
         } finally {
             busy = false;
-            header.disabled = submit.disabled = addButton.disabled = false;
-            for (const row of lines.children) row.disabled = false;
+            header.disabled = submit.disabled = addButton.disabled = readOnly;
+            for (const row of lines.children) row.disabled = readOnly;
             updateLineNumbers();
             form.setAttribute("aria-busy", "false");
-            label.textContent = "Create purchase";
+            label.textContent = saveLabel;
             spinner.hidden = true;
         }
     });

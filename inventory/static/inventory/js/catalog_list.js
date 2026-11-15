@@ -1,4 +1,4 @@
-import { getJSON, deleteJSON } from "../../js/api.js";
+import { getJSON, deleteJSON, postJSON } from "../../js/api.js";
 
 function actionIcon(pathData) {
     const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -11,7 +11,7 @@ function actionIcon(pathData) {
     return svg;
 }
 
-export function catalogRow(record, columns, editUrlTemplate = "", onDelete = null, stockUrlTemplate = "", viewUrlTemplate = "") {
+export function catalogRow(record, columns, editUrlTemplate = "", onDelete = null, stockUrlTemplate = "", viewUrlTemplate = "", editDisabledField = "", onReceive = null, onComplete = null, deleteDisabledField = "") {
     const row = document.createElement("tr");
     for (const column of columns) {
         const cell = document.createElement("td");
@@ -38,22 +38,59 @@ export function catalogRow(record, columns, editUrlTemplate = "", onDelete = nul
                 actions.append(stock);
             }
             if (editUrlTemplate) {
-                const link = document.createElement("a");
-                link.href = editUrlTemplate.replace("/0/", `/${encodeURIComponent(record.id)}/`);
+                const disabled = Boolean(editDisabledField && record[editDisabledField] === true);
+                const link = document.createElement(disabled ? "button" : "a");
+                if (disabled) {
+                    link.type = "button";
+                    link.disabled = true;
+                } else link.href = editUrlTemplate.replace("/0/", `/${encodeURIComponent(record.id)}/`);
+                link.dataset.catalogEditAction = "";
                 link.className = "icon-button";
-                link.setAttribute("aria-label", `Edit ${record.name || record.code}`);
-                link.title = `Edit ${record.name || record.code}`;
+                link.setAttribute("aria-label", `Edit ${record.name || record.order_number || record.code || record.id}`);
+                link.title = `Edit ${record.name || record.order_number || record.code || record.id}`;
                 link.append(actionIcon("m16 3 5 5-12 12-6 1 1-6L16 3ZM13 6l5 5"));
                 actions.append(link);
+            }
+            if (onReceive) {
+                const receive = document.createElement("button");
+                receive.type = "button";
+                receive.className = "icon-button inventory-receive-button";
+                receive.dataset.catalogReceiveAction = "";
+                receive.disabled = record.is_received !== false;
+                receive.title = `${record.is_received === true ? "Received" : "Receive"} ${record.order_number || record.id}`;
+                receive.setAttribute("aria-label", receive.title);
+                receive.append(actionIcon("M4 12H3v8h18v-8h-1M3 12h5l2 3h4l2-3h5M6 7l-3 5M18 7l3 5M12 3v8m-3-3 3 3 3-3"));
+                receive.addEventListener("click", () => {
+                    if (!receive.disabled) return onReceive(record, receive);
+                });
+                actions.append(receive);
+            }
+            if (onComplete) {
+                const complete = document.createElement("button");
+                complete.type = "button";
+                complete.className = "icon-button inventory-receive-button";
+                complete.dataset.catalogCompleteAction = "";
+                complete.disabled = record.is_completed !== false;
+                complete.title = `${record.is_completed === true ? "Completed" : "Complete sale"} ${record.order_number || record.id}`;
+                complete.setAttribute("aria-label", complete.title);
+                complete.append(actionIcon("M4 4h16v16H4V4Zm4 8 3 3 5-6"));
+                complete.addEventListener("click", () => {
+                    if (!complete.disabled) return onComplete(record, complete);
+                });
+                actions.append(complete);
             }
             if (onDelete) {
                 const remove = document.createElement("button");
                 remove.type = "button";
                 remove.className = "icon-button inventory-delete-button";
-                remove.title = `Delete ${record.name || record.code}`;
+                remove.dataset.catalogDeleteAction = "";
+                remove.disabled = Boolean(deleteDisabledField && record[deleteDisabledField] === true);
+                remove.title = `Delete ${record.name || record.order_number || record.code || record.id}`;
                 remove.setAttribute("aria-label", remove.title);
                 remove.append(actionIcon("M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"));
-                remove.addEventListener("click", () => onDelete(record, remove));
+                remove.addEventListener("click", () => {
+                    if (!remove.disabled) return onDelete(record, remove);
+                });
                 actions.append(remove);
             }
             cell.append(actions);
@@ -84,6 +121,8 @@ export function catalogRow(record, columns, editUrlTemplate = "", onDelete = nul
             badge.textContent = typeof value === "boolean" ? (value ? "Active" : "Inactive")
                 : String(value || "Not set").replaceAll("-", " ").replaceAll("_", " ");
             cell.append(badge);
+        } else if (column.type === "boolean") {
+            cell.textContent = value === true ? "Yes" : value === false ? "No" : "\u2014";
         } else {
             cell.textContent = column.type === "price" ? `${record.currency || ""} ${value ?? "0"}`.trim()
                 : value === null || value === undefined || value === "" ? "\u2014" : String(value);
@@ -105,11 +144,108 @@ if (panel) {
     let visibleCount = 0;
     const deleteDialog = find("delete-dialog");
     const deleteForm = find("delete-form");
+    const receiveForm = find("receive-form");
+    const receiving = new Set();
+    const completeForm = find("complete-form");
+    const completing = new Set();
     let pendingDelete = null;
+
+    function renderRecord(record) {
+        const row = catalogRow(record, columns, panel.dataset.editUrlTemplate,
+            deleteDialog && panel.dataset.deleteUrlTemplate ? openDelete : null,
+            panel.dataset.stockUrlTemplate, panel.dataset.viewUrlTemplate, panel.dataset.editDisabledField,
+            receiveForm && panel.dataset.receiveUrl ? receivePurchase : null,
+            completeForm && panel.dataset.completeUrl ? completeSale : null, panel.dataset.deleteDisabledField);
+        const button = row.querySelector("[data-catalog-receive-action]");
+        if (button && receiving.has(String(record.id))) button.disabled = true;
+        const completeButton = row.querySelector("[data-catalog-complete-action]");
+        if (completeButton && completing.has(String(record.id))) completeButton.disabled = true;
+        return row;
+    }
+
+    async function completeSale(record, trigger) {
+        const id = String(record.id);
+        if (record.is_completed !== false || completing.has(id)) return;
+        completing.add(id);
+        trigger.disabled = true;
+        trigger.setAttribute("aria-busy", "true");
+        const feedback = find("feedback");
+        feedback.hidden = true;
+        try {
+            const result = await postJSON(panel.dataset.completeUrl, { sale_id: record.id, is_completed: true },
+                completeForm.elements.namedItem("csrfmiddlewaretoken").value);
+            if (String(result?.sales_order?.id) !== id || result.sales_order.is_completed !== true) {
+                throw new Error("Could not confirm completion. Refresh the list before trying again.");
+            }
+            Object.assign(record, result.sales_order);
+            const row = trigger.closest("tr");
+            if (row?.isConnected) row.replaceWith(renderRecord(record));
+            else await load(page);
+            feedback.dataset.tone = "success";
+            feedback.textContent = result.message || "Sale completed and stock updated.";
+        } catch (error) {
+            feedback.dataset.tone = "error";
+            feedback.textContent = error.status === 403
+                ? "Your session or permissions have changed. Refresh this page and try again."
+                : error.status === 404 ? "This sale no longer exists. Refresh the list."
+                : error.errors && Object.keys(error.errors).length
+                    ? Object.entries(error.errors).map(([name, value]) => `${name}: ${Array.isArray(value) ? value.join(" ") : value}`).join(" ")
+                    : error.message || "Could not complete this sale. Please try again.";
+        } finally {
+            completing.delete(id);
+            trigger.removeAttribute("aria-busy");
+            if (record.is_completed !== true) {
+                trigger.disabled = false;
+                if (!trigger.isConnected) await load(page);
+            }
+            feedback.hidden = false;
+            feedback.focus();
+        }
+    }
+
+    async function receivePurchase(record, trigger) {
+        const id = String(record.id);
+        if (record.is_received !== false || receiving.has(id)) return;
+        receiving.add(id);
+        trigger.disabled = true;
+        trigger.setAttribute("aria-busy", "true");
+        const feedback = find("feedback");
+        feedback.hidden = true;
+        try {
+            const result = await postJSON(panel.dataset.receiveUrl, { purchase_id: record.id, is_received: true },
+                receiveForm.elements.namedItem("csrfmiddlewaretoken").value);
+            if (String(result?.purchase_order?.id) !== id || result.purchase_order.is_received !== true) {
+                throw new Error("Could not confirm receipt. Refresh the list before trying again.");
+            }
+            Object.assign(record, result.purchase_order);
+            const row = trigger.closest("tr");
+            if (row?.isConnected) row.replaceWith(renderRecord(record));
+            else await load(page);
+            feedback.dataset.tone = "success";
+            feedback.textContent = result.message || "Purchase received and stock updated.";
+        } catch (error) {
+            feedback.dataset.tone = "error";
+            feedback.textContent = error.status === 403
+                ? "Your session or permissions have changed. Refresh this page and try again."
+                : error.status === 404 ? "This purchase no longer exists. Refresh the list."
+                : error.errors && Object.keys(error.errors).length
+                    ? Object.entries(error.errors).map(([name, value]) => `${name}: ${Array.isArray(value) ? value.join(" ") : value}`).join(" ")
+                    : error.message || "Could not receive this purchase. Please try again.";
+        } finally {
+            receiving.delete(id);
+            trigger.removeAttribute("aria-busy");
+            if (record.is_received !== true) {
+                trigger.disabled = false;
+                if (!trigger.isConnected) await load(page);
+            }
+            feedback.hidden = false;
+            feedback.focus();
+        }
+    }
 
     function openDelete(record, trigger) {
         pendingDelete = {record, trigger};
-        find("delete-name").textContent = record.name || record.code;
+        find("delete-name").textContent = record.name || record.order_number || record.code || record.id;
         find("delete-error").hidden = true;
         deleteDialog.showModal();
         find("delete-cancel").focus();
@@ -133,7 +269,7 @@ if (panel) {
             if (current !== version) return;
             if (!Array.isArray(data.results)) throw new Error("Could not load records. Please try again.");
             visibleCount = data.results.length;
-            find("rows").replaceChildren(...data.results.map((record) => catalogRow(record, columns, panel.dataset.editUrlTemplate, deleteDialog && panel.dataset.deleteUrlTemplate ? openDelete : null, panel.dataset.stockUrlTemplate, panel.dataset.viewUrlTemplate)));
+            find("rows").replaceChildren(...data.results.map(renderRecord));
             find("count").textContent = String(data.count);
             find("count").hidden = false;
             find("table").hidden = data.results.length === 0;
@@ -204,7 +340,7 @@ if (panel) {
                 await deleteJSON(url, csrf);
                 deleteDialog.close();
                 find("feedback").dataset.tone = "success";
-                find("feedback").textContent = `${record.name || record.code} deleted.`;
+                find("feedback").textContent = `${record.name || record.order_number || record.code || record.id} deleted.`;
                 find("feedback").hidden = false;
                 await load(nextPage);
                 find("feedback").focus();

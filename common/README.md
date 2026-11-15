@@ -4,11 +4,10 @@
 description, is_active and the inherited TimeStampedModel audit fields. Product
 references ProductStatus using the unique code.
 
-`TradeStatus(ProductStatus)` is a Django proxy model. It adds no fields or table;
-purchase and sales order status foreign keys reference this class using code.
-TradeStatus and ProductStatus expose the same rows, so creating or editing a
-status through either model changes the shared record. This is inheritance
-without separate product/trade status datasets.
+`TradeStatus(TimeStampedModel)` has its own table, with code, name, description,
+is_active and audit fields. Purchase and sales order status foreign keys reference
+its unique code. Product and trade statuses are independent: the same code can
+exist in both tables, and edits/deletes in one do not change the other.
 
 Both are registered in Django admin as Product statuses and Trade statuses.
 Their codes remain immutable through the existing status API/admin, and draft
@@ -24,6 +23,14 @@ common.*_tradestatus for the proxy admin. Duplicate content types/permissions
 are merged without dropping group/user grants. Rollback merges trade grants
 back into the old Status permissions before removing proxy metadata.
 
+Migration 0003 replaces the former TradeStatus proxy with an independent table.
+It copies existing statuses, preserving IDs and audit timestamps, then repoints
+the physical purchase/sales foreign keys. Existing content types, permission
+grants and admin logs remain intact. All existing codes are initially copied for
+compatibility; future product and trade changes are separate. Rollback copies
+trade-only codes back to ProductStatus to preserve order references, keeping the
+existing product labels where the datasets have diverged.
+
 ## Trade status settings
 
 Settings → Trade status setting opens `/settings/trade-statuses/`. The list,
@@ -38,6 +45,6 @@ and `trade_status`; updates return the record directly. Session authentication,
 CSRF and common.view/add/change/delete_tradestatus permissions match the shared
 API structure. Pages additionally require view permission to reach their list.
 
-The default draft and statuses referenced by products or orders cannot be
-deleted (409). ProductStatus and TradeStatus still share records, so settings
-edits are visible through either model. No new schema migration is required.
+The default draft and trade statuses referenced by purchase or sales orders
+cannot be deleted (409). Product references protect ProductStatus records only.
+Settings edits apply exclusively to TradeStatus.

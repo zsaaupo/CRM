@@ -7,8 +7,8 @@ Model views inherit `BaseListCreateAPIView`, `BaseListAPIView`,
 `BaseDetailAPIView`, and `BaseUpdateAPIView` from `common/view.py`. Shared model
 validation and audit field definitions live in `common/serializers.py`.
 
-Products use `common.models.ProductStatus`. Purchases and sales use its fieldless
-`TradeStatus` proxy subclass; both models share the same status records.
+Products use `common.models.ProductStatus`. Purchases and sales use the independent
+`common.models.TradeStatus` table. Product and trade statuses have separate records.
 Existing `/inventory/api/statuses/` routes remain available, but their permissions
 are `common.view_productstatus`, `common.add_productstatus`, `common.change_productstatus`, and
 `common.delete_productstatus`. The rename migration preserves existing records and

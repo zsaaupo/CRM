@@ -40,6 +40,7 @@ class SalesOrder(TimeStampedModel):
     notes = models.TextField(blank=True)
     confirmed_at = models.DateTimeField(null=True, blank=True, editable=False)
     fulfilled_at = models.DateTimeField(null=True, blank=True, editable=False)
+    is_completed = models.BooleanField(default=False, editable=False)
 
     class Meta:
         ordering = ['-order_date', '-pk']

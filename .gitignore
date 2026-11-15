@@ -19,3 +19,6 @@ staticfiles/
 
 # User-uploaded files
 media/
+
+# Local rollback snapshots
+rollback_backups/

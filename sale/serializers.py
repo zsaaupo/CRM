@@ -4,11 +4,12 @@ from django.utils import timezone
 from rest_framework import serializers
 from rest_framework.exceptions import NotFound
 
+from common.models import TradeStatus
 from common.serializers import AUDIT_FIELDS, CatalogSerializer
 from inventory.models import Currency
 from people.models import Party
 from .models import SalesOrder, SalesOrderItem
-from .services import lock_draft_order, require_item_permission
+from .services import lock_order, require_item_permission
 
 
 class SalesOrderSerializer(CatalogSerializer):
@@ -19,7 +20,7 @@ class SalesOrderSerializer(CatalogSerializer):
     customer_name = serializers.CharField(source='customer.name', read_only=True, default=None)
     customer_code = serializers.CharField(source='customer.code', read_only=True, default=None)
     currency = serializers.SlugRelatedField(slug_field='code', queryset=Currency.objects.all())
-    status = serializers.SlugRelatedField(slug_field='code', read_only=True)
+    status = serializers.SlugRelatedField(slug_field='code', queryset=TradeStatus.objects.all(), required=False)
     subtotal = serializers.DecimalField(max_digits=40, decimal_places=4, read_only=True)
     tax_total = serializers.DecimalField(max_digits=40, decimal_places=4, read_only=True)
     grand_total = serializers.DecimalField(max_digits=40, decimal_places=4, read_only=True)
@@ -29,15 +30,15 @@ class SalesOrderSerializer(CatalogSerializer):
         fields = [
             'id', 'order_number', 'customer', 'customer_name', 'customer_code', 'order_date', 'expected_delivery_date', 'currency',
             'exchange_rate', 'status', 'warehouse', 'warehouse_name', 'customer_reference',
-            'billing_address', 'shipping_address', 'shipping_cost', 'notes', 'confirmed_at', 'fulfilled_at',
+            'billing_address', 'shipping_address', 'shipping_cost', 'notes', 'confirmed_at', 'fulfilled_at', 'is_completed',
             'subtotal', 'tax_total', 'grand_total', *AUDIT_FIELDS[1:],
         ]
-        read_only_fields = [*AUDIT_FIELDS, 'order_number', 'status', 'confirmed_at', 'fulfilled_at',
+        read_only_fields = [*AUDIT_FIELDS, 'order_number', 'confirmed_at', 'fulfilled_at', 'is_completed',
                             'subtotal', 'tax_total', 'grand_total']
 
     @transaction.atomic
     def update(self, instance, validated_data):
-        current = lock_draft_order(instance.pk)
+        current = lock_order(instance.pk)
         self.instance = current
         return super().update(current, self.validate(validated_data))
 
@@ -67,12 +68,12 @@ class SalesOrderItemSerializer(CatalogSerializer):
 
     @transaction.atomic
     def create(self, validated_data):
-        lock_draft_order(validated_data['sales_order'].pk)
+        lock_order(validated_data['sales_order'].pk)
         return super().create(validated_data)
 
     @transaction.atomic
     def update(self, instance, validated_data):
-        lock_draft_order(instance.sales_order_id)
+        lock_order(instance.sales_order_id)
         try:
             current = SalesOrderItem.objects.get(pk=instance.pk)
         except SalesOrderItem.DoesNotExist as exc:
@@ -91,6 +92,16 @@ class SalesOrderDetailSerializer(SalesOrderSerializer):
 
 class SalesOrderItemFilterSerializer(serializers.Serializer):
     sales_order = serializers.IntegerField(min_value=1, required=False)
+
+
+class SaleCompleteSerializer(serializers.Serializer):
+    sale_id = serializers.IntegerField(min_value=1, max_value=9223372036854775807)
+    is_completed = serializers.BooleanField(required=True)
+
+    def validate_is_completed(self, value):
+        if value is not True:
+            raise serializers.ValidationError('This field must be true to complete the sale.')
+        return value
 
 
 class SalesOrderLineSerializer(serializers.ModelSerializer):
@@ -161,7 +172,7 @@ class SalesOrderCreateSerializer(SalesOrderSerializer):
 
     @transaction.atomic
     def update(self, instance, validated_data):
-        order = lock_draft_order(instance.pk)
+        order = lock_order(instance.pk)
         items = validated_data.pop('items', None)
         self.instance = order
         if items is not None:

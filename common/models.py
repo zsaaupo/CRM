@@ -11,25 +11,27 @@ class TimeStampedModel(models.Model):
         abstract = True
 
 
-class ProductStatus(TimeStampedModel):
+class Status(TimeStampedModel):
     code = models.SlugField(max_length=32, unique=True)
     name = models.CharField(max_length=100)
     description = models.TextField(blank=True)
     is_active = models.BooleanField(default=True)
 
     class Meta:
+        abstract = True
         ordering = ['name', 'pk']
-        verbose_name = 'product status'
-        verbose_name_plural = 'product statuses'
 
     def __str__(self):
         return self.name
 
 
-class TradeStatus(ProductStatus):
-    """The same status records exposed for purchase and sales transactions."""
+class ProductStatus(Status):
+    class Meta(Status.Meta):
+        verbose_name = 'product status'
+        verbose_name_plural = 'product statuses'
 
-    class Meta:
-        proxy = True
+
+class TradeStatus(Status):
+    class Meta(Status.Meta):
         verbose_name = 'trade status'
         verbose_name_plural = 'trade statuses'

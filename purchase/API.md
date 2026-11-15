@@ -145,14 +145,19 @@ shown only to users with `inventory.view_product`.
 
 ## Deletion and totals
 
-DELETE performs hard deletion and returns 204. An order referenced by items
-returns 409; delete those items first. Related products, units, currencies and
-statuses remain protected by their model relationships.
+DELETE performs hard deletion of unreceived records and returns 204. Deleting
+an order with items requires both order and item delete permissions; its items
+and header are removed atomically. Received records reject deletion with 409.
+Other protected references still return 409 and roll back the deletion.
+Related products, units, currencies and statuses remain protected.
+
+The purchase list shows a red delete icon with both delete permissions. Edit and
+delete actions remain visible but disabled once is_received is true, including
+immediately after a successful Receive action.
 
 Order totals reflect current items and shipping cost. Creating, updating or
-deleting purchase records does not change warehouse stock. Status is a shared
-lookup value; this API does not implement confirmation rules or lock records
-based on status.
+deleting unreceived purchase records does not change warehouse stock. Status is
+a shared lookup value; receipt is controlled separately by is_received.
 
 Suppliers are protected references. Party deletion still soft-deletes only the
 party; existing purchases retain the supplier ID/name/code, including in the
@@ -160,3 +165,122 @@ purchase detail API. Unrelated PATCH requests continue to work for these orders.
 Selecting a deleted party or one whose supplier role has been removed is rejected
 on new assignments, even if its ID is supplied directly. Omitting the supplier
 field preserves the historical reference; supplying null clears it.
+
+## Edit purchases
+
+Purchase list rows show a pencil edit action for users with order view/change
+and item view/add/change/delete permissions. The action is hidden when that
+row's is_received flag is true. It opens `/purchase/purchase-orders/<id>/edit/`,
+which reuses the creation template, styles and API-driven form controller.
+Successful saves redirect to the purchase list.
+
+The edit form loads the order detail and every page of its item list before
+enabling saving. Reference choices come from GET
+`/purchase/api/purchase-orders/edit-options/`, requiring order view/change and
+item view permissions; creating new orders is not required. Existing supplier
+links, prices, exchange-rate snapshots, item IDs and creation audits are retained.
+
+PUT/PATCH on the existing order detail/update APIs now accept an optional nested
+`items` list. Omit items for a header-only update. When supplied, it represents
+the complete desired item list and must contain at least one line:
+
+```json
+{
+  "notes": "Updated before receipt",
+  "items": [
+    {
+      "id": 45,
+      "line_number": 1,
+      "product": 3,
+      "unit": 1,
+      "quantity": "5.000000",
+      "unit_price": "10.0000",
+      "discount_amount": "0.0000",
+      "tax_rate": "0.0000",
+      "description": "Agreed product"
+    }
+  ]
+}
+```
+
+An existing item ID updates that line, a line without an ID creates a new item,
+and omitted existing IDs delete those lines. IDs must be unique and belong to
+this purchase; new purchases cannot submit existing IDs. Add/change/delete item
+permissions are checked for the actions actually performed. Line-number swaps
+retain IDs. Header and line changes commit together; any failure rolls back all
+changes. Editing does not increase stock.
+
+Received orders are blocked by the API even if an edit URL is entered directly
+or receipt occurs while the editor is open. The form then remains disabled with
+a read-only message. JavaScript interaction tests are available with
+`node purchase/tests/purchase_edit_ui.mjs`.
+
+## Receive a purchase and increase stock
+
+Purchase responses expose `is_received` (read-only, default false), `warehouse`
+(optional warehouse ID before receipt), and `warehouse_name` (read-only). Ordinary
+create/update endpoints cannot set or reset is_received. Set a receiving warehouse
+when creating the order or PATCH it onto an existing unreceived purchase:
+
+```http
+PATCH /purchase/api/purchase-orders/12/update/
+Content-Type: application/json
+
+{"warehouse": 3}
+```
+
+The purchase creation page also loads active warehouses through the existing
+purchase options API. A draft can omit a warehouse, but receipt requires one.
+
+```http
+POST /purchase/api/purchase-orders/receive/
+Content-Type: application/json
+
+{
+  "purchase_id": 12,
+  "is_received": true
+}
+```
+
+Requires SessionAuthentication, IsAuthenticated, the existing
+`purchase.change_purchaseorder` permission (direct or group), and X-CSRFToken.
+This endpoint accepts POST/OPTIONS. Responses are marked no-store.
+
+Purchase list rows include a receive icon action for users with purchase change
+permission. It is enabled only when is_received=false. Clicking sends the request
+above with the current CSRF token and disables the button while it is pending.
+On success the row is updated immediately: the receive action stays disabled and
+its edit link disappears. Already received rows also show a disabled receive
+action. Errors are shown above the table and allow a safe retry; search and
+pagination retain the correct button state if refreshed during a request.
+JavaScript coverage is available with `node purchase/tests/purchase_receive_ui.mjs`.
+
+Receiving performs one atomic operation:
+
+1. Claim the unreceived purchase. Reject a missing/inactive receiving warehouse,
+   empty order or a line whose unit no longer matches its product.
+2. Sum quantities by product ID across all purchase lines.
+3. Create the warehouse/product Stock balance if absent, otherwise increment its
+   quantity. Different purchases/suppliers share that same balance; different
+   warehouses have separate balances.
+4. Set is_received=true and server audit fields. The header and all its items
+   become read-only through the APIs. PUT/PATCH/DELETE, adding new items and moving
+   items into/out of the received order are blocked. GET/list access is unchanged.
+
+The API returns 200 with `message`, `received_now` and `purchase_order`. First
+success returns received_now=true. Repeating the request returns false and does
+not add stock again or change the receipt audit timestamp. This also prevents
+duplicate stock from concurrent receipt requests. A concurrent item edit either
+finishes before receipt or is blocked; it cannot rewrite received quantities.
+
+False/missing is_received, invalid IDs, no receiving warehouse, invalid quantities
+or unsupported resulting stock precision return 400; missing purchases return
+404; permission/CSRF failures return 403. Locked writes and retryable database
+contention return 409. Any failure rolls back the receipt flag and every stock
+update, leaving the purchase unreceived/editable. Retry a busy request with the
+same purchase ID and true flag.
+
+Receipt takes all items at their stored quantities, independently of trade status.
+It does not automatically confirm/close the status, create stock movements or
+allow partial receipts/unreceiving. Product totals across branches can be computed
+by summing their Stock quantities; this endpoint updates the selected warehouse.

@@ -105,8 +105,9 @@ class TradeStatusSettingsTests(TestCase):
         self.assertContains(editing, 'data-catalog-submit disabled')
         self.assertContains(editing, f'data-success-url="{self.list_url}"')
 
-    def test_page_api_crud_roundtrip_preserves_audit_and_shared_proxy_records(self):
+    def test_page_api_crud_roundtrip_preserves_audit_and_independent_records(self):
         self.grant('view', 'add', 'change', 'delete')
+        product_status = ProductStatus.objects.create(code='ready-review', name='Product review')
         adding = self.client.get(self.add_url)
         response = self.client.post(adding.context['create_api_url'], {
             'name': 'Ready for review', 'code': 'ready-review', 'description': 'Shared label',
@@ -116,18 +117,19 @@ class TradeStatusSettingsTests(TestCase):
         data = response.data['trade_status']
         self.assertEqual(data['create_by'], self.user.username)
         self.assertEqual(data['modified_by'], self.user.username)
-        self.assertEqual(ProductStatus.objects.get(pk=data['id']).name, data['name'])
+        self.assertEqual(ProductStatus.objects.get(pk=product_status.pk).name, 'Product review')
         editing = self.client.get(reverse('common_pages:edit-trade-status', args=[data['id']]))
         self.assertEqual(self.client.get(editing.context['detail_api_url']).data['name'], data['name'])
         response = self.client.patch(editing.context['create_api_url'], {'name': 'Reviewed', 'is_active': False,
                                      'create_by': 'spoof'}, format='json')
         self.assertEqual(response.status_code, 200, response.data)
         self.assertEqual(response.data['create_by'], self.user.username)
-        self.assertEqual(ProductStatus.objects.get(pk=data['id']).name, 'Reviewed')
+        self.assertEqual(TradeStatus.objects.get(pk=data['id']).name, 'Reviewed')
+        self.assertEqual(ProductStatus.objects.get(pk=product_status.pk).name, 'Product review')
         self.assertEqual(self.client.get(self.client.get(self.list_url).context['list_api_url'], {'q': 'Reviewed'}).data['count'], 1)
         detail = reverse('common:trade-status-detail', args=[data['id']])
         self.assertEqual(self.client.delete(detail).status_code, 204)
-        self.assertFalse(ProductStatus.objects.filter(pk=data['id']).exists())
+        self.assertTrue(ProductStatus.objects.filter(pk=product_status.pk).exists())
         self.assertEqual(self.client.get(detail).status_code, 404)
 
     def test_validation_csrf_duplicate_codes_and_database_errors(self):
@@ -145,22 +147,28 @@ class TradeStatusSettingsTests(TestCase):
         for method, url in [('post', self.api_url), ('patch', self.update), ('put', self.detail), ('delete', self.detail)]:
             self.assertEqual(getattr(self.client, method)(url, {'name': 'Denied'}, format='json').status_code, 403)
 
-    def test_default_draft_and_referenced_product_purchase_sale_statuses_are_protected(self):
+    def test_default_draft_and_referenced_purchase_sale_statuses_are_protected(self):
         self.grant('delete')
         draft = TradeStatus.objects.get(code='draft')
         self.assertEqual(self.client.delete(reverse('common:trade-status-detail', args=[draft.pk])).status_code, 409)
-        unit = UnitOfMeasure.objects.create(name='Pieces', code='TRADE-PCS')
-        for index, model in enumerate([Product, PurchaseOrder, SalesOrder]):
+        for index, model in enumerate([PurchaseOrder, SalesOrder]):
             status = TradeStatus.objects.create(code=f'linked-{index}', name=f'Linked {index}')
             fields = {'currency_id': 'BDT', 'status_id': status.code}
-            if model is Product:
-                fields.update(name='Product', sku='TRADE-STATUS', unit=unit)
-            else:
-                fields['exchange_rate'] = '1'
+            fields['exchange_rate'] = '1'
             model.objects.create(**fields)
             response = self.client.delete(reverse('common:trade-status-detail', args=[status.pk]))
             self.assertEqual(response.status_code, 409, response.data)
             self.assertTrue(TradeStatus.objects.filter(pk=status.pk).exists())
+
+    def test_product_reference_does_not_protect_independent_trade_status(self):
+        self.grant('delete')
+        product_status = ProductStatus.objects.create(code=self.record.code, name='Product review')
+        unit = UnitOfMeasure.objects.create(name='Pieces', code='TRADE-PCS')
+        product = Product.objects.create(name='Product', sku='TRADE-STATUS', unit=unit,
+                                         currency_id='BDT', status=product_status)
+        self.assertEqual(self.client.delete(self.detail).status_code, 204)
+        product.refresh_from_db()
+        self.assertEqual(product.status, product_status)
 
     def test_search_pagination_methods_and_change_only_update_access(self):
         self.grant('view')

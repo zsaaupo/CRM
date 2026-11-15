@@ -5,6 +5,7 @@ from unittest.mock import patch
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group, Permission
 from django.db import IntegrityError
+from django.db.models.deletion import ProtectedError
 from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
@@ -156,10 +157,10 @@ class PurchaseAPITests(TestCase):
         self.assertEqual(self.client.get(detail).data['grand_total'], '25.0000')
         self.assertFalse(Stock.objects.exists())
 
-    def test_protected_orders_and_missing_records(self):
+    def test_order_deletion_requires_item_permission_and_missing_records_return_404(self):
         self.grant(PurchaseOrder, 'delete', 'view', 'change')
         response = self.client.delete(reverse('purchase:purchase-order-detail', args=[self.order.pk]))
-        self.assertEqual(response.status_code, 409, response.data)
+        self.assertEqual(response.status_code, 403, response.data)
         self.assertTrue(PurchaseOrder.objects.filter(pk=self.order.pk).exists())
         for model, route, key, payload in self.resources():
             self.grant(model, 'view', 'change', 'delete')
@@ -167,6 +168,19 @@ class PurchaseAPITests(TestCase):
             self.assertEqual(self.client.get(detail).status_code, 404)
             self.assertEqual(self.client.patch(detail, {}, format='json').status_code, 404)
             self.assertEqual(self.client.delete(detail).status_code, 404)
+
+    def test_delete_order_removes_its_items_atomically(self):
+        self.grant(PurchaseOrder, 'delete')
+        self.grant(PurchaseOrderItem, 'delete')
+        url = reverse('purchase:purchase-order-detail', args=[self.order.pk])
+        with patch('purchase.models.PurchaseOrder.delete', side_effect=ProtectedError('Still referenced', [self.order])):
+            response = self.client.delete(url)
+            self.assertEqual(response.status_code, 409, response.data)
+        self.assertTrue(PurchaseOrder.objects.filter(pk=self.order.pk).exists())
+        self.assertTrue(PurchaseOrderItem.objects.filter(pk=self.item.pk).exists())
+        self.assertEqual(self.client.delete(url).status_code, 204)
+        self.assertFalse(PurchaseOrder.objects.filter(pk=self.order.pk).exists())
+        self.assertFalse(PurchaseOrderItem.objects.filter(pk=self.item.pk).exists())
 
     def test_csrf_is_required_for_every_write(self):
         self.client.credentials()

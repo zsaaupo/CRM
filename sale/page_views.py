@@ -35,14 +35,19 @@ class SalesListPageView(ProtectedAccountPageView):
                     ('order_number', 'Order number', 'text'), ('customer_name', 'Customer', 'text'),
                     ('order_date', 'Order date', 'text'), ('expected_delivery_date', 'Expected date', 'text'),
                     ('status', 'Status', 'status'), ('grand_total', 'Total', 'price'),
+                    ('is_completed', 'Completed', 'boolean'),
                     ('actions', 'Actions', 'edit'),
                 ]
             ],
         })
         if self.request.user.has_perms(SALES_EDIT_PERMISSIONS):
             context['edit_url_template'] = reverse('sale_pages:edit-sale', args=[0])
+            context['edit_disabled_field'] = 'is_completed'
         if context['can_delete']:
             context['delete_url_template'] = reverse('sale:sales-order-detail', args=[0])
+            context['delete_disabled_field'] = 'is_completed'
+        if self.request.user.has_perm('sale.change_salesorder'):
+            context['complete_api_url'] = reverse('sale:sales-order-complete')
         return context
 
 

@@ -39,6 +39,7 @@ export function initializeSalesForm(form) {
     let autoAddress = '';
     let options = null;
     let ready = false;
+    let readOnly = false;
     let loading = false;
     let busy = false;
     let lineId = 0;
@@ -69,13 +70,13 @@ export function initializeSalesForm(form) {
             row.querySelector("[data-line-heading]").textContent = title;
             row.querySelector("[data-line-legend]").textContent = title;
             const remove = row.querySelector("[data-line-remove]");
-            remove.disabled = busy || rows.length === 1;
+            remove.disabled = busy || readOnly || rows.length === 1;
             remove.setAttribute("aria-label", `Remove item ${index + 1}`);
         });
     }
 
     function addLine(focus = false, item = null) {
-        if (!ready || busy) return;
+        if (!ready || busy || readOnly) return;
         const row = document.getElementById("sale-line-template").content.firstElementChild.cloneNode(true);
         const prefix = `sale-item-${++lineId}`;
         for (const input of row.querySelectorAll("[data-line-field], [data-line-unit-label]")) {
@@ -150,7 +151,9 @@ export function initializeSalesForm(form) {
                 isEdit ? getJSON(form.dataset.detailUrl) : null,
                 loadItems(),
             ]);
-            if (isEdit && (!record?.id || record.status !== 'draft')) throw new Error('Only draft sales orders can be edited. Return to the sales list.');
+            if (isEdit && !record?.id) throw new Error('Could not load the sales order. Return to the sales list.');
+            readOnly = record?.is_completed === true;
+            if (readOnly) throw new Error('This sale has been completed and is read-only. Return to the sales list.');
             for (const name of ["currency", "status", "product"]) {
                 if (!Array.isArray(data[name])) throw new Error("Could not load sale choices. Please try again.");
                 if (!data[name].length) throw new Error(`No ${name} records are available. Add the missing records or contact your administrator, then try again.`);
@@ -172,6 +175,12 @@ export function initializeSalesForm(form) {
                     historical.value = String(record.customer);
                     historical.textContent = `${record.customer_name} (existing customer)`;
                     field('customer').append(historical);
+                }
+                if (record.warehouse && !options.warehouse.some((item) => String(item.value) === String(record.warehouse))) {
+                    const historical = document.createElement('option');
+                    historical.value = String(record.warehouse);
+                    historical.textContent = `${record.warehouse_name} (existing warehouse)`;
+                    field('warehouse').append(historical);
                 }
                 for (const name of headerFields) field(name).value = record[name] ?? '';
                 field('exchange_rate').readOnly = record.currency === options.base_currency;
@@ -233,7 +242,7 @@ export function initializeSalesForm(form) {
     form.addEventListener("input", (event) => { event.target.removeAttribute("aria-invalid"); });
     form.addEventListener("submit", async (event) => {
         event.preventDefault();
-        if (!ready || busy) return;
+        if (!ready || busy || readOnly) return;
         status.hidden = true;
         for (const box of form.querySelectorAll("[data-error-for], [data-line-error]")) box.hidden = true;
         for (const input of form.querySelectorAll('[aria-invalid="true"]')) input.removeAttribute("aria-invalid");
@@ -248,22 +257,28 @@ export function initializeSalesForm(form) {
         header.disabled = submit.disabled = addButton.disabled = true;
         for (const row of lines.children) row.disabled = true;
         form.setAttribute("aria-busy", "true");
-        label.textContent = "Creating sale...";
+        label.textContent = isEdit ? "Saving changes..." : "Creating sale...";
         spinner.hidden = false;
         try {
             if (isEdit) await patchJSON(form.action, payload, field('csrfmiddlewaretoken').value);
             else await postJSON(form.action, payload, field("csrfmiddlewaretoken").value);
             window.location.assign(form.dataset.successUrl);
         } catch (error) {
+            if (isEdit && error.status === 409) {
+                try { readOnly = (await getJSON(form.dataset.detailUrl)).is_completed === true; }
+                catch { /* Preserve the API error if the session changed. */ }
+                if (readOnly) ready = false;
+            }
             showErrors(error.errors);
-            message(error.status === 403 ? "Your session or permissions have changed. Refresh this page and try again."
+            message(readOnly ? "This sale has been completed and is read-only. Return to the sales list."
+                : error.status === 403 ? "Your session or permissions have changed. Refresh this page and try again."
                 : error.status === 400 ? `Please check the sale details. ${errorText(error.errors)}`
                 : error.message || "Could not save the sale. Please try again.");
             status.focus();
         } finally {
             busy = false;
-            header.disabled = submit.disabled = addButton.disabled = false;
-            for (const row of lines.children) row.disabled = false;
+            header.disabled = submit.disabled = addButton.disabled = readOnly;
+            for (const row of lines.children) row.disabled = readOnly;
             updateLineNumbers();
             form.setAttribute("aria-busy", "false");
             label.textContent = saveLabel;

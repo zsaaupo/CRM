@@ -8,6 +8,7 @@ from django.test import Client, TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
 
+from common.models import ProductStatus, TradeStatus
 from inventory.models import Product, UnitOfMeasure
 from people.models import Party
 from sale.models import SalesOrder, SalesOrderItem
@@ -60,7 +61,7 @@ class SalesIntegrationTests(TestCase):
         self.assertEqual(response.status_code, 201, response.data)
         data = response.data['sales_order']
         self.assertTrue(data['order_number'].startswith('SO-'))
-        self.assertEqual(data['status'], 'draft')
+        self.assertEqual(data['status'], 'confirmed')
         self.assertIsNone(data['confirmed_at'])
         self.assertEqual(data['grand_total'], '37.2000')
         order = SalesOrder.objects.get(pk=data['id'])
@@ -145,17 +146,48 @@ class SalesIntegrationTests(TestCase):
         self.assertEqual(self.client.get(self.detail).data['customer_name'], 'Customer')
         self.assertEqual(self.client.patch(self.update, {'notes': 'History'}, format='json').status_code, 200)
 
-    def test_non_draft_order_and_its_items_reject_all_mutations(self):
+    def test_non_draft_order_and_its_items_allow_permission_checked_crud(self):
         SalesOrder.objects.filter(pk=self.order.pk).update(status_id='confirmed')
-        for method, url, data in [
-            ('patch', self.update, {'notes': 'Forbidden'}), ('delete', self.detail, {}),
-            ('post', reverse('sale:sales-order-item-list'), {**self.line(3), 'sales_order': self.order.pk}),
-            ('patch', reverse('sale:sales-order-item-update', args=[self.first.pk]), {'quantity': '4'}),
-            ('delete', reverse('sale:sales-order-item-detail', args=[self.first.pk]), {}),
+        for method, url, data, expected in [
+            ('patch', self.update, {'notes': 'Updated'}, 200),
+            ('post', reverse('sale:sales-order-item-list'), {**self.line(3), 'sales_order': self.order.pk}, 201),
+            ('patch', reverse('sale:sales-order-item-update', args=[self.first.pk]), {'quantity': '4'}, 200),
+            ('delete', reverse('sale:sales-order-item-detail', args=[self.first.pk]), {}, 204),
+            ('delete', self.detail, {}, 204),
         ]:
-            self.assertEqual(getattr(self.client, method)(url, data, format='json').status_code, 409)
+            response = getattr(self.client, method)(url, data, format='json')
+            self.assertEqual(response.status_code, expected, getattr(response, 'data', None))
         self.stock.refresh_from_db()
         self.assertEqual(self.stock.quantity, Decimal('20'))
+
+    def test_create_and_edit_options_include_all_trade_statuses_only(self):
+        status = TradeStatus.objects.create(code='awaiting-payment', name='Awaiting payment')
+        ProductStatus.objects.create(code='product-only', name='Product only')
+        for route in ['sale:sale-options', 'sale:sales-edit-options']:
+            response = self.client.get(reverse(route))
+            self.assertEqual(response.status_code, 200, response.data)
+            choices = {row['value']: row['label'] for row in response.data['status']}
+            self.assertEqual(choices[status.code], status.name)
+            self.assertIn('draft', choices)
+            self.assertIn('confirmed', choices)
+            self.assertNotIn('product-only', choices)
+
+    def test_nested_status_and_item_update_remains_atomic(self):
+        status = TradeStatus.objects.create(code='review', name='Review')
+        response = self.client.patch(self.update, {
+            'status': status.code, 'items': [self.line(id=self.first.pk, quantity='4')],
+        }, format='json')
+        self.assertEqual(response.status_code, 200, response.data)
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.status_id, status.code)
+        self.first.refresh_from_db()
+        self.assertEqual(self.first.quantity, Decimal('4'))
+        with patch('sale.serializers.SalesOrderItem.objects.create', side_effect=IntegrityError):
+            response = self.client.patch(self.update, {'status': 'draft', 'items': [self.line()]}, format='json')
+        self.assertEqual(response.status_code, 400, response.data)
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.status_id, status.code)
+        self.assertTrue(self.order.items.filter(pk=self.first.pk).exists())
 
     def test_delete_draft_with_items_needs_item_delete_permission_and_keeps_stock(self):
         self.grant_only('delete_salesorder')
@@ -180,6 +212,8 @@ class SalesIntegrationTests(TestCase):
         listing = self.client.get(urls[0])
         self.assertContains(listing, 'data-edit-url-template="/sale/sales-orders/0/edit/"')
         self.assertContains(listing, 'data-delete-url-template="/sale/api/sales-orders/0/"')
+        self.assertContains(listing, 'data-delete-disabled-field="is_completed"')
+        self.assertContains(listing, 'data-edit-disabled-field="is_completed"')
         editing = self.client.get(urls[3])
         self.assertContains(editing, f'data-items-url="/sale/api/sales-order-items/list/?sales_order={self.order.pk}"')
         self.assertContains(editing, 'data-method="PATCH"')

@@ -1,0 +1,30 @@
+{% extends "layouts/dashboard.html" %}
+{% load static %}
+{% block title %}Stock details | eManager{% endblock %}
+{% block content %}
+<div class="workspace-content" data-record-detail data-api-url="{{ detail_api_url }}" data-title-field="product_name" data-login-url="{% url 'account_pages:login' %}">
+    <div class="page-heading">
+        <div class="min-w-0 max-w-full"><p class="page-eyebrow">Warehouses</p><h1 class="page-title break-all"><span data-record-title>Stock details</span><span class="text-emerald-600">.</span></h1><p class="page-description">Product quantity and its warehouse location.</p></div>
+        <a href="{{ list_url }}" class="secondary-button">Back to stock list <span aria-hidden="true">&rarr;</span></a>
+    </div>
+    {% include 'includes/detail_status.html' %}
+    <div data-record-content hidden>
+        <section class="user-form-card mb-6" aria-labelledby="stock-information-heading">
+            <h2 id="stock-information-heading" class="section-title mb-6">Stock information</h2>
+            <dl class="profile-grid">
+                {% include 'includes/detail_field.html' with name='id' label='Stock ID' only %}
+                {% include 'includes/detail_field.html' with name='warehouse_name' label='Warehouse' only %}
+                {% include 'includes/detail_field.html' with name='warehouse_code' label='Warehouse code' only %}
+                {% include 'includes/detail_field.html' with name='product_name' label='Product' only %}
+                {% include 'includes/detail_field.html' with name='product_sku' label='SKU' only %}
+                {% include 'includes/detail_field.html' with name='quantity' label='Quantity' only %}
+                {% include 'includes/detail_field.html' with name='unit_name' label='Unit' only %}
+                {% include 'includes/detail_field.html' with name='unit_code' label='Unit code' only %}
+            </dl>
+        </section>
+        {% include 'includes/detail_audit.html' %}
+    </div>
+    <noscript><p class="form-error">Enable JavaScript to load stock details.</p></noscript>
+</div>
+{% endblock %}
+{% block workspace_js %}<script type="module" src="{% static 'warehouse/js/stock_detail.js' %}"></script>{% endblock %}

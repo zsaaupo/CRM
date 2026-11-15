@@ -7,6 +7,10 @@ from account.page_views import ProtectedAccountPageView
 PURCHASE_CREATE_PERMISSIONS = (
     'purchase.view_purchaseorder', 'purchase.add_purchaseorder', 'purchase.add_purchaseorderitem',
 )
+PURCHASE_EDIT_PERMISSIONS = (
+    'purchase.view_purchaseorder', 'purchase.change_purchaseorder', 'purchase.view_purchaseorderitem',
+    'purchase.add_purchaseorderitem', 'purchase.change_purchaseorderitem', 'purchase.delete_purchaseorderitem',
+)
 
 
 class PurchaseListPageView(ProtectedAccountPageView):
@@ -23,6 +27,7 @@ class PurchaseListPageView(ProtectedAccountPageView):
             'list_api_url': reverse('purchase:purchase-order-list-view'),
             'view_url_template': reverse('purchase_pages:purchase-detail', args=[0]),
             'can_add': self.request.user.has_perms(PURCHASE_CREATE_PERMISSIONS),
+            'can_delete': self.request.user.has_perms(('purchase.delete_purchaseorder', 'purchase.delete_purchaseorderitem')),
             'columns': [
                 {'key': key, 'label': label, 'type': kind}
                 for key, label, kind in [
@@ -33,6 +38,14 @@ class PurchaseListPageView(ProtectedAccountPageView):
                 ]
             ],
         })
+        if self.request.user.has_perms(PURCHASE_EDIT_PERMISSIONS):
+            context['edit_url_template'] = reverse('purchase_pages:edit-purchase', args=[0])
+            context['edit_disabled_field'] = 'is_received'
+        if context['can_delete']:
+            context['delete_url_template'] = reverse('purchase:purchase-order-detail', args=[0])
+            context['delete_disabled_field'] = 'is_received'
+        if self.request.user.has_perm('purchase.change_purchaseorder'):
+            context['receive_api_url'] = reverse('purchase:purchase-order-receive')
         return context
 
 
@@ -69,5 +82,22 @@ class PurchaseCreatePageView(ProtectedAccountPageView):
             'create_api_url': reverse('purchase:purchase-order-list'),
             'options_api_url': reverse('purchase:purchase-options'),
             'base_currency': settings.INVENTORY_BASE_CURRENCY,
+        })
+        return context
+
+
+class PurchaseEditPageView(PurchaseCreatePageView):
+    permission_required = PURCHASE_EDIT_PERMISSIONS
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        pk = self.kwargs['pk']
+        context.update({
+            'page_mode': 'edit', 'page_label': 'Edit purchase', 'form_heading': 'Edit purchase',
+            'form_method': 'PATCH', 'save_label': 'Save changes',
+            'create_api_url': reverse('purchase:purchase-order-update', args=[pk]),
+            'detail_api_url': reverse('purchase:purchase-order-detail', args=[pk]),
+            'items_api_url': reverse('purchase:purchase-order-item-list-view') + f'?purchase_order={pk}',
+            'options_api_url': reverse('purchase:purchase-edit-options'),
         })
         return context

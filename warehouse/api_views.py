@@ -5,13 +5,13 @@ from common.view import (
 
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import never_cache
-from rest_framework.generics import CreateAPIView
+from rest_framework.generics import CreateAPIView, RetrieveAPIView
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from inventory.models import Product
 from .models import Stock, WareHouse
-from .serializers import StockSerializer, WareHouseSerializer
+from .serializers import StockFilterSerializer, StockReadSerializer, StockSerializer, WareHouseSerializer
 
 
 class WareHouseListCreateAPIView(BaseListCreateAPIView):
@@ -70,3 +70,23 @@ class StockOptionsAPIView(BaseAPIMixin, APIView):
                 for row in Product.objects.order_by('name', 'pk').values('pk', 'name', 'sku', 'unit__code')
             ],
         })
+
+
+class StockListAPIView(BaseListAPIView):
+    serializer_class = StockReadSerializer
+    queryset = Stock.objects.select_related('warehouse', 'product__unit')
+    search_fields = ['warehouse__name', 'warehouse__code', 'product__name', 'product__sku']
+    ordering = ['warehouse__name', 'product__name', 'pk']
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        filters = StockFilterSerializer(data=self.request.query_params)
+        filters.is_valid(raise_exception=True)
+        return queryset.filter(**{f'{name}_id': value for name, value in filters.validated_data.items()})
+
+
+@method_decorator(never_cache, name='dispatch')
+class StockDetailAPIView(BaseAPIMixin, RetrieveAPIView):
+    serializer_class = StockReadSerializer
+    queryset = StockListAPIView.queryset
+    http_method_names = ['get', 'head', 'options']

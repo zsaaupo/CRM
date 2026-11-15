@@ -85,6 +85,8 @@ const panel = document.querySelector("[data-record-detail]");
 if (panel) {
     let items;
     initializeRecordDetail(panel, async (record) => {
+        const edit = panel.querySelector('[data-sale-edit]');
+        if (edit) edit.hidden = record.is_completed !== false;
         const section = panel.querySelector("[data-sale-items]");
         if (section && !items) items = initializeSalesItems(section, record.currency);
         if (items) await items.ready;

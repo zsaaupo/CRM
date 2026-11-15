@@ -3,7 +3,7 @@ from django.urls import path
 from .api_views import (
     PurchaseOrderDetailAPIView, PurchaseOrderItemDetailAPIView, PurchaseOrderItemListAPIView,
     PurchaseOrderItemListCreateAPIView, PurchaseOrderItemUpdateAPIView, PurchaseOrderListAPIView,
-    PurchaseOptionsAPIView, PurchaseOrderListCreateAPIView, PurchaseOrderUpdateAPIView,
+    PurchaseOptionsAPIView, PurchaseEditOptionsAPIView, PurchaseOrderListCreateAPIView, PurchaseOrderUpdateAPIView, PurchaseReceiveAPIView,
 )
 
 
@@ -11,6 +11,8 @@ app_name = 'purchase'
 
 urlpatterns = [
     path('purchase-orders/options/', PurchaseOptionsAPIView.as_view(), name='purchase-options'),
+    path('purchase-orders/edit-options/', PurchaseEditOptionsAPIView.as_view(), name='purchase-edit-options'),
+    path('purchase-orders/receive/', PurchaseReceiveAPIView.as_view(), name='purchase-order-receive'),
     path('purchase-orders/', PurchaseOrderListCreateAPIView.as_view(), name='purchase-order-list'),
     path('purchase-orders/list/', PurchaseOrderListAPIView.as_view(), name='purchase-order-list-view'),
     path('purchase-orders/<int:pk>/', PurchaseOrderDetailAPIView.as_view(), name='purchase-order-detail'),

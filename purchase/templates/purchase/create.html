@@ -1,13 +1,13 @@
 {% extends "layouts/dashboard.html" %}
 {% load static %}
-{% block title %}Create purchase | eManager{% endblock %}
+{% block title %}{{ page_label }} | eManager{% endblock %}
 {% block content %}
 <div class="workspace-content">
     <div class="page-heading">
-        <div><p class="page-eyebrow">Purchase</p><h1 class="page-title">Create purchase<span class="text-emerald-600">.</span></h1><p class="page-description">Record an order and the products you are purchasing.</p></div>
+        <div><p class="page-eyebrow">Purchase</p><h1 class="page-title">{{ form_heading|default:'Create purchase' }}<span class="text-emerald-600">.</span></h1><p class="page-description">{% if page_mode == 'edit' %}Update this purchase and its products before receiving it.{% else %}Record an order and the products you are purchasing.{% endif %}</p></div>
         <a href="{{ list_url }}" class="secondary-button">Back to purchases <span aria-hidden="true">&rarr;</span></a>
     </div>
-    <form method="post" action="{{ create_api_url }}" data-purchase-form data-options-url="{{ options_api_url }}" data-success-url="{{ list_url }}" novalidate>
+    <form method="post" action="{{ create_api_url }}" data-purchase-form data-method="{{ form_method|default:'POST' }}" data-options-url="{{ options_api_url }}" data-detail-url="{{ detail_api_url }}" data-items-url="{{ items_api_url }}" data-success-url="{{ list_url }}" novalidate>
         {% csrf_token %}
         <div class="form-status mb-5" data-purchase-status role="status" aria-live="polite" tabindex="-1" hidden></div>
         <button type="button" class="secondary-button mb-5" data-purchase-retry hidden>Try loading again</button>
@@ -17,6 +17,7 @@
             <p class="section-description">The order number is generated automatically. Supplier details are optional.</p>
             <div class="user-form-grid">
                 {% include 'inventory/includes/field.html' with name='supplier' label='Supplier' field_type='select' hint='Only parties marked as suppliers are listed.' only %}
+                {% include 'inventory/includes/field.html' with name='warehouse' label='Receiving warehouse' field_type='select' hint='Choose where the products will be stocked. Required before receiving the purchase.' only %}
                 {% include 'inventory/includes/field.html' with name='supplier_reference' label='Supplier reference' maxlength='100' only %}
                 {% include 'inventory/includes/field.html' with name='order_date' label='Order date' field_type='date' required=True value=today|date:'Y-m-d' only %}
                 {% include 'inventory/includes/field.html' with name='expected_date' label='Expected date' field_type='date' only %}
@@ -35,7 +36,7 @@
             <p class="section-description">Add at least one product. Prices and shipping use the selected order currency. Totals are calculated when you save.</p>
             <div class="space-y-6" data-purchase-lines></div>
         </section>
-        <div class="user-form-actions"><a href="{{ list_url }}" class="secondary-button">Cancel</a><button type="submit" class="primary-button compact-primary" data-purchase-submit disabled><span data-submit-label>Create purchase</span><span class="button-spinner" data-submit-spinner hidden aria-hidden="true"></span></button></div>
+        <div class="user-form-actions"><a href="{{ list_url }}" class="secondary-button">Cancel</a><button type="submit" class="primary-button compact-primary" data-purchase-submit disabled><span data-submit-label>{{ save_label|default:'Create purchase' }}</span><span class="button-spinner" data-submit-spinner hidden aria-hidden="true"></span></button></div>
         <noscript><p class="form-error">Enable JavaScript to load choices and create a purchase.</p></noscript>
     </form>
     <template id="purchase-line-template">

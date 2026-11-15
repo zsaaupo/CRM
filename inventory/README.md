@@ -1,7 +1,8 @@
 # Product catalog
 
 Products use ProductType and ProductStatus tables rather than TextChoices.
-ProductStatus is defined in `common.models`; its fieldless TradeStatus proxy is used by purchases and sales. Migration
+ProductStatus is defined in `common.models`; purchases and sales use the separate
+TradeStatus table. Migration
 0005 preserves existing status data and moves status permission grants to the
 common app. Status API/page routes remain under inventory for compatibility.
 Both have a unique stable code, display name, description, active flag and the

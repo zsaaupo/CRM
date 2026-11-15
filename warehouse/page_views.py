@@ -90,3 +90,38 @@ class StockAddPageView(ProtectedAccountPageView):
             'selected_warehouse': requested_warehouse if requested_warehouse.isascii() and requested_warehouse.isdigit() and len(requested_warehouse) <= 20 else '',
         })
         return context
+
+
+class StockListPageView(ProtectedAccountPageView):
+    template_name = 'inventory/list.html'
+    permission_required = ('warehouse.view_stock',)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context.update({
+            'page_section': 'warehouses', 'page_mode': 'stock-list', 'page_label': 'Stock list',
+            'section_label': 'Warehouses', 'resource': {'singular': 'stock', 'plural': 'stock'},
+            'list_api_url': reverse('warehouse:stock-list'),
+            'view_url_template': reverse('warehouse_pages:stock-detail', args=[0]),
+            'list_description': 'Current quantities by warehouse and product.',
+            'columns': [{'key': key, 'label': label, 'type': kind} for key, label, kind in [
+                ('warehouse_name', 'Warehouse', 'text'), ('product_sku', 'SKU', 'text'),
+                ('product_name', 'Product', 'text'), ('quantity', 'Quantity', 'text'),
+                ('unit_code', 'Unit', 'text'), ('actions', 'Actions', 'edit'),
+            ]],
+        })
+        return context
+
+
+class StockDetailPageView(ProtectedAccountPageView):
+    template_name = 'warehouse/stock_detail.html'
+    permission_required = ('warehouse.view_stock',)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context.update({
+            'page_section': 'warehouses', 'page_mode': 'stock-detail', 'page_label': 'Stock details',
+            'list_url': reverse('warehouse_pages:stock-list'),
+            'detail_api_url': reverse('warehouse:stock-detail', args=[self.kwargs['pk']]),
+        })
+        return context

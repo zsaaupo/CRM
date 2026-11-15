@@ -11,20 +11,20 @@ from sale.models import SalesOrder
 
 
 class ProductTradeStatusTests(TestCase):
-    def test_trade_status_inherits_product_status_without_fields_or_table(self):
-        self.assertTrue(issubclass(TradeStatus, ProductStatus))
-        self.assertTrue(TradeStatus._meta.proxy)
-        self.assertEqual(TradeStatus._meta.local_fields, [])
-        self.assertEqual(TradeStatus._meta.db_table, ProductStatus._meta.db_table)
-        self.assertIs(TradeStatus._meta.concrete_model, ProductStatus)
+    def test_trade_status_has_independent_fields_table_and_records(self):
+        self.assertFalse(issubclass(TradeStatus, ProductStatus))
+        self.assertFalse(TradeStatus._meta.proxy)
+        self.assertNotEqual(TradeStatus._meta.db_table, ProductStatus._meta.db_table)
+        self.assertIs(TradeStatus._meta.concrete_model, TradeStatus)
         status = ProductStatus.objects.create(code='custom-ready', name='Custom ready')
-        trade = TradeStatus.objects.get(pk=status.pk)
-        self.assertEqual(trade.code, status.code)
-        trade.name = 'Updated shared label'
+        self.assertFalse(TradeStatus.objects.filter(code=status.code).exists())
+        trade = TradeStatus.objects.create(code=status.code, name='Trade ready')
+        trade.name = 'Updated trade label'
         trade.save()
         status.refresh_from_db()
-        self.assertEqual(status.name, 'Updated shared label')
-        self.assertEqual(ProductStatus.objects.filter(code='custom-ready').count(), 1)
+        self.assertEqual(status.name, 'Custom ready')
+        trade.delete()
+        self.assertTrue(ProductStatus.objects.filter(pk=status.pk).exists())
 
     def test_products_and_orders_resolve_the_declared_status_classes(self):
         self.assertIs(Product._meta.get_field('status').remote_field.model, ProductStatus)

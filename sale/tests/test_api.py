@@ -9,7 +9,7 @@ from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
 
-from common.models import TradeStatus
+from common.models import ProductStatus, TradeStatus
 from inventory.models import Currency, Product, UnitOfMeasure
 from people.models import Party
 from sale.models import SalesOrder, SalesOrderItem
@@ -100,11 +100,47 @@ class SalesAPITests(TestCase):
         response = self.client.patch(reverse('sale:sales-order-update', args=[self.order.pk]),
                                      {'status': status.code}, format='json')
         self.assertEqual(response.status_code, 200, response.data)
-        self.assertEqual(response.data['status'], 'draft')
+        self.assertEqual(response.data['status'], status.code)
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.status_id, status.code)
         Currency.objects.create(code='USD', name='Dollar', exchange_rate='120')
         response = self.client.post(url, self.order_payload(currency='USD', exchange_rate='120'), format='json')
         self.assertEqual(response.status_code, 201, response.data)
         self.assertEqual(response.data['sales_order']['currency'], 'USD')
+
+    def test_custom_trade_status_can_be_created_changed_and_read_back(self):
+        self.grant(SalesOrder, 'add', 'change', 'view')
+        status = TradeStatus.objects.create(code='awaiting-payment', name='Awaiting payment')
+        response = self.client.post(reverse('sale:sales-order-list'),
+                                   self.order_payload(status=status.code), format='json')
+        self.assertEqual(response.status_code, 201, response.data)
+        order_id = response.data['sales_order']['id']
+        self.assertEqual(response.data['sales_order']['status'], status.code)
+        detail = reverse('sale:sales-order-detail', args=[order_id])
+        self.assertEqual(self.client.get(detail).data['status_name'], status.name)
+        for url, code in [(detail, 'confirmed'),
+                          (reverse('sale:sales-order-update', args=[order_id]), 'draft')]:
+            response = self.client.patch(url, {'status': code}, format='json')
+            self.assertEqual(response.status_code, 200, response.data)
+            self.assertEqual(response.data['status'], code)
+            self.assertEqual(SalesOrder.objects.get(pk=order_id).status_id, code)
+
+    def test_invalid_status_or_product_only_status_is_rejected_without_changes(self):
+        self.grant(SalesOrder, 'add', 'change')
+        ProductStatus.objects.create(code='product-only', name='Product only')
+        for code in ['missing-status', 'product-only', '', None]:
+            with self.subTest(status=code):
+                response = self.client.post(reverse('sale:sales-order-list'),
+                                           self.order_payload(status=code), format='json')
+                self.assertEqual(response.status_code, 400, response.data)
+                self.assertIn('status', response.data)
+                response = self.client.patch(reverse('sale:sales-order-update', args=[self.order.pk]),
+                                             {'status': code, 'notes': 'Must not save'}, format='json')
+                self.assertEqual(response.status_code, 400, response.data)
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.status_id, 'draft')
+        self.assertEqual(self.order.notes, '')
+        self.assertEqual(SalesOrder.objects.count(), 1)
 
     def test_order_validation_checks_merged_partial_updates_and_required_fields(self):
         self.grant(SalesOrder, 'add', 'change')

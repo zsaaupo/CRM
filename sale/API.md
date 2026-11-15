@@ -54,8 +54,10 @@ precede it. The unit must match the product. Quantity and line numbers must be
 positive; discount cannot exceed quantity times price; tax is between 0 and 100.
 
 Success returns 201 with `message` and `sales_order`. Order number, audit fields,
-status, confirmed_at, fulfilled_at, customer/warehouse labels and calculated
-subtotal/tax_total/grand_total are read-only. The order always starts as draft.
+confirmed_at, fulfilled_at, customer/warehouse labels and calculated
+subtotal/tax_total/grand_total are read-only. Status accepts an existing
+TradeStatus code, such as `"status": "confirmed"`; omitting it defaults to draft.
+Unknown codes and product-only statuses return 400.
 For the example, subtotal is 28, tax is 4.2 and grand total is 37.2.
 
 Nested creation requires add permission for both orders and items. Everything
@@ -76,12 +78,33 @@ items leaves lines unchanged. An empty items array is rejected.
 Updates preserve existing item IDs and creation audit fields, including when
 lines are renumbered. Header and line changes roll back together on failure.
 Individual item APIs remain available; existing items cannot move to another
-order. DELETE of a draft order with lines requires both order and item delete
+order. DELETE of an order with lines requires both order and item delete
 permissions and removes both atomically. Deletion is permanent.
 
-Only draft orders and their items are editable/deletable; other statuses return
-409. Status transitions and fulfillment actions are not implemented yet. Stock
-is never changed by any endpoint in this version.
+Uncompleted orders and items remain editable/deletable at any trade status with
+the required permissions. PATCH `{"status": "confirmed"}` changes the status
+label only. Completed orders and their items reject updates/deletion with 409.
+
+## Complete a sale and deduct stock
+
+POST `/sale/api/sales-orders/complete/`:
+
+```json
+{"sale_id": 7, "is_completed": true}
+```
+
+Requires `sale.change_salesorder`, session authentication and CSRF. An active
+warehouse and at least one item are required. Quantities are combined by product
+ID and deducted from that warehouse's existing Stock balances. Missing or
+insufficient stock returns 400 and rolls back all changes. Stock cannot go negative.
+
+Success returns 200 with `message`, `completed_now` and `sales_order`.
+The sale becomes `is_completed=true`, `fulfilled_at` records the completion time,
+and its header/items become read-only, including deletion and new lines.
+Repeating the request returns `completed_now=false` without deducting again.
+Concurrent stock updates may return a retryable 409; retrying is safe.
+TradeStatus is preserved. Completion is independent of the status label.
+The completion flag and timestamps cannot be written through ordinary CRUD APIs.
 
 ## Lists, options and pages
 
@@ -92,7 +115,7 @@ name/SKU, order number and description. Filter items with `?sales_order=<id>`.
 
 GET `/sales-orders/options/` requires both order/item add permissions. It returns
 customer, warehouse, currency, status and product choices. Status choices contain
-draft only. Products include unit, currency, sale price and tax defaults; the UI
+all TradeStatus records. Products include unit, currency, sale price and tax defaults; the UI
 prefills prices only when currencies match and requires manual prices otherwise.
 Customer addresses can prefill editable order address snapshots. Party/catalog
 view permissions are not required just to populate an authorized sales form.
@@ -100,7 +123,7 @@ GET `/sales-orders/edit-options/` requires order view/change and item view.
 
 Web routes (namespace `sale_pages`):
 
-- `/sale/sales-orders/`: list, search, pagination and view/edit/delete row icons.
+- `/sale/sales-orders/`: list, search, pagination and view/edit/delete/complete row icons.
 - `/sale/sales-orders/add/`: create an order with products; success returns to list.
 - `/sale/sales-orders/<id>/`: order details, totals and paginated items.
 - `/sale/sales-orders/<id>/edit/`: edit header and all lines; success returns to list.
@@ -108,6 +131,9 @@ Web routes (namespace `sale_pages`):
 Create pages require order view/add and item add permissions. Edit pages require
 order view/change plus item view/add/change/delete because the editor supports
 all line operations. Detail pages show lines only with item view permission.
+The Complete sale action requires change permission, is disabled after success,
+and completed rows keep edit/delete visible but disabled. Direct edit pages also enforce read-only
+behavior, including when another request completes a sale while it is being edited.
 The editor loads every item page before enabling save, retains agreed prices,
 and preserves unchanged historical customer links even after Party soft deletion.
 Deleted customers cannot be selected for new assignments.

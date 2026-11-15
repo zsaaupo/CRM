@@ -1,6 +1,15 @@
 # Purchase models
 
 PurchaseOrder and PurchaseOrderItem inherit common.models.TimeStampedModel.
+PurchaseOrder also has an optional receiving warehouse and server-controlled
+is_received=False flag. Set the warehouse before receiving. POST
+`/purchase/api/purchase-orders/receive/` with purchase_id and is_received=true
+receives every item in one transaction and permanently locks the purchase and
+its items against normal API edits/deletion. Receipt increments one Stock row
+per warehouse/product, combining repeated product lines and purchases. Retrying
+the same purchase returns its received result without increasing stock again.
+The purchase creation page includes the receiving warehouse dropdown; details
+show the warehouse and receipt flag.
 Supplier is an optional protected foreign key to people.Party (`null=True`,
 `blank=True`). New assignments require a non-deleted party with is_supplier=True.
 Parties with both roles are eligible; is_active is a separate business status.
@@ -17,8 +26,8 @@ imported Party records.
 
 Order numbers default to PO- followed by a UUID hex string, protected by a unique
 constraint. Status is a protected foreign key to common.TradeStatus, referencing its
-unique code. TradeStatus inherits ProductStatus as a fieldless proxy and shares
-its records; products reference ProductStatus directly. Draft, confirmed, closed and cancelled
+unique code. TradeStatus has its own table and audit fields, independent of
+ProductStatus, which products reference directly. Draft, confirmed, closed and cancelled
 are seeded records, not hard-coded choices. New statuses need no schema change.
 Dates, positive exchange rates, nonnegative shipping, and valid status references
 have database constraints.
@@ -48,7 +57,15 @@ CRUD APIs are available under `/purchase/api/`; see [API.md](API.md) for routes,
 permissions and request examples. The purchase list and creation pages are under
 `/purchase/purchase-orders/`. The creation page saves an order and all its items
 atomically through the order API; individual item APIs remain available.
-Confirmation/status-transition services, posted-document immutability, receipts
-and stock updates are separate future work.
-Creating an order does not change stock. Historical amounts and unit usage should
-be frozen through those services when confirmation is implemented.
+Unreceived purchases have permission-controlled edit actions on the list. The
+edit page reuses the create form, loads all item pages and saves header/line
+changes atomically through PATCH, then returns to the list. Received purchases
+keep edit and delete actions visible but disabled and remain locked by the API.
+The list delete action requires order and item delete permissions and removes
+an unreceived purchase and its lines atomically. Nested edits preserve existing
+line IDs and creation metadata and enforce each item action's permissions.
+Creating or editing an unreceived order does not change stock. The receive
+service is the only purchase action that increases stock. It does not change
+the trade status, create a movement ledger, or support partial receipts. Received
+order/item writes use a shared parent guard. Programmatic callers should use
+these serializers/services; direct ORM or SQL writes bypass the API workflow.
