@@ -47,6 +47,104 @@ ID and audit fields are read-only. The server fills create_by and modified_by
 from the signed-in username and preserves creation metadata during updates.
 JSON, form-encoded, and multipart requests are accepted, matching inventory APIs.
 
+## Warehouse scope enforcement
+
+Warehouse data APIs require HasWarehouseAccess in addition to IsAuthenticated
+and existing model CRUD permission checks using the assigned role's grants.
+Direct user permission grants do not bypass the role for warehouse features. A role's specific assignment limits
+warehouses, stock, purchase orders/items and sales orders/items to that warehouse.
+All warehouses permits every warehouse and existing warehouse-less drafts.
+Superusers are unrestricted. Missing/unassigned configurations deny access with
+403, even when the user has CRUD permissions. Existing users must be assigned
+through the assignment APIs before using these features; no automatic grants
+are made during rollout.
+
+Scope is applied before search, counts, pagination and object lookup. An
+out-of-scope detail/update/delete ID returns 404. Creates default a missing
+warehouse to the user's specific assignment; an explicit null or another
+warehouse is rejected with 403. Updates cannot move records outside that scope.
+Standalone item APIs inherit scope from their parent orders and validate parent
+references against scoped querysets. Unknown/out-of-scope parent IDs return 400.
+
+Purchase/sales options contain only allowed active warehouses and include
+`warehouse_scope: {"warehouse": 2, "all_warehouses": false}` for a restricted
+user. Forms select and disable that warehouse; the backend enforces the same
+rule on direct API calls. All-warehouse users can choose a warehouse. Shared
+products, parties, currencies and statuses keep their existing permissions.
+Warehouse creation requires all-warehouse access plus add_warehouse permission.
+
+Receipt and completion services recheck scope inside their stock transaction,
+including repeat requests. Order/item edits and deletes recheck scope under
+the same assignment lock. Assignment changes take effect on the next request
+without logging in again. Received/completed records retain their existing
+read-only rules. Pages/navigation and warehouse/stock Django admin queries and
+warehouse choices follow the same scope. All-warehouse access grants no CRUD
+permissions by itself.
+
+
+## Role warehouse access assignments
+
+Warehouse scope belongs to a Django Group (role), not a user. Each role can have
+one RoleWarehouseAccess configuration. Every user assigned that role inherits
+its warehouse or All warehouses setting. The existing account role-assignment
+APIs continue to assign one group to each user.
+
+| URL | Methods | Purpose |
+| --- | --- | --- |
+| /warehouse/api/role-warehouse-access/ | GET, POST | List and create role assignments |
+| /warehouse/api/role-warehouse-access/list/ | GET | Read-only assignment list |
+| /warehouse/api/role-warehouse-access/<id>/ | GET, PUT, PATCH, DELETE | Read, update or delete |
+| /warehouse/api/role-warehouse-access/<id>/update/ | PUT, PATCH | Dedicated update |
+
+The URL ID is the configuration ID, not the role ID. Search ?q=term matches role
+names and warehouse names/codes. Filters are ?role=<id>, ?warehouse=<id> and
+?all_warehouses=true or false. Lists use 20-row pagination, ordered by role ID.
+Read endpoints support HEAD/OPTIONS; dedicated updates support OPTIONS.
+
+These APIs use the existing shared model-permission logic, with grants coming
+from the user's assigned role: warehouse.view_rolewarehouseaccess,
+warehouse.add_rolewarehouseaccess, warehouse.change_rolewarehouseaccess and
+warehouse.delete_rolewarehouseaccess. No additional management permission is
+required. Dedicated updates require change permission without requiring view.
+Session authentication and CSRF for writes are required.
+
+POST /warehouse/api/role-warehouse-access/:
+
+```json
+{"role": 7, "warehouse": 2, "all_warehouses": false}
+```
+
+Success returns 201 with message and role_warehouse_access. Records contain id,
+role, role_name, warehouse, warehouse_name, warehouse_code, all_warehouses and
+server-controlled audit fields. Role cannot be changed after creation.
+
+PATCH to switch to all warehouses:
+
+```json
+{"warehouse": null, "all_warehouses": true}
+```
+
+Both settings may be cleared to deny warehouse access to the role's members.
+A warehouse plus all_warehouses=true is invalid. Invalid/duplicate roles and
+invalid warehouse IDs return 400. DELETE returns 204 and removes only the
+configuration, preserving the role, members, warehouses and stock. Its members
+then lose warehouse access.
+
+Superusers can configure any role without having a role themselves. Other
+managers need an assigned role with warehouse access. They cannot change or
+delete their own role's scope, or manage a role containing a superuser. A
+specific-warehouse manager can manage only assignments within that warehouse
+or unassigned configurations. Only an all-warehouse manager or superuser can
+grant All warehouses. These limits also apply when assigning a warehouse-enabled
+role to a user through the account APIs.
+
+No role, multiple roles, or a role without configured warehouse access denies
+warehouse data access. Changing a role's scope applies to all its members on the
+next request. Changing a user's role changes their inherited access immediately.
+Old user-warehouse-access routes are removed. Migration converts compatible
+user configurations to roles and preserves CRUD permission grants; it refuses
+conflicting member scopes rather than silently broadening access.
+
 ## Web pages
 
 The sidebar includes a Warehouses section for users with warehouse or stock view
@@ -68,39 +166,11 @@ the existing detail API with confirmation and refresh the list after deletion.
 Buttons are hidden without their action permission; APIs enforce permissions
 and CSRF independently. An absent edit record is reported by the detail API.
 
-## Add stock
+## Stock changes
 
-- POST `/warehouse/api/stocks/` creates a Stock row. Returns 201 with `message`
-  and `stock` keys; audit fields are server-controlled.
-- GET `/warehouse/api/stocks/options/` returns `warehouse` and `product` arrays
-  containing only `value` and `label`; product labels include SKU and unit code.
-- `/warehouse/stocks/add/` renders the Add stock page. Its dropdowns load through
-  the options API; saving stays disabled until required choices load successfully.
-- The page and both APIs require `warehouse.add_stock`, including group grants.
-  The options API does not require warehouse/product management permissions.
-- Each warehouse list row has an Add stock plus icon for users with
-  `warehouse.add_stock`. It opens `/warehouse/stocks/add/?warehouse=<id>` and
-  preselects that warehouse after the options API loads. The warehouse dropdown
-  is disabled, but its ID is included in the API submission. There is no Add stock
-  sidebar menu entry. A missing or invalid warehouse keeps saving disabled and
-  asks the user to return to the list and choose a valid warehouse.
-- Successful creation redirects to the warehouse list if the user has
-  `warehouse.view_warehouse`; otherwise it redirects to the dashboard.
-
-```json
-{
-  "warehouse": 1,
-  "product": 2,
-  "quantity": "12.123456"
-}
-```
-
-Warehouse and product are numeric IDs and must exist. Quantity is nonnegative,
-supports six decimal places, and defaults to zero when omitted. Duplicate
-warehouse/product pairs return 400; this endpoint creates a balance and does not
-increment or overwrite an existing balance. Writes require session cookies and
-CSRF. Only POST/OPTIONS are supported by the creation endpoint. Options are
-read-only (GET/HEAD/OPTIONS). All responses are marked no-store.
+Manual stock creation through the API or dashboard is unavailable. Purchase
+receipts create or increase warehouse/product balances; completing a sale
+decreases existing balances. Existing stock data is preserved.
 
 ## Stock list and details
 

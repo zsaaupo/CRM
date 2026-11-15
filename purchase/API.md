@@ -145,6 +145,14 @@ shown only to users with `inventory.view_product`.
 
 ## Deletion and totals
 
+Warehouse scope and CRUD permissions are inherited from the user's single role. Specific-warehouse
+users can only list/read/create/change/delete their own warehouse's orders/items
+and receive those purchases. Missing warehouse on creation defaults to their
+assignment; explicit null or another warehouse is rejected. Options show only
+their active assigned warehouse and the form locks its dropdown. Unassigned
+users are denied; all-warehouse users/superusers retain broader scope. See
+[warehouse scope rules](../warehouse/API.md#warehouse-scope-enforcement).
+
 DELETE performs hard deletion of unreceived records and returns 204. Deleting
 an order with items requires both order and item delete permissions; its items
 and header are removed atomically. Received records reject deletion with 409.

@@ -1,3 +1,4 @@
+from warehouse.tests.helpers import assign_warehouse_role
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group, Permission
 from django.test import Client, TestCase
@@ -11,6 +12,7 @@ from purchase.serializers import PurchaseOrderDetailSerializer
 class PurchaseDetailPageTests(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_user(username='purchase-reader')
+        self.role = assign_warehouse_role(self.user, all_warehouses=True).role
         self.client.force_login(self.user)
         unit = UnitOfMeasure.objects.create(name='Pieces', code='PCS')
         self.product = Product.objects.create(name='Keyboard', sku='KEY', unit=unit, currency_id='BDT')
@@ -21,7 +23,7 @@ class PurchaseDetailPageTests(TestCase):
         self.api_url = reverse('purchase:purchase-order-detail', args=[self.order.pk])
 
     def grant(self, *codenames):
-        self.user.user_permissions.add(*Permission.objects.filter(content_type__app_label='purchase', codename__in=codenames))
+        self.role.permissions.add(*Permission.objects.filter(content_type__app_label='purchase', codename__in=codenames))
 
     def test_read_only_detail_page_and_list_action_use_order_permission(self):
         self.assertRedirects(Client().get(self.url), reverse('account_pages:login'))
@@ -76,7 +78,7 @@ class PurchaseDetailPageTests(TestCase):
         last = self.client.get(first['next']).json()
         self.assertEqual([row['line_number'] for row in last['results']], [21, 22])
         self.assertTrue(all(row['purchase_order'] == self.order.pk for row in first['results'] + last['results']))
-        self.user.user_permissions.add(Permission.objects.get(content_type__app_label='inventory', codename='view_product'))
+        self.role.permissions.add(Permission.objects.get(content_type__app_label='inventory', codename='view_product'))
         self.assertContains(self.client.get(self.url), 'data-product-url-template="/inventory/products/0/"')
 
     def test_queries_missing_record_empty_items_and_revoked_access(self):
@@ -87,7 +89,7 @@ class PurchaseDetailPageTests(TestCase):
         role = Group.objects.create(name='Purchase readers')
         role.permissions.add(*Permission.objects.filter(content_type__app_label='purchase',
                              codename__in=['view_purchaseorder', 'view_purchaseorderitem']))
-        self.user.groups.add(role)
+        assign_warehouse_role(self.user, all_warehouses=True, role=role)
         self.assertEqual(self.client.get(self.url).status_code, 200)
         missing = reverse('purchase:purchase-order-detail', args=[999999])
         self.assertEqual(self.client.get(missing).status_code, 404)

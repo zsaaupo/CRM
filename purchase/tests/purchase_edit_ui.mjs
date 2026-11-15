@@ -47,7 +47,7 @@ function line() {
     return row;
 }
 
-async function setup({ received = false, failPage = false, conflict = false, edit = true } = {}) {
+async function setup({ received = false, failPage = false, conflict = false, edit = true, restricted = false } = {}) {
     const form = new Element('form');
     const fields = Object.fromEntries(['supplier', 'warehouse', 'supplier_reference', 'order_date', 'expected_date', 'currency',
         'exchange_rate', 'status', 'shipping_cost', 'notes', 'csrfmiddlewaretoken'].map(name => [name, new Element('input')]));
@@ -62,10 +62,10 @@ async function setup({ received = false, failPage = false, conflict = false, edi
         : parts[selector.match(/^\[data-purchase-(.*)\]$/)?.[1]];
     form.querySelectorAll = selector => selector === '[data-purchase-line]' ? parts.lines.children : [];
     parts.lines.querySelectorAll = () => parts.lines.children;
-    const options = { base_currency: 'BDT', supplier: [], warehouse: [{ value: 1, label: 'Main' }],
+    const options = { warehouse_scope: {all_warehouses: !restricted, warehouse: restricted ? 1 : null}, base_currency: 'BDT', supplier: [], warehouse: [{ value: 1, label: 'Main' }],
         currency: [{ value: 'BDT', label: 'Taka', exchange_rate: '1' }, { value: 'USD', label: 'Dollar', exchange_rate: '120' }],
         status: [{ value: 'draft', label: 'Draft' }], product: [{ value: 5, label: 'Rice', unit: 9, unit_label: 'Pieces (PCS)' }] };
-    const record = { id: 7, is_received: received, supplier: 44, supplier_name: 'Historical supplier', warehouse: 2,
+    const record = { id: 7, is_received: received, supplier: 44, supplier_name: 'Historical supplier', warehouse: restricted ? 1 : 2,
         warehouse_name: 'Inactive branch', supplier_reference: 'REF', order_date: '2026-11-15', expected_date: null,
         currency: 'USD', exchange_rate: '121.50000000', status: 'draft', shipping_cost: '3.0000', notes: 'Agreed terms' };
     const items = Array.from({ length: 26 }, (_, index) => ({ id: index + 101, line_number: index + 1, product: 5, unit: 9,
@@ -139,10 +139,10 @@ assert.equal(creator.saved[0].data.items[0].id, undefined);
 vm.runInContext(catalog, editor.context);
 editor.context.columns = [{ key: 'actions', type: 'edit' }];
 editor.context.rowData = { id: 7, order_number: 'PO-7', is_received: false };
-const editableRow = vm.runInContext("catalogRow(rowData, columns, '/purchase/0/edit/', null, '', '/purchase/0/', 'is_received')", editor.context);
+const editableRow = vm.runInContext("catalogRow(rowData, columns, '/purchase/0/edit/', null, '/purchase/0/', 'is_received')", editor.context);
 assert.equal(editableRow.children[0].children[0].children.length, 2);
 editor.context.rowData.is_received = true;
-const receivedRow = vm.runInContext("catalogRow(rowData, columns, '/purchase/0/edit/', null, '', '/purchase/0/', 'is_received')", editor.context);
+const receivedRow = vm.runInContext("catalogRow(rowData, columns, '/purchase/0/edit/', null, '/purchase/0/', 'is_received')", editor.context);
 assert.equal(receivedRow.children[0].children[0].children.length, 2);
 assert.equal(receivedRow.children[0].children[0].children[0].href, '/purchase/7/');
 assert.equal(receivedRow.children[0].children[0].children[1].tagName, 'BUTTON');
@@ -151,3 +151,13 @@ assert.equal(receivedRow.children[0].children[0].children[1].href, undefined);
 const ordinaryRow = vm.runInContext("catalogRow(rowData, columns, '/inventory/0/edit/')", editor.context);
 assert.equal(ordinaryRow.children[0].children[0].children.length, 1);
 console.log('Purchase editing UI passed: conditional icons, all item pages, preserved IDs/prices, historical supplier, PATCH/POST, redirects and received-order locking.');
+
+const restrictedCreator = await setup({edit: false, restricted: true});
+assert.equal(restrictedCreator.fields.warehouse.disabled, true);
+assert.equal(String(restrictedCreator.fields.warehouse.value), '1');
+await restrictedCreator.form.listeners.submit(event);
+assert.equal(String(restrictedCreator.saved[0].data.warehouse), '1');
+const restrictedEditor = await setup({restricted: true});
+assert.equal(restrictedEditor.fields.warehouse.disabled, true);
+assert.equal(String(restrictedEditor.fields.warehouse.value), '1');
+console.log('Assigned warehouse stays selected and disabled for creation and editing.');

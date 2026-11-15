@@ -11,7 +11,7 @@ function actionIcon(pathData) {
     return svg;
 }
 
-export function catalogRow(record, columns, editUrlTemplate = "", onDelete = null, stockUrlTemplate = "", viewUrlTemplate = "", editDisabledField = "", onReceive = null, onComplete = null, deleteDisabledField = "") {
+export function catalogRow(record, columns, editUrlTemplate = "", onDelete = null, viewUrlTemplate = "", editDisabledField = "", onReceive = null, onComplete = null, deleteDisabledField = "") {
     const row = document.createElement("tr");
     for (const column of columns) {
         const cell = document.createElement("td");
@@ -27,15 +27,6 @@ export function catalogRow(record, columns, editUrlTemplate = "", onDelete = nul
                 view.setAttribute("aria-label", view.title);
                 view.append(actionIcon("M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12ZM15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"));
                 actions.append(view);
-            }
-            if (stockUrlTemplate) {
-                const stock = document.createElement("a");
-                stock.href = stockUrlTemplate.replace("__warehouse__", encodeURIComponent(record.id));
-                stock.className = "icon-button inventory-stock-button";
-                stock.title = `Add stock to ${record.name || record.code}`;
-                stock.setAttribute("aria-label", stock.title);
-                stock.append(actionIcon("M12 5v14M5 12h14"));
-                actions.append(stock);
             }
             if (editUrlTemplate) {
                 const disabled = Boolean(editDisabledField && record[editDisabledField] === true);
@@ -153,7 +144,7 @@ if (panel) {
     function renderRecord(record) {
         const row = catalogRow(record, columns, panel.dataset.editUrlTemplate,
             deleteDialog && panel.dataset.deleteUrlTemplate ? openDelete : null,
-            panel.dataset.stockUrlTemplate, panel.dataset.viewUrlTemplate, panel.dataset.editDisabledField,
+            panel.dataset.viewUrlTemplate, panel.dataset.editDisabledField,
             receiveForm && panel.dataset.receiveUrl ? receivePurchase : null,
             completeForm && panel.dataset.completeUrl ? completeSale : null, panel.dataset.deleteDisabledField);
         const button = row.querySelector("[data-catalog-receive-action]");

@@ -9,6 +9,8 @@ from rest_framework.exceptions import APIException, NotFound, PermissionDenied, 
 
 from inventory.models import Product
 from warehouse.models import Stock, WareHouse
+from warehouse.scope import lock_warehouse_scope, scoped_queryset
+from account.permissions import has_role_permissions
 from .models import PurchaseOrder
 
 
@@ -27,11 +29,13 @@ class PurchaseBusy(APIException):
     default_code = 'purchase_busy'
 
 
-def lock_editable_purchase(pk):
+def lock_editable_purchase(pk, actor):
     """Call inside atomic. A conditional write also serializes SQLite writers."""
     try:
-        PurchaseOrder.objects.filter(pk=pk, is_received=False).update(is_received=False)
-        order = PurchaseOrder.objects.select_for_update().get(pk=pk)
+        scope = lock_warehouse_scope(actor)
+        orders = scoped_queryset(PurchaseOrder.objects.all(), scope)
+        orders.filter(pk=pk, is_received=False).update(is_received=False)
+        order = orders.select_for_update().get(pk=pk)
     except PurchaseOrder.DoesNotExist as exc:
         raise NotFound('Purchase order not found.') from exc
     except OperationalError as exc:
@@ -47,13 +51,13 @@ class PurchaseDeleteGuardMixin:
     @transaction.atomic
     def perform_destroy(self, instance):
         if isinstance(instance, PurchaseOrder):
-            instance = lock_editable_purchase(instance.pk)
+            instance = lock_editable_purchase(instance.pk, self.request.user)
             if instance.items.exists():
-                if not self.request.user.has_perm('purchase.delete_purchaseorderitem'):
+                if not has_role_permissions(self.request.user, ('purchase.delete_purchaseorderitem',)):
                     raise PermissionDenied('You do not have permission to delete purchase order items.')
                 instance.items.all().delete()
         else:
-            lock_editable_purchase(instance.purchase_order_id)
+            lock_editable_purchase(instance.purchase_order_id, self.request.user)
             current = type(instance).objects.filter(pk=instance.pk).first()
             if current is None:
                 raise NotFound('Purchase order item not found.')
@@ -64,17 +68,21 @@ class PurchaseDeleteGuardMixin:
 
 
 def receive_purchase(actor, purchase_id):
-    if not actor.is_authenticated or not actor.has_perm('purchase.change_purchaseorder'):
+    if not has_role_permissions(actor, ('purchase.change_purchaseorder',)):
         raise PermissionDenied('You do not have permission to receive a purchase.')
     try:
         with transaction.atomic():
+            scope = lock_warehouse_scope(actor)
+            if not has_role_permissions(actor, ('purchase.change_purchaseorder',)):
+                raise PermissionDenied('Your role does not have permission to receive a purchase.')
+            orders = scoped_queryset(PurchaseOrder.objects.all(), scope)
             now = timezone.now()
             # This is both a once-only claim and the first database write. Losing
             # requests wait/retry and then see True; any later failure rolls it back.
-            claimed = PurchaseOrder.objects.filter(pk=purchase_id, is_received=False).update(
+            claimed = orders.filter(pk=purchase_id, is_received=False).update(
                 is_received=True, modified_by=actor.get_username(), updated_at=now)
             try:
-                order = PurchaseOrder.objects.select_for_update().get(pk=purchase_id)
+                order = orders.select_for_update().get(pk=purchase_id)
             except PurchaseOrder.DoesNotExist as exc:
                 raise NotFound('Purchase order not found.') from exc
             if not claimed:

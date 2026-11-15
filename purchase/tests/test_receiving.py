@@ -1,3 +1,4 @@
+from warehouse.tests.helpers import assign_warehouse_role
 from decimal import Decimal
 from unittest.mock import patch
 
@@ -17,7 +18,8 @@ from warehouse.models import Stock, WareHouse
 class PurchaseReceivingTests(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_user(username='purchase-receiver')
-        self.user.user_permissions.add(Permission.objects.get(content_type__app_label='purchase', codename='change_purchaseorder'))
+        self.role = assign_warehouse_role(self.user, all_warehouses=True).role
+        self.role.permissions.add(Permission.objects.get(content_type__app_label='purchase', codename='change_purchaseorder'))
         self.warehouse = WareHouse.objects.create(name='Main', address='Dhaka', phone='1')
         self.branch = WareHouse.objects.create(name='Branch', address='Dhaka', phone='2')
         self.unit = UnitOfMeasure.objects.create(name='Pieces', code='RECEIVE-PCS')
@@ -45,7 +47,7 @@ class PurchaseReceivingTests(TestCase):
         return response
 
     def grant(self, *codenames):
-        self.user.user_permissions.add(*Permission.objects.filter(content_type__app_label='purchase', codename__in=codenames))
+        self.role.permissions.add(*Permission.objects.filter(content_type__app_label='purchase', codename__in=codenames))
 
     def test_receiving_adds_stock_and_marks_purchase_read_only(self):
         response = self.receive()
@@ -193,7 +195,7 @@ class PurchaseReceivingTests(TestCase):
         self.receive(status=400)
         self.order.refresh_from_db()
         self.assertFalse(self.order.is_received)
-        with patch('purchase.services.PurchaseOrder.objects.filter', side_effect=OperationalError('database is locked')):
+        with patch('purchase.services.lock_warehouse_scope', side_effect=OperationalError('database is locked')):
             self.receive(status=409)
         self.grant('change_purchaseorderitem')
         with patch('purchase.serializers.PurchaseOrderItemSerializer.is_valid', side_effect=OperationalError('database table is locked')):
@@ -202,11 +204,11 @@ class PurchaseReceivingTests(TestCase):
             self.assertEqual(response.status_code, 409, response.data)
 
     def test_permission_csrf_group_grants_and_supported_methods(self):
-        self.user.user_permissions.clear()
+        self.role.permissions.clear()
         self.receive(status=403)
         role = Group.objects.create(name='Purchase receivers')
         role.permissions.add(Permission.objects.get(content_type__app_label='purchase', codename='change_purchaseorder'))
-        self.user.groups.add(role)
+        assign_warehouse_role(self.user, all_warehouses=True, role=role)
         self.client.credentials()
         self.receive(status=403)
         self.client.credentials(HTTP_X_CSRFTOKEN=self.token)
@@ -220,14 +222,14 @@ class PurchaseReceivingTests(TestCase):
     def test_purchase_list_exposes_receive_action_only_with_change_permission(self):
         view = Permission.objects.get(content_type__app_label='purchase', codename='view_purchaseorder')
         change = Permission.objects.get(content_type__app_label='purchase', codename='change_purchaseorder')
-        self.user.user_permissions.clear()
-        self.user.user_permissions.add(view)
+        self.role.permissions.clear()
+        self.role.permissions.add(view)
         url = reverse('purchase_pages:purchase-list')
         response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
         self.assertNotIn('receive_api_url', response.context)
         self.assertNotContains(response, 'data-catalog-receive-form')
-        self.user.user_permissions.add(change)
+        self.role.permissions.add(change)
         response = self.client.get(url)
         self.assertEqual(response.context['receive_api_url'], self.url)
         self.assertContains(response, f'data-receive-url="{self.url}"')
@@ -236,7 +238,7 @@ class PurchaseReceivingTests(TestCase):
         self.assertNotIn('edit_url_template', response.context)
 
     def test_list_action_api_contract_returns_received_flag_and_safe_retries(self):
-        self.user.user_permissions.add(Permission.objects.get(content_type__app_label='purchase', codename='view_purchaseorder'))
+        self.role.permissions.add(Permission.objects.get(content_type__app_label='purchase', codename='view_purchaseorder'))
         page = self.client.get(reverse('purchase_pages:purchase-list'))
         response = self.client.post(page.context['receive_api_url'], {'purchase_id': self.order.pk, 'is_received': True}, format='json')
         self.assertEqual(response.status_code, 200, response.data)

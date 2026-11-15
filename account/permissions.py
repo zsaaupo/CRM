@@ -1,5 +1,8 @@
 from rest_framework.permissions import BasePermission
 from django.core.exceptions import PermissionDenied
+from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Permission
+from django.db.models import F
 
 
 ACCESS_RULES = {
@@ -31,6 +34,24 @@ def check_role_permission_target(actor, group):
         raise PermissionDenied('Only a superuser can change permissions of their own role.')
 
 
+def lock_user_access(user_ids):
+    """Call inside atomic before reading/changing a user's role-dependent access."""
+    get_user_model().objects.filter(pk__in=sorted(set(user_ids))).update(is_active=F('is_active'))
+
+
+def has_role_permissions(user, permissions):
+    if not user.is_authenticated or not user.is_active:
+        return False
+    if user.is_superuser:
+        return True
+    roles = list(user.groups.order_by('pk').values_list('pk', flat=True)[:2])
+    if len(roles) != 1:
+        return False
+    granted = {f'{app}.{code}' for app, code in Permission.objects.filter(group__pk=roles[0]).values_list(
+        'content_type__app_label', 'codename')}
+    return all(permission in granted for permission in permissions)
+
+
 class HasRequiredPermissions(BasePermission):
     """Require the view's declared Django permissions, including group grants."""
 
@@ -48,5 +69,6 @@ class HasRequiredPermissions(BasePermission):
         return bool(
             request.user.is_authenticated
             and permissions
-            and request.user.has_perms(permissions)
+            and (has_role_permissions(request.user, permissions) if getattr(view, 'role_permissions_only', False)
+                 else request.user.has_perms(permissions))
         )

@@ -12,6 +12,8 @@ from common.view import BaseAPIMixin, BaseDetailAPIView, BaseListAPIView, BaseLi
 from inventory.models import Currency, Product
 from people.models import Party
 from warehouse.models import WareHouse
+from warehouse.scope import WarehouseScopeAPIMixin, scoped_queryset, warehouse_scope, warehouse_scope_options
+from account.permissions import has_role_permissions
 
 from .models import PurchaseOrder, PurchaseOrderItem
 from .services import PurchaseBusy, PurchaseDeleteGuardMixin, receive_purchase
@@ -30,7 +32,7 @@ class PurchaseConcurrencyMixin:
         return super().handle_exception(exc)
 
 
-class PurchaseOrderListCreateAPIView(PurchaseConcurrencyMixin, BaseListCreateAPIView):
+class PurchaseOrderListCreateAPIView(PurchaseConcurrencyMixin, WarehouseScopeAPIMixin, BaseListCreateAPIView):
     serializer_class = PurchaseOrderSerializer
     queryset = PurchaseOrder.objects.select_related('currency', 'status', 'supplier', 'warehouse').prefetch_related('items')
     response_key = 'purchase_order'
@@ -41,19 +43,19 @@ class PurchaseOrderListCreateAPIView(PurchaseConcurrencyMixin, BaseListCreateAPI
         return PurchaseOrderCreateSerializer if self.request.method == 'POST' else PurchaseOrderSerializer
 
     def perform_create(self, serializer):
-        if serializer.validated_data.get('items') and not self.request.user.has_perm('purchase.add_purchaseorderitem'):
+        if serializer.validated_data.get('items') and not has_role_permissions(self.request.user, ('purchase.add_purchaseorderitem',)):
             raise PermissionDenied('You do not have permission to add purchase order items.')
         super().perform_create(serializer)
 
 
-class PurchaseOrderListAPIView(PurchaseConcurrencyMixin, BaseListAPIView):
+class PurchaseOrderListAPIView(PurchaseConcurrencyMixin, WarehouseScopeAPIMixin, BaseListAPIView):
     serializer_class = PurchaseOrderSerializer
     queryset = PurchaseOrderListCreateAPIView.queryset
     search_fields = PurchaseOrderListCreateAPIView.search_fields
     ordering = PurchaseOrderListCreateAPIView.ordering
 
 
-class PurchaseOrderDetailAPIView(PurchaseConcurrencyMixin, PurchaseDeleteGuardMixin, BaseDetailAPIView):
+class PurchaseOrderDetailAPIView(PurchaseConcurrencyMixin, WarehouseScopeAPIMixin, PurchaseDeleteGuardMixin, BaseDetailAPIView):
     serializer_class = PurchaseOrderDetailSerializer
     queryset = PurchaseOrderListCreateAPIView.queryset
 
@@ -61,7 +63,7 @@ class PurchaseOrderDetailAPIView(PurchaseConcurrencyMixin, PurchaseDeleteGuardMi
         return PurchaseOrderCreateSerializer if self.request.method in ('PUT', 'PATCH') else PurchaseOrderDetailSerializer
 
 
-class PurchaseOrderUpdateAPIView(PurchaseConcurrencyMixin, BaseUpdateAPIView):
+class PurchaseOrderUpdateAPIView(PurchaseConcurrencyMixin, WarehouseScopeAPIMixin, BaseUpdateAPIView):
     serializer_class = PurchaseOrderCreateSerializer
     queryset = PurchaseOrderListCreateAPIView.queryset
 
@@ -78,29 +80,33 @@ class PurchaseOrderItemQuerysetMixin:
         return queryset.filter(purchase_order_id=order_id) if order_id is not None else queryset
 
 
-class PurchaseOrderItemListCreateAPIView(PurchaseConcurrencyMixin, PurchaseOrderItemQuerysetMixin, BaseListCreateAPIView):
+class PurchaseOrderItemListCreateAPIView(PurchaseConcurrencyMixin, PurchaseOrderItemQuerysetMixin, WarehouseScopeAPIMixin, BaseListCreateAPIView):
+    warehouse_lookup = "purchase_order__warehouse_id"
     serializer_class = PurchaseOrderItemSerializer
     queryset = PurchaseOrderItem.objects.select_related('purchase_order', 'product', 'unit')
     response_key = 'purchase_order_item'
 
 
-class PurchaseOrderItemListAPIView(PurchaseConcurrencyMixin, PurchaseOrderItemQuerysetMixin, BaseListAPIView):
+class PurchaseOrderItemListAPIView(PurchaseConcurrencyMixin, PurchaseOrderItemQuerysetMixin, WarehouseScopeAPIMixin, BaseListAPIView):
+    warehouse_lookup = "purchase_order__warehouse_id"
     serializer_class = PurchaseOrderItemSerializer
     queryset = PurchaseOrderItemListCreateAPIView.queryset
 
 
-class PurchaseOrderItemDetailAPIView(PurchaseConcurrencyMixin, PurchaseDeleteGuardMixin, BaseDetailAPIView):
+class PurchaseOrderItemDetailAPIView(PurchaseConcurrencyMixin, WarehouseScopeAPIMixin, PurchaseDeleteGuardMixin, BaseDetailAPIView):
+    warehouse_lookup = "purchase_order__warehouse_id"
     serializer_class = PurchaseOrderItemSerializer
     queryset = PurchaseOrderItemListCreateAPIView.queryset
 
 
-class PurchaseOrderItemUpdateAPIView(PurchaseConcurrencyMixin, BaseUpdateAPIView):
+class PurchaseOrderItemUpdateAPIView(PurchaseConcurrencyMixin, WarehouseScopeAPIMixin, BaseUpdateAPIView):
+    warehouse_lookup = "purchase_order__warehouse_id"
     serializer_class = PurchaseOrderItemSerializer
     queryset = PurchaseOrderItemListCreateAPIView.queryset
 
 
 @method_decorator(never_cache, name='dispatch')
-class PurchaseReceiveAPIView(PurchaseConcurrencyMixin, BaseAPIMixin, GenericAPIView):
+class PurchaseReceiveAPIView(PurchaseConcurrencyMixin, WarehouseScopeAPIMixin, BaseAPIMixin, GenericAPIView):
     serializer_class = PurchaseReceiveSerializer
     required_permissions = ('purchase.change_purchaseorder',)
     http_method_names = ['post', 'options']
@@ -117,7 +123,7 @@ class PurchaseReceiveAPIView(PurchaseConcurrencyMixin, BaseAPIMixin, GenericAPIV
 
 
 @method_decorator(never_cache, name='dispatch')
-class PurchaseOptionsAPIView(PurchaseConcurrencyMixin, BaseAPIMixin, APIView):
+class PurchaseOptionsAPIView(PurchaseConcurrencyMixin, WarehouseScopeAPIMixin, BaseAPIMixin, APIView):
     """Reference data for purchase creation without catalog management permissions."""
 
     required_permissions = ('purchase.add_purchaseorder', 'purchase.add_purchaseorderitem')
@@ -126,13 +132,14 @@ class PurchaseOptionsAPIView(PurchaseConcurrencyMixin, BaseAPIMixin, APIView):
     def get(self, request):
         return Response({
             'base_currency': settings.INVENTORY_BASE_CURRENCY,
+            'warehouse_scope': warehouse_scope_options(request.user),
             'supplier': [
                 {'value': row.pk, 'label': f'{row.name} ({row.code})'}
                 for row in Party.objects.filter(is_supplier=True).order_by('name', 'pk')
             ],
             'warehouse': [
                 {'value': row.pk, 'label': str(row)}
-                for row in WareHouse.objects.filter(is_active=True).order_by('name', 'pk')
+                for row in scoped_queryset(WareHouse.objects.filter(is_active=True), warehouse_scope(request.user), 'pk').order_by('name', 'pk')
             ],
             'currency': [
                 {'value': row.code, 'label': f'{row.name} ({row.code})',

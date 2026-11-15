@@ -1,7 +1,9 @@
+from account.permissions import has_role_permissions
 from django.conf import settings
 from django.urls import reverse
 
 from account.page_views import ProtectedAccountPageView
+from warehouse.scope import WarehouseScopePageMixin
 
 
 SALES_CREATE_PERMISSIONS = (
@@ -13,7 +15,7 @@ SALES_EDIT_PERMISSIONS = (
 )
 
 
-class SalesListPageView(ProtectedAccountPageView):
+class SalesListPageView(WarehouseScopePageMixin, ProtectedAccountPageView):
     template_name = 'inventory/list.html'
     permission_required = ('sale.view_salesorder',)
 
@@ -26,8 +28,8 @@ class SalesListPageView(ProtectedAccountPageView):
             'add_url': reverse('sale_pages:create-sale'),
             'list_api_url': reverse('sale:sales-order-list-view'),
             'view_url_template': reverse('sale_pages:sale-detail', args=[0]),
-            'can_add': self.request.user.has_perms(SALES_CREATE_PERMISSIONS),
-            'can_delete': self.request.user.has_perms(('sale.delete_salesorder', 'sale.delete_salesorderitem')),
+            'can_add': has_role_permissions(self.request.user, SALES_CREATE_PERMISSIONS),
+            'can_delete': has_role_permissions(self.request.user, ('sale.delete_salesorder', 'sale.delete_salesorderitem')),
             'list_description': 'Customer orders, dates and totals.',
             'columns': [
                 {'key': key, 'label': label, 'type': kind}
@@ -40,18 +42,18 @@ class SalesListPageView(ProtectedAccountPageView):
                 ]
             ],
         })
-        if self.request.user.has_perms(SALES_EDIT_PERMISSIONS):
+        if has_role_permissions(self.request.user, SALES_EDIT_PERMISSIONS):
             context['edit_url_template'] = reverse('sale_pages:edit-sale', args=[0])
             context['edit_disabled_field'] = 'is_completed'
         if context['can_delete']:
             context['delete_url_template'] = reverse('sale:sales-order-detail', args=[0])
             context['delete_disabled_field'] = 'is_completed'
-        if self.request.user.has_perm('sale.change_salesorder'):
+        if has_role_permissions(self.request.user, ('sale.change_salesorder',)):
             context['complete_api_url'] = reverse('sale:sales-order-complete')
         return context
 
 
-class SalesDetailPageView(ProtectedAccountPageView):
+class SalesDetailPageView(WarehouseScopePageMixin, ProtectedAccountPageView):
     template_name = 'sale/detail.html'
     permission_required = ('sale.view_salesorder',)
 
@@ -62,19 +64,19 @@ class SalesDetailPageView(ProtectedAccountPageView):
             'list_url': reverse('sale_pages:sale-list'),
             'detail_api_url': reverse('sale:sales-order-detail', args=[self.kwargs['pk']]),
             'base_currency': settings.INVENTORY_BASE_CURRENCY,
-            'can_view_items': self.request.user.has_perm('sale.view_salesorderitem'),
+            'can_view_items': has_role_permissions(self.request.user, ('sale.view_salesorderitem',)),
         })
         if context['can_view_items']:
             context['items_api_url'] = (reverse('sale:sales-order-item-list-view')
                                         + f'?sales_order={self.kwargs["pk"]}')
-        if self.request.user.has_perm('inventory.view_product'):
+        if has_role_permissions(self.request.user, ('inventory.view_product',)):
             context['product_url_template'] = reverse('inventory_pages:product-detail', args=[0])
-        if self.request.user.has_perms(SALES_EDIT_PERMISSIONS):
+        if has_role_permissions(self.request.user, SALES_EDIT_PERMISSIONS):
             context['edit_url'] = reverse('sale_pages:edit-sale', args=[self.kwargs['pk']])
         return context
 
 
-class SalesCreatePageView(ProtectedAccountPageView):
+class SalesCreatePageView(WarehouseScopePageMixin, ProtectedAccountPageView):
     template_name = 'sale/create.html'
     permission_required = SALES_CREATE_PERMISSIONS
 

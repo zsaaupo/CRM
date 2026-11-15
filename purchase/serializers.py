@@ -10,11 +10,13 @@ from common.models import TradeStatus
 from common.serializers import AUDIT_FIELDS, CatalogSerializer
 from inventory.models import Currency
 from people.models import Party
+from warehouse.scope import WarehouseScopedSerializerMixin
+from account.permissions import has_role_permissions
 from .models import PurchaseOrder, PurchaseOrderItem
 from .services import PurchaseBusy, lock_editable_purchase
 
 
-class PurchaseOrderSerializer(CatalogSerializer):
+class PurchaseOrderSerializer(WarehouseScopedSerializerMixin, CatalogSerializer):
     warehouse_name = serializers.CharField(source='warehouse.name', read_only=True, default=None)
     supplier = serializers.PrimaryKeyRelatedField(
         queryset=Party.objects.filter(is_supplier=True), required=False, allow_null=True,
@@ -29,7 +31,7 @@ class PurchaseOrderSerializer(CatalogSerializer):
 
     @transaction.atomic
     def update(self, instance, validated_data):
-        instance = lock_editable_purchase(instance.pk)
+        instance = lock_editable_purchase(instance.pk, self.context['request'].user)
         self.instance = instance
         return super().update(instance, self.validate(validated_data))
 
@@ -43,7 +45,8 @@ class PurchaseOrderSerializer(CatalogSerializer):
         read_only_fields = [*AUDIT_FIELDS, 'order_number', 'is_received', 'subtotal', 'tax_total', 'grand_total']
 
 
-class PurchaseOrderItemSerializer(CatalogSerializer):
+class PurchaseOrderItemSerializer(WarehouseScopedSerializerMixin, CatalogSerializer):
+    warehouse_parent_field = 'purchase_order'
     product_name = serializers.CharField(source='product.name', read_only=True)
     product_sku = serializers.CharField(source='product.sku', read_only=True)
     unit_name = serializers.CharField(source='unit.name', read_only=True)
@@ -54,14 +57,14 @@ class PurchaseOrderItemSerializer(CatalogSerializer):
 
     @transaction.atomic
     def create(self, validated_data):
-        lock_editable_purchase(validated_data['purchase_order'].pk)
+        lock_editable_purchase(validated_data['purchase_order'].pk, self.context['request'].user)
         return super().create(validated_data)
 
     @transaction.atomic
     def update(self, instance, validated_data):
         destination = validated_data.get('purchase_order')
         for pk in sorted({instance.purchase_order_id, destination.pk if destination else instance.purchase_order_id}):
-            lock_editable_purchase(pk)
+            lock_editable_purchase(pk, self.context['request'].user)
         current = PurchaseOrderItem.objects.filter(pk=instance.pk).first()
         if current is None:
             raise NotFound('Purchase order item not found.')
@@ -167,7 +170,7 @@ class PurchaseOrderCreateSerializer(PurchaseOrderSerializer):
 
     @transaction.atomic
     def update(self, instance, validated_data):
-        order = lock_editable_purchase(instance.pk)
+        order = lock_editable_purchase(instance.pk, self.context['request'].user)
         items = validated_data.pop('items', None)
         self.instance = order
         if items is not None:
@@ -183,7 +186,7 @@ class PurchaseOrderCreateSerializer(PurchaseOrderSerializer):
                 for key, value in item.items() if key != 'id')]
             for action, needed in [('delete', bool(removed)), ('add', any('id' not in item for item in items)),
                                    ('change', bool(changed))]:
-                if needed and request is not None and not request.user.has_perm(f'purchase.{action}_purchaseorderitem'):
+                if needed and request is not None and not has_role_permissions(request.user, (f'purchase.{action}_purchaseorderitem',)):
                     raise PermissionDenied(f'You do not have permission to {action} purchase order items.')
             order.items.filter(pk__in=removed).delete()
             # Free final line numbers before swaps, preserving IDs and creation audits.

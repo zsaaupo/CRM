@@ -1,3 +1,4 @@
+from warehouse.tests.helpers import assign_warehouse_role
 from decimal import Decimal
 from unittest.mock import patch
 
@@ -18,6 +19,7 @@ from warehouse.models import Stock, WareHouse
 class SalesIntegrationTests(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_user(username='sales-editor')
+        self.role = assign_warehouse_role(self.user, all_warehouses=True).role
         self.customer = Party.objects.create(code='CUST', name='Customer', is_customer=True, address='Original address')
         self.unit = UnitOfMeasure.objects.create(name='Pieces', code='PCS')
         self.product = Product.objects.create(name='Keyboard', sku='KEY', unit=self.unit, currency_id='BDT',
@@ -42,10 +44,10 @@ class SalesIntegrationTests(TestCase):
         self.update = reverse('sale:sales-order-update', args=[self.order.pk])
 
     def grant_all(self):
-        self.user.user_permissions.set(Permission.objects.filter(content_type__app_label='sale'))
+        self.role.permissions.set(Permission.objects.filter(content_type__app_label='sale'))
 
     def grant_only(self, *codenames):
-        self.user.user_permissions.set(Permission.objects.filter(content_type__app_label='sale', codename__in=codenames))
+        self.role.permissions.set(Permission.objects.filter(content_type__app_label='sale', codename__in=codenames))
 
     def line(self, number=1, **changes):
         return {'line_number': number, 'product': self.product.pk, 'unit': self.unit.pk,

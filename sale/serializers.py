@@ -8,11 +8,12 @@ from common.models import TradeStatus
 from common.serializers import AUDIT_FIELDS, CatalogSerializer
 from inventory.models import Currency
 from people.models import Party
+from warehouse.scope import WarehouseScopedSerializerMixin
 from .models import SalesOrder, SalesOrderItem
 from .services import lock_order, require_item_permission
 
 
-class SalesOrderSerializer(CatalogSerializer):
+class SalesOrderSerializer(WarehouseScopedSerializerMixin, CatalogSerializer):
     warehouse_name = serializers.CharField(source='warehouse.name', read_only=True, default=None)
     customer = serializers.PrimaryKeyRelatedField(
         queryset=Party.objects.filter(is_customer=True), required=False, allow_null=True,
@@ -38,12 +39,13 @@ class SalesOrderSerializer(CatalogSerializer):
 
     @transaction.atomic
     def update(self, instance, validated_data):
-        current = lock_order(instance.pk)
+        current = lock_order(instance.pk, self.context['request'].user)
         self.instance = current
         return super().update(current, self.validate(validated_data))
 
 
-class SalesOrderItemSerializer(CatalogSerializer):
+class SalesOrderItemSerializer(WarehouseScopedSerializerMixin, CatalogSerializer):
+    warehouse_parent_field = 'sales_order'
     product_name = serializers.CharField(source='product.name', read_only=True)
     product_sku = serializers.CharField(source='product.sku', read_only=True)
     unit_name = serializers.CharField(source='unit.name', read_only=True)
@@ -68,12 +70,12 @@ class SalesOrderItemSerializer(CatalogSerializer):
 
     @transaction.atomic
     def create(self, validated_data):
-        lock_order(validated_data['sales_order'].pk)
+        lock_order(validated_data['sales_order'].pk, self.context['request'].user)
         return super().create(validated_data)
 
     @transaction.atomic
     def update(self, instance, validated_data):
-        lock_order(instance.sales_order_id)
+        lock_order(instance.sales_order_id, self.context['request'].user)
         try:
             current = SalesOrderItem.objects.get(pk=instance.pk)
         except SalesOrderItem.DoesNotExist as exc:
@@ -172,7 +174,7 @@ class SalesOrderCreateSerializer(SalesOrderSerializer):
 
     @transaction.atomic
     def update(self, instance, validated_data):
-        order = lock_order(instance.pk)
+        order = lock_order(instance.pk, self.context['request'].user)
         items = validated_data.pop('items', None)
         self.instance = order
         if items is not None:

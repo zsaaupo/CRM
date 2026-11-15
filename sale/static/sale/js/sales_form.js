@@ -163,6 +163,13 @@ export function initializeSalesForm(form) {
             choices(field("customer"), options.customer, "No customer");
             if (!Array.isArray(options.warehouse)) throw new Error('Could not load warehouses. Please try again.');
             choices(field('warehouse'), options.warehouse, 'No warehouse');
+            field('warehouse').disabled = options.warehouse_scope?.all_warehouses === false;
+            if (field('warehouse').disabled) {
+                field('warehouse').value = String(options.warehouse_scope.warehouse);
+                if (!options.warehouse.some(row => String(row.value) === field('warehouse').value) && !record) {
+                    throw new Error('Your assigned warehouse is unavailable. Contact an administrator.');
+                }
+            }
             choices(field("currency"), options.currency, "Select currency");
             choices(field("status"), options.status, "Select status");
             field("currency").value = options.currency.some((row) => row.value === options.base_currency) ? options.base_currency : "";

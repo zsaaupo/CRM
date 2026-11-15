@@ -1,5 +1,6 @@
 from decimal import Decimal
 
+from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
 from django.db import models
 from common.models import TimeStampedModel
@@ -30,3 +31,39 @@ class Stock(TimeStampedModel):
 
     def __str__(self):
         return f'{self.product} - {self.warehouse}: {self.quantity}'
+
+
+class RoleWarehouseAccess(TimeStampedModel):
+    """Warehouse scope inherited by users assigned to this role."""
+
+    role = models.OneToOneField(
+        'auth.Group', on_delete=models.CASCADE, related_name='warehouse_access',
+    )
+    warehouse = models.ForeignKey(
+        WareHouse, on_delete=models.PROTECT, null=True, blank=True,
+        related_name='role_access_assignments',
+    )
+    all_warehouses = models.BooleanField(
+        default=False,
+        help_text='Allow access to all warehouses, subject to the role\'s CRUD permissions.',
+    )
+
+    class Meta:
+        ordering = ['role_id']
+        verbose_name = 'role warehouse access'
+        verbose_name_plural = 'role warehouse access assignments'
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(all_warehouses=False) | models.Q(warehouse__isnull=True),
+                name='warehouse_role_access_scope_valid',
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.all_warehouses and self.warehouse_id is not None:
+            raise ValidationError({'warehouse': 'Clear the warehouse when all-warehouse access is enabled.'})
+
+    def __str__(self):
+        scope = 'All warehouses' if self.all_warehouses else str(self.warehouse) if self.warehouse_id else 'No warehouse access'
+        return f'{self.role.name} — {scope}'

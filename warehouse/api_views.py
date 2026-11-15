@@ -3,76 +3,48 @@ from common.view import (
     BaseUpdateAPIView,
 )
 
+from django.db import OperationalError, transaction
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import never_cache
-from rest_framework.generics import CreateAPIView, RetrieveAPIView
-from rest_framework.response import Response
-from rest_framework.views import APIView
+from rest_framework.generics import RetrieveAPIView
 
-from inventory.models import Product
-from .models import Stock, WareHouse
-from .serializers import StockFilterSerializer, StockReadSerializer, StockSerializer, WareHouseSerializer
+from .access import WarehouseAccessBusy, lock_assignment_write, managed_assignments
+from .models import Stock, RoleWarehouseAccess, WareHouse
+from .scope import WarehouseScopeAPIMixin
+from .serializers import (
+    StockFilterSerializer, StockReadSerializer, RoleWarehouseAccessFilterSerializer,
+    RoleWarehouseAccessSerializer, WareHouseSerializer,
+)
 
 
-class WareHouseListCreateAPIView(BaseListCreateAPIView):
+class WarehouseRecordScopeMixin(WarehouseScopeAPIMixin):
+    warehouse_lookup = 'pk'
+
+
+class WareHouseListCreateAPIView(WarehouseRecordScopeMixin, BaseListCreateAPIView):
     serializer_class = WareHouseSerializer
     queryset = WareHouse.objects.all()
     response_key = 'warehouse'
     search_fields = ['name', 'code', 'address', 'phone', 'email']
 
 
-class WareHouseListAPIView(BaseListAPIView):
+class WareHouseListAPIView(WarehouseRecordScopeMixin, BaseListAPIView):
     serializer_class = WareHouseSerializer
     queryset = WareHouse.objects.all()
     search_fields = WareHouseListCreateAPIView.search_fields
 
 
-class WareHouseDetailAPIView(BaseDetailAPIView):
+class WareHouseDetailAPIView(WarehouseRecordScopeMixin, BaseDetailAPIView):
     serializer_class = WareHouseSerializer
     queryset = WareHouse.objects.all()
 
 
-class WareHouseUpdateAPIView(BaseUpdateAPIView):
+class WareHouseUpdateAPIView(WarehouseRecordScopeMixin, BaseUpdateAPIView):
     serializer_class = WareHouseSerializer
     queryset = WareHouse.objects.all()
 
 
-@method_decorator(never_cache, name='dispatch')
-class StockCreateAPIView(BaseAPIMixin, CreateAPIView):
-    serializer_class = StockSerializer
-    queryset = Stock.objects.all()
-    required_permissions = ('warehouse.add_stock',)
-    http_method_names = ['post', 'options']
-
-    def perform_create(self, serializer):
-        actor = self.request.user.get_username()
-        self.save_record(serializer, create_by=actor, modified_by=actor)
-
-    def create(self, request, *args, **kwargs):
-        response = super().create(request, *args, **kwargs)
-        response.data = {'message': 'Stock created successfully.', 'stock': response.data}
-        return response
-
-
-@method_decorator(never_cache, name='dispatch')
-class StockOptionsAPIView(BaseAPIMixin, APIView):
-    required_permissions = ('warehouse.add_stock',)
-    http_method_names = ['get', 'head', 'options']
-
-    def get(self, request):
-        return Response({
-            'warehouse': [
-                {'value': row['pk'], 'label': f"{row['name']} ({row['code']})" if row['code'] else row['name']}
-                for row in WareHouse.objects.order_by('name', 'pk').values('pk', 'name', 'code')
-            ],
-            'product': [
-                {'value': row['pk'], 'label': f"{row['sku']} — {row['name']} ({row['unit__code']})"}
-                for row in Product.objects.order_by('name', 'pk').values('pk', 'name', 'sku', 'unit__code')
-            ],
-        })
-
-
-class StockListAPIView(BaseListAPIView):
+class StockListAPIView(WarehouseScopeAPIMixin, BaseListAPIView):
     serializer_class = StockReadSerializer
     queryset = Stock.objects.select_related('warehouse', 'product__unit')
     search_fields = ['warehouse__name', 'warehouse__code', 'product__name', 'product__sku']
@@ -86,7 +58,49 @@ class StockListAPIView(BaseListAPIView):
 
 
 @method_decorator(never_cache, name='dispatch')
-class StockDetailAPIView(BaseAPIMixin, RetrieveAPIView):
+class StockDetailAPIView(WarehouseScopeAPIMixin, BaseAPIMixin, RetrieveAPIView):
     serializer_class = StockReadSerializer
     queryset = StockListAPIView.queryset
     http_method_names = ['get', 'head', 'options']
+
+
+class RoleWarehouseAccessAPIMixin:
+    role_permissions_only = True
+    serializer_class = RoleWarehouseAccessSerializer
+    queryset = RoleWarehouseAccess.objects.select_related('role', 'warehouse')
+    response_key = 'role_warehouse_access'
+    search_fields = ['role__name', 'warehouse__name', 'warehouse__code']
+    ordering = ['role_id', 'pk']
+
+    def get_queryset(self):
+        queryset = managed_assignments(super().get_queryset(), self.request.user)
+        # Preserve omission: BooleanField treats missing HTML/query fields as False.
+        filters = RoleWarehouseAccessFilterSerializer(data=self.request.query_params.dict())
+        filters.is_valid(raise_exception=True)
+        return queryset.filter(**filters.validated_data)
+
+    @transaction.atomic
+    def perform_destroy(self, instance):
+        _, current = lock_assignment_write(self.request.user, instance.role_id, instance.pk, action='delete')
+        super().perform_destroy(current)
+
+    def handle_exception(self, exc):
+        if isinstance(exc, OperationalError) and ('locked' in str(exc).lower() or 'deadlock' in str(exc).lower()):
+            exc = WarehouseAccessBusy()
+        return super().handle_exception(exc)
+
+
+class RoleWarehouseAccessListCreateAPIView(RoleWarehouseAccessAPIMixin, BaseListCreateAPIView):
+    pass
+
+
+class RoleWarehouseAccessListAPIView(RoleWarehouseAccessAPIMixin, BaseListAPIView):
+    pass
+
+
+class RoleWarehouseAccessDetailAPIView(RoleWarehouseAccessAPIMixin, BaseDetailAPIView):
+    pass
+
+
+class RoleWarehouseAccessUpdateAPIView(RoleWarehouseAccessAPIMixin, BaseUpdateAPIView):
+    pass

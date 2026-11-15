@@ -1,3 +1,4 @@
+from warehouse.tests.helpers import assign_warehouse_role
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
 from django.core.exceptions import ValidationError
@@ -12,7 +13,8 @@ from purchase.models import PurchaseOrder
 class PurchaseSupplierTests(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_user(username='purchase-supplier-operator')
-        self.user.user_permissions.add(*Permission.objects.filter(content_type__app_label='purchase',
+        self.role = assign_warehouse_role(self.user, all_warehouses=True).role
+        self.role.permissions.add(*Permission.objects.filter(content_type__app_label='purchase',
             codename__in=['add_purchaseorder', 'change_purchaseorder', 'view_purchaseorder', 'add_purchaseorderitem']))
         self.supplier = Party.objects.create(code='SUP', name='Supplier company', is_supplier=True)
         self.both = Party.objects.create(code='BOTH', name='Both roles', is_supplier=True, is_customer=True)
@@ -100,7 +102,7 @@ class PurchaseSupplierTests(TestCase):
     def test_admin_can_soft_delete_a_supplier_referenced_by_a_purchase(self):
         self.user.is_staff = True
         self.user.save(update_fields=['is_staff'])
-        self.user.user_permissions.add(*Permission.objects.filter(content_type__app_label='people',
+        self.role.permissions.add(*Permission.objects.filter(content_type__app_label='people',
                                         codename__in=['view_party', 'delete_party']))
         delete_url = reverse('admin:people_party_delete', args=[self.supplier.pk])
         response = self.client.get(delete_url)

@@ -23,7 +23,7 @@ from rest_framework.views import APIView
 
 from .emails import thread_send_email
 from .models import Account
-from .permissions import ACCESS_RULES, HasRequiredPermissions, check_assignment_target, check_role_permission_target
+from .permissions import ACCESS_RULES, HasRequiredPermissions, check_assignment_target, check_role_permission_target, lock_user_access
 from .serializers import (
     AccountSerializer,
     AddUserSerializer,
@@ -272,11 +272,14 @@ class UserGroupsAPIView(GenericAPIView):
 
     def put(self, request, *args, **kwargs):
         with transaction.atomic():
+            lock_user_access([request.user.pk, self.kwargs['pk']])
             user = self.get_object()
             check_assignment_target(request.user, user)
             serializer = self.get_serializer(data=request.data)
             serializer.is_valid(raise_exception=True)
             group = serializer.validated_data['group']
+            from warehouse.access import check_user_role_assignment
+            check_user_role_assignment(request.user, user, group)
             user.groups.set([group])
             result = {
                 'user': user.pk,
@@ -295,9 +298,12 @@ class AssignGroupAPIView(UserGroupsAPIView):
         with transaction.atomic():
             serializer = self.get_serializer(data=request.data)
             serializer.is_valid(raise_exception=True)
+            lock_user_access([request.user.pk, serializer.validated_data['user']])
             user = get_object_or_404(self.get_queryset(), pk=serializer.validated_data['user'])
             check_assignment_target(request.user, user)
             group = serializer.validated_data['group']
+            from warehouse.access import check_user_role_assignment
+            check_user_role_assignment(request.user, user, group)
             user.groups.set([group])
         return Response({'user': user.pk, 'group': group.pk}, status=status.HTTP_200_OK)
 

@@ -1,3 +1,4 @@
+from warehouse.tests.helpers import assign_warehouse_role
 from decimal import Decimal
 from unittest.mock import patch
 
@@ -17,6 +18,7 @@ from warehouse.models import Stock, WareHouse
 class SaleCompletionTests(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_user(username='sale-completer')
+        self.role = assign_warehouse_role(self.user, all_warehouses=True).role
         self.grant('change_salesorder')
         self.warehouse = WareHouse.objects.create(name='Main', address='Dhaka', phone='1')
         self.branch = WareHouse.objects.create(name='Branch', address='Dhaka', phone='2')
@@ -33,7 +35,7 @@ class SaleCompletionTests(TestCase):
         self.url = reverse('sale:sales-order-complete')
 
     def grant(self, *names):
-        self.user.user_permissions.add(*Permission.objects.filter(content_type__app_label='sale', codename__in=names))
+        self.role.permissions.add(*Permission.objects.filter(content_type__app_label='sale', codename__in=names))
 
     def new_order(self, quantity='2', warehouse=None):
         order = SalesOrder.objects.create(currency_id='BDT', exchange_rate=1, warehouse=warehouse or self.warehouse,
@@ -136,11 +138,11 @@ class SaleCompletionTests(TestCase):
         self.client.credentials()
         self.assertEqual(self.client.post(self.url, payload, format='json').status_code, 403)
         self.client.credentials(HTTP_X_CSRFTOKEN=self.token)
-        self.user.user_permissions.clear()
+        self.role.permissions.clear()
         self.complete(expected=403)
         group = Group.objects.create(name='Completers')
         group.permissions.add(Permission.objects.get(content_type__app_label='sale', codename='change_salesorder'))
-        self.user.groups.add(group)
+        assign_warehouse_role(self.user, all_warehouses=True, role=group)
         for method in ['get', 'put', 'patch', 'delete']:
             self.assertEqual(getattr(self.client, method)(self.url, payload).status_code, 405)
         self.assertEqual(self.client.options(self.url).status_code, 200)
@@ -192,14 +194,14 @@ class SaleCompletionTests(TestCase):
         self.assertFalse(response.data['sales_order']['is_completed'])
 
     def test_busy_returns_retryable_409_and_pages_wire_completion_permission(self):
-        with patch('sale.services.SalesOrder.objects.filter', side_effect=OperationalError('database is locked')):
+        with patch('sale.services.lock_warehouse_scope', side_effect=OperationalError('database is locked')):
             response = self.complete(expected=409)
         self.assertEqual(response.data['detail'].code, 'sale_busy')
         self.grant('view_salesorder')
         listing = self.client.get(reverse('sale_pages:sale-list'))
         self.assertContains(listing, f'data-complete-url="{self.url}"')
         self.assertContains(listing, 'data-catalog-complete-form')
-        self.user.user_permissions.clear()
+        self.role.permissions.clear()
         self.grant('view_salesorder')
         listing = self.client.get(reverse('sale_pages:sale-list'))
         self.assertNotContains(listing, 'data-catalog-complete-form')

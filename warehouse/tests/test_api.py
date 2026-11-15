@@ -1,3 +1,4 @@
+from warehouse.tests.helpers import assign_warehouse_role
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -13,6 +14,7 @@ from warehouse.models import WareHouse
 class WareHouseAPITests(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_user(username='warehouse-operator')
+        self.role = assign_warehouse_role(self.user, all_warehouses=True).role
         self.client = APIClient(enforce_csrf_checks=True)
         self.client.force_login(self.user)
         self.token = self.client.get(reverse('account:login')).data['csrfToken']
@@ -28,7 +30,7 @@ class WareHouseAPITests(TestCase):
         return Permission.objects.get(content_type__app_label='warehouse', codename=f'{action}_warehouse')
 
     def grant(self, *actions):
-        self.user.user_permissions.add(*(self.permission(action) for action in actions))
+        self.role.permissions.add(*(self.permission(action) for action in actions))
 
     def payload(self, **changes):
         return {'name': 'North depot', 'address': 'Gazipur', 'phone': '01800000000',
@@ -67,7 +69,7 @@ class WareHouseAPITests(TestCase):
     def test_update_endpoint_requires_only_change_and_supports_put_patch(self):
         self.grant('view')
         self.assertEqual(self.client.patch(self.update, {'name': 'Denied'}, format='json').status_code, 403)
-        self.user.user_permissions.clear()
+        self.role.permissions.clear()
         self.grant('change')
         response = self.client.patch(self.update, {'is_active': False, 'email': None, 'code': None}, format='json')
         self.assertEqual(response.status_code, 200, response.data)
@@ -148,7 +150,7 @@ class WareHouseAPITests(TestCase):
     def test_group_permission_revocation_and_inactive_users(self):
         group = Group.objects.create(name='Warehouse operators')
         group.permissions.add(self.permission('view'), self.permission('change'))
-        self.user.groups.add(group)
+        assign_warehouse_role(self.user, all_warehouses=True, role=group)
         self.assertEqual(self.client.get(self.url).status_code, 200)
         self.assertEqual(self.client.patch(self.update, {'name': 'Edited'}, format='json').status_code, 200)
         group.permissions.clear()

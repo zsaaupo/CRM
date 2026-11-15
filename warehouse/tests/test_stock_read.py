@@ -1,3 +1,4 @@
+from warehouse.tests.helpers import assign_warehouse_role
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
@@ -16,6 +17,7 @@ from warehouse.serializers import StockReadSerializer
 class StockReadTests(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_user(username='stock-reader')
+        self.role = assign_warehouse_role(self.user, all_warehouses=True).role
         self.warehouse = WareHouse.objects.create(name='Main', code='MAIN', address='Dhaka', phone='1')
         self.branch = WareHouse.objects.create(name='Branch', address='Dhaka', phone='2')
         self.unit = UnitOfMeasure.objects.create(name='Kilograms', code='READ-KG')
@@ -32,7 +34,7 @@ class StockReadTests(TestCase):
     def grant(self, *permissions):
         for value in permissions:
             app, codename = value.split('.')
-            self.user.user_permissions.add(Permission.objects.get(content_type__app_label=app, codename=codename))
+            self.role.permissions.add(Permission.objects.get(content_type__app_label=app, codename=codename))
 
     def test_stock_view_permission_is_required_independently_of_warehouse_access(self):
         for url in [self.list_api, self.detail_api]:
@@ -122,7 +124,7 @@ class StockReadTests(TestCase):
     def test_stock_only_role_sees_stock_navigation_and_revocation_removes_access(self):
         role = Group.objects.create(name='Stock viewers')
         role.permissions.add(Permission.objects.get(content_type__app_label='warehouse', codename='view_stock'))
-        self.user.groups.add(role)
+        assign_warehouse_role(self.user, all_warehouses=True, role=role)
         dashboard = self.client.get(reverse('dashboard'))
         self.assertContains(dashboard, 'data-warehouses-toggle')
         self.assertContains(dashboard, f'href="{self.list_page}"')

@@ -1,3 +1,4 @@
+from warehouse.tests.helpers import assign_warehouse_role
 from decimal import Decimal
 from unittest.mock import patch
 
@@ -16,6 +17,7 @@ from warehouse.models import Stock, WareHouse
 class PurchaseEditingTests(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_user(username='purchase-editor')
+        self.role = assign_warehouse_role(self.user, all_warehouses=True).role
         self.unit = UnitOfMeasure.objects.create(name='Pieces', code='EDIT-PCS')
         self.product = Product.objects.create(name='Rice', sku='EDIT-RICE', unit=self.unit, currency_id='BDT')
         self.warehouse = WareHouse.objects.create(name='Main', address='Dhaka', phone='1')
@@ -35,7 +37,7 @@ class PurchaseEditingTests(TestCase):
             unit=self.unit, quantity=quantity, unit_price='10', create_by='original', modified_by='original')
 
     def grant(self, *permissions):
-        self.user.user_permissions.add(*Permission.objects.filter(
+        self.role.permissions.add(*Permission.objects.filter(
             content_type__app_label='purchase', codename__in=[p.split('.')[-1] for p in permissions]))
 
     def payload(self, item=None, **changes):

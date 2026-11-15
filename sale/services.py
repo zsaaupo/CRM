@@ -8,6 +8,8 @@ from rest_framework.exceptions import APIException, NotFound, PermissionDenied, 
 
 from inventory.models import Product
 from warehouse.models import Stock, WareHouse
+from warehouse.scope import lock_warehouse_scope, scoped_queryset
+from account.permissions import has_role_permissions
 from .models import SalesOrder
 
 
@@ -23,11 +25,13 @@ class SaleBusy(APIException):
     default_code = 'sale_busy'
 
 
-def lock_order(pk):
+def lock_order(pk, actor):
     """Call inside atomic. Serialize order/line edits with completion, including on SQLite."""
     try:
-        SalesOrder.objects.filter(pk=pk, is_completed=False).update(is_completed=False)
-        order = SalesOrder.objects.select_for_update().get(pk=pk)
+        scope = lock_warehouse_scope(actor)
+        orders = scoped_queryset(SalesOrder.objects.all(), scope)
+        orders.filter(pk=pk, is_completed=False).update(is_completed=False)
+        order = orders.select_for_update().get(pk=pk)
     except SalesOrder.DoesNotExist as exc:
         raise NotFound('Sales order not found.') from exc
     if order.is_completed:
@@ -36,13 +40,15 @@ def lock_order(pk):
 
 
 def require_item_permission(request, action):
-    if request is not None and not request.user.has_perm(f'sale.{action}_salesorderitem'):
+    if request is not None and not has_role_permissions(request.user, (f'sale.{action}_salesorderitem',)):
         raise PermissionDenied(f'You do not have permission to {action} sales order items.')
 
 
 @transaction.atomic
 def delete_order(order, request):
-    order = lock_order(order.pk)
+    order = lock_order(order.pk, request.user)
+    if not has_role_permissions(request.user, ('sale.delete_salesorder',)):
+        raise PermissionDenied('Your role does not have permission to delete sales orders.')
     if order.items.exists():
         require_item_permission(request, 'delete')
         order.items.all().delete()
@@ -50,16 +56,20 @@ def delete_order(order, request):
 
 
 def complete_sale(actor, sale_id):
-    if not actor.is_authenticated or not actor.has_perm('sale.change_salesorder'):
+    if not has_role_permissions(actor, ('sale.change_salesorder',)):
         raise PermissionDenied('You do not have permission to complete a sale.')
     try:
         with transaction.atomic():
+            scope = lock_warehouse_scope(actor)
+            if not has_role_permissions(actor, ('sale.change_salesorder',)):
+                raise PermissionDenied('Your role does not have permission to complete a sale.')
+            orders = scoped_queryset(SalesOrder.objects.all(), scope)
             now = timezone.now()
             # Claim once as the first write; errors roll back both the flag and stock.
-            claimed = SalesOrder.objects.filter(pk=sale_id, is_completed=False).update(
+            claimed = orders.filter(pk=sale_id, is_completed=False).update(
                 is_completed=True, fulfilled_at=now, modified_by=actor.get_username(), updated_at=now)
             try:
-                order = SalesOrder.objects.select_for_update().get(pk=sale_id)
+                order = orders.select_for_update().get(pk=sale_id)
             except SalesOrder.DoesNotExist as exc:
                 raise NotFound('Sales order not found.') from exc
             if not claimed:

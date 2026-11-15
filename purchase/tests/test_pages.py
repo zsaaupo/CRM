@@ -1,3 +1,4 @@
+from warehouse.tests.helpers import assign_warehouse_role
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -15,6 +16,7 @@ from warehouse.models import Stock
 class PurchasePageTests(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_user(username='purchase-page-operator')
+        self.role = assign_warehouse_role(self.user, all_warehouses=True).role
         self.unit = UnitOfMeasure.objects.create(name='Pieces', code='PCS')
         self.product = Product.objects.create(name='Keyboard', sku='KEYBOARD', currency_id='BDT', unit=self.unit)
         self.client = APIClient(enforce_csrf_checks=True)
@@ -25,7 +27,7 @@ class PurchasePageTests(TestCase):
         self.options_url = reverse('purchase:purchase-options')
 
     def grant(self, *codenames):
-        self.user.user_permissions.add(*Permission.objects.filter(
+        self.role.permissions.add(*Permission.objects.filter(
             content_type__app_label='purchase', codename__in=codenames,
         ))
 

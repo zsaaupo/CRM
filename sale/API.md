@@ -87,6 +87,14 @@ label only. Completed orders and their items reject updates/deletion with 409.
 
 ## Complete a sale and deduct stock
 
+Warehouse scope and model permissions come from the user's single role for all order/item APIs,
+including this completion action. Specific-warehouse users cannot read, change,
+delete or complete another warehouse's sale. Missing warehouse on creation
+defaults to their assignment; explicit null/other warehouses are rejected.
+Options show only their active assigned warehouse and the form locks the
+dropdown. Missing assignments deny access. See
+[warehouse scope rules](../warehouse/API.md#warehouse-scope-enforcement).
+
 POST `/sale/api/sales-orders/complete/`:
 
 ```json

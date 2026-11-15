@@ -45,7 +45,7 @@ function line() {
     return row;
 }
 
-async function setup({ completed = false, failPage = false, conflict = false, edit = true } = {}) {
+async function setup({ completed = false, failPage = false, conflict = false, edit = true, restricted = false } = {}) {
     const form = new Element('form');
     const fields = Object.fromEntries(['customer', 'warehouse', 'customer_reference', 'order_date', 'expected_delivery_date', 'currency',
         'billing_address', 'shipping_address', 'exchange_rate', 'status', 'shipping_cost', 'notes', 'csrfmiddlewaretoken'].map(name => [name, new Element('input')]));
@@ -60,10 +60,10 @@ async function setup({ completed = false, failPage = false, conflict = false, ed
         : parts[selector.match(/^\[data-sale-(.*)\]$/)?.[1]];
     form.querySelectorAll = selector => selector === '[data-sale-line]' ? parts.lines.children : [];
     parts.lines.querySelectorAll = () => parts.lines.children;
-    const options = { base_currency: 'BDT', customer: [], warehouse: [{ value: 1, label: 'Main' }],
+    const options = { warehouse_scope: {all_warehouses: !restricted, warehouse: restricted ? 1 : null}, base_currency: 'BDT', customer: [], warehouse: [{ value: 1, label: 'Main' }],
         currency: [{ value: 'BDT', label: 'Taka', exchange_rate: '1' }, { value: 'USD', label: 'Dollar', exchange_rate: '120' }],
         status: [{ value: 'draft', label: 'Draft' }, { value: 'review', label: 'Review' }], product: [{ value: 5, label: 'Rice', unit: 9, unit_label: 'Pieces (PCS)' }] };
-    const record = { id: 7, is_completed: completed, customer: 44, customer_name: 'Historical customer', warehouse: 2,
+    const record = { id: 7, is_completed: completed, customer: 44, customer_name: 'Historical customer', warehouse: restricted ? 1 : 2,
         warehouse_name: 'Inactive branch', customer_reference: 'REF', order_date: '2026-11-15', expected_delivery_date: null,
         currency: 'USD', exchange_rate: '121.50000000', status: 'review', shipping_cost: '3.0000', notes: 'Agreed terms' };
     const items = Array.from({ length: 26 }, (_, index) => ({ id: index + 101, line_number: index + 1, product: 5, unit: 9,
@@ -131,3 +131,13 @@ creator.fields.status.value = 'review';
 await creator.form.listeners.submit(event);
 assert.equal(creator.saved[0].data.status, 'review');
 console.log('Sales edit UI passed: custom status, all item pages, saved prices and IDs, completion read-only guard, concurrent completion, creation and success redirect.');
+
+const restrictedCreator = await setup({edit: false, restricted: true});
+assert.equal(restrictedCreator.fields.warehouse.disabled, true);
+assert.equal(String(restrictedCreator.fields.warehouse.value), '1');
+await restrictedCreator.form.listeners.submit(event);
+assert.equal(String(restrictedCreator.saved[0].data.warehouse), '1');
+const restrictedEditor = await setup({restricted: true});
+assert.equal(restrictedEditor.fields.warehouse.disabled, true);
+assert.equal(String(restrictedEditor.fields.warehouse.value), '1');
+console.log('Assigned warehouse stays selected and disabled for creation and editing.');

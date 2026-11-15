@@ -1,3 +1,4 @@
+from warehouse.tests.helpers import assign_warehouse_role
 from html.parser import HTMLParser
 
 from django.contrib.auth import get_user_model
@@ -24,6 +25,7 @@ class PageInputs(HTMLParser):
 class WareHousePageTests(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_user(username='warehouse-page-operator')
+        self.role = assign_warehouse_role(self.user, all_warehouses=True).role
         self.record = WareHouse.objects.create(name='Existing depot', address='Dhaka', phone='01700000000')
         self.client = APIClient(enforce_csrf_checks=True)
         self.client.force_login(self.user)
@@ -32,7 +34,7 @@ class WareHousePageTests(TestCase):
         self.edit_url = reverse('warehouse_pages:edit-warehouse', args=[self.record.pk])
 
     def grant(self, *actions):
-        self.user.user_permissions.add(*Permission.objects.filter(content_type__app_label='warehouse',
+        self.role.permissions.add(*Permission.objects.filter(content_type__app_label='warehouse',
                                         codename__in=[f'{action}_warehouse' for action in actions]))
 
     def test_pages_require_login_and_separate_model_permissions(self):
@@ -141,7 +143,7 @@ class WareHousePageTests(TestCase):
         role = Group.objects.create(name='Warehouse editors')
         role.permissions.add(*Permission.objects.filter(content_type__app_label='warehouse',
                                     codename__in=['view_warehouse', 'change_warehouse']))
-        self.user.groups.add(role)
+        assign_warehouse_role(self.user, all_warehouses=True, role=role)
         self.assertEqual(self.client.get(self.edit_url).status_code, 200)
         role.permissions.clear()
         self.assertEqual(self.client.get(self.edit_url).status_code, 403)

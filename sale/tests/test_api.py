@@ -1,3 +1,4 @@
+from warehouse.tests.helpers import assign_warehouse_role
 from datetime import timedelta
 from decimal import Decimal
 from unittest.mock import patch
@@ -20,6 +21,7 @@ from warehouse.models import Stock
 class SalesAPITests(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_user(username='sale-operator')
+        self.role = assign_warehouse_role(self.user, all_warehouses=True).role
         self.unit = UnitOfMeasure.objects.create(name='Pieces', code='PCS')
         self.product = Product.objects.create(sku='KEYBOARD', name='Keyboard', currency_id='BDT', unit=self.unit)
         self.customer = Party.objects.create(code='SUP-1', name='Example customer', is_customer=True)
@@ -34,7 +36,7 @@ class SalesAPITests(TestCase):
         self.client.credentials(HTTP_X_CSRFTOKEN=self.token)
 
     def grant(self, model, *actions):
-        self.user.user_permissions.add(*Permission.objects.filter(content_type__app_label='sale',
+        self.role.permissions.add(*Permission.objects.filter(content_type__app_label='sale',
             codename__in=[f'{action}_{model._meta.model_name}' for action in actions]))
 
     def order_payload(self, **changes):
@@ -217,7 +219,7 @@ class SalesAPITests(TestCase):
 
     def test_anonymous_inactive_and_unrelated_permissions_do_not_grant_access(self):
         self.user.is_staff = True
-        self.user.user_permissions.add(Permission.objects.get(content_type__app_label='inventory', codename='view_product'))
+        self.role.permissions.add(Permission.objects.get(content_type__app_label='inventory', codename='view_product'))
         self.user.save(update_fields=['is_staff'])
         for model, route, key, payload in self.resources():
             url = reverse(f'sale:{route}-list')
@@ -231,7 +233,7 @@ class SalesAPITests(TestCase):
     def test_group_grants_and_revocation(self):
         role = Group.objects.create(name='Sales readers')
         role.permissions.add(Permission.objects.get(content_type__app_label='sale', codename='view_salesorder'))
-        self.user.groups.add(role)
+        assign_warehouse_role(self.user, all_warehouses=True, role=role)
         url = reverse('sale:sales-order-list')
         self.assertEqual(self.client.get(url).status_code, 200)
         role.permissions.clear()
@@ -271,7 +273,7 @@ class SalesAPITests(TestCase):
             self.assertEqual(self.client.options(url).status_code, 200)
             for method in ['post', 'put', 'patch', 'delete']:
                 self.assertEqual(getattr(self.client, method)(url, {}, format='json').status_code, 405)
-        self.user.user_permissions.clear()
+        self.role.permissions.clear()
         for model, route, key, payload in self.resources():
             self.grant(model, 'change')
             pk = self.order.pk if model is SalesOrder else self.item.pk
