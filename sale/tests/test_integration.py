@@ -140,6 +140,7 @@ class SalesIntegrationTests(TestCase):
         options = self.client.get(reverse('sale:sale-options')).data
         self.assertEqual({item['value'] for item in options['customer']}, {self.customer.pk, both.pk})
         self.assertEqual(options['product'][0]['sale_price'], '10.0000')
+        self.assertIsNone(options['product'][0]['minimum_sale_price'])
         self.assertEqual(self.client.get(reverse('people:party-list')).status_code, 403)
         for invalid in [supplier.pk, deleted.pk, 999999]:
             response = self.client.post(self.url, self.payload(customer=invalid), format='json')
@@ -163,11 +164,15 @@ class SalesIntegrationTests(TestCase):
         self.assertEqual(self.stock.quantity, Decimal('20'))
 
     def test_create_and_edit_options_include_all_trade_statuses_only(self):
+        self.product.minimum_sale_price = Decimal('8.1250')
+        self.product.save(update_fields=['minimum_sale_price'])
         status = TradeStatus.objects.create(code='awaiting-payment', name='Awaiting payment')
         ProductStatus.objects.create(code='product-only', name='Product only')
         for route in ['sale:sale-options', 'sale:sales-edit-options']:
             response = self.client.get(reverse(route))
             self.assertEqual(response.status_code, 200, response.data)
+            self.assertEqual(response.data['product'][0]['minimum_sale_price'], '8.1250')
+            self.assertEqual(response.data['product'][0]['currency'], 'BDT')
             choices = {row['value']: row['label'] for row in response.data['status']}
             self.assertEqual(choices[status.code], status.name)
             self.assertIn('draft', choices)

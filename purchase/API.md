@@ -126,8 +126,11 @@ The options API requires both add permissions and returns `supplier`, `currency`
 `status`, `product` and `base_currency`. Supplier choices include only non-deleted
 parties with `is_supplier=true`, as `{"value": 1, "label": "Name (CODE)"}`.
 The create page uses these choices in an optional dropdown. Party view permission
-is not required just to choose a supplier for a purchase. Products include their unit ID and label;
-currencies include their current exchange rate as a suggested value. An unknown
+is not required just to choose a supplier for a purchase. Products include their unit ID, label,
+and `cost_price` as a decimal string. Selecting a product fills the line's unit price
+from that cost price; the price remains editable. Opening an existing purchase
+preserves its saved line prices until another product is selected.
+Currencies include their current exchange rate as a suggested value. An unknown
 rate must be entered manually. Catalog view permissions are not required just
 to populate this form. Choices are loaded when the page opens, without caching.
 

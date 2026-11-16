@@ -12,35 +12,7 @@
         <form method="post" enctype="multipart/form-data" action="{% url 'account:add-user' %}" data-auth-form="add-user" data-success-url="{{ user_list_url }}" class="user-form-card" novalidate>
             {% csrf_token %}
             <div class="form-status mb-7" data-form-status role="status" aria-live="polite" tabindex="-1" hidden></div>
-            <fieldset>
-                <legend class="section-title">Personal details</legend>
-                <p class="section-description">Start with their name and contact information.</p>
-                <div class="user-form-grid">
-                    <div class="user-form-full">
-                        <label for="add-image" class="form-label">Profile picture <span class="ml-1 font-normal text-stone-400">Optional</span></label>
-                        <input id="add-image" name="image" type="file" accept="image/*" class="form-input" aria-describedby="add-image-hint add-image-error">
-                        <p id="add-image-hint" class="mt-2 text-xs leading-5 text-stone-500">Choose a profile image. Without one, their name initials will be shown.</p>
-                        <p id="add-image-error" data-error-for="image" class="form-error" hidden></p>
-                    </div>
-                    {% include "account/includes/user_field.html" with name="full_name" label="Full name" required=True maxlength=150 autocomplete="name" placeholder="e.g. Avery Morgan" only %}
-                    {% include "account/includes/user_field.html" with name="email" label="Email address" field_type="email" required=True maxlength=150 autocomplete="email" placeholder="person@example.com" only %}
-                    {% include "account/includes/user_field.html" with name="phone_number" label="Phone number" field_type="tel" maxlength=32 autocomplete="tel" placeholder="+880 1700 000000" only %}
-                    {% include "account/includes/user_field.html" with name="designation" label="Designation" maxlength=150 autocomplete="organization-title" placeholder="e.g. Teacher" only %}
-                    {% include "account/includes/user_field.html" with name="date_of_birth" label="Date of birth" field_type="date" autocomplete="bday" only %}
-                    <div><label for="add-gender" class="form-label">Gender <span class="ml-1 font-normal text-stone-400">Optional</span></label><select id="add-gender" name="gender" class="form-input" aria-describedby="add-gender-error"><option value="">Select gender</option><option value="M">Male</option><option value="F">Female</option><option value="T">Other</option></select><p id="add-gender-error" data-error-for="gender" class="form-error" hidden></p></div>
-                </div>
-            </fieldset>
-            <fieldset class="user-form-section">
-                <legend class="section-title">Address</legend>
-                <p class="section-description">Add location details if you have them.</p>
-                <div class="user-form-grid">
-                    <div class="user-form-full"><label for="add-address" class="form-label">Street address <span class="ml-1 font-normal text-stone-400">Optional</span></label><textarea id="add-address" name="address" rows="3" autocomplete="street-address" class="form-input" placeholder="Street, building, apartment" aria-describedby="add-address-error"></textarea><p id="add-address-error" data-error-for="address" class="form-error" hidden></p></div>
-                    {% include "account/includes/user_field.html" with name="city" label="City" maxlength=100 autocomplete="address-level2" only %}
-                    {% include "account/includes/user_field.html" with name="state" label="State / region" maxlength=100 autocomplete="address-level1" only %}
-                    {% include "account/includes/user_field.html" with name="postal_code" label="Postal code" maxlength=20 autocomplete="postal-code" only %}
-                    {% include "account/includes/user_field.html" with name="country" label="Country" maxlength=100 autocomplete="country-name" only %}
-                </div>
-            </fieldset>
+            {% include "account/includes/user_profile_fields.html" %}
             <fieldset class="user-form-section">
                 <legend class="section-title">Login credentials</legend>
                 <p class="section-description">Choose a strong, unique password for the new account.</p>

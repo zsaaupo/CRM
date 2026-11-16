@@ -93,6 +93,7 @@ APIs continue to assign one group to each user.
 | --- | --- | --- |
 | /warehouse/api/role-warehouse-access/ | GET, POST | List and create role assignments |
 | /warehouse/api/role-warehouse-access/list/ | GET | Read-only assignment list |
+| /warehouse/api/role-warehouse-access/options/?role=<id> | GET | Current scope and allowed warehouse choices for the role permission page |
 | /warehouse/api/role-warehouse-access/<id>/ | GET, PUT, PATCH, DELETE | Read, update or delete |
 | /warehouse/api/role-warehouse-access/<id>/update/ | PUT, PATCH | Dedicated update |
 
@@ -101,11 +102,17 @@ names and warehouse names/codes. Filters are ?role=<id>, ?warehouse=<id> and
 ?all_warehouses=true or false. Lists use 20-row pagination, ordered by role ID.
 Read endpoints support HEAD/OPTIONS; dedicated updates support OPTIONS.
 
-These APIs use the existing shared model-permission logic, with grants coming
-from the user's assigned role: warehouse.view_rolewarehouseaccess,
-warehouse.add_rolewarehouseaccess, warehouse.change_rolewarehouseaccess and
-warehouse.delete_rolewarehouseaccess. No additional management permission is
-required. Dedicated updates require change permission without requiring view.
+Assignment management requires warehouse.manage_warehouse_access inherited from
+the acting user's role. In Roles → Manage permissions, check Manage warehouse
+assignments in the Additional permissions column for rolewarehouseaccess and
+save the role permissions. That single checkbox authorizes assignment reads,
+create, update and delete; the old assignment model CRUD grants are not required
+and do not authorize management on their own. Sales/purchase/stock CRUD grants
+remain separate. Unchecking the permission revokes management on the next request.
+
+Members still need a valid role warehouse scope, and existing own-role,
+superuser-role and warehouse boundaries remain enforced. Management does not
+allow changing one's own scope or granting beyond the actor's allowed warehouses.
 Session authentication and CSRF for writes are required.
 
 POST /warehouse/api/role-warehouse-access/:
@@ -144,6 +151,23 @@ next request. Changing a user's role changes their inherited access immediately.
 Old user-warehouse-access routes are removed. Migration converts compatible
 user configurations to roles and preserves CRUD permission grants; it refuses
 conflicting member scopes rather than silently broadening access.
+
+The existing role permission page includes a Warehouse access section with
+No warehouse access, Specific warehouse and All warehouses choices. It loads
+the current configuration and choices from the options endpoint. One Save permissions
+button sends both the selected permission IDs and warehouse_access to the existing
+account group-permissions PUT endpoint. Both settings save in one database
+transaction; any failure rolls back both. Success returns to the role list.
+Reset selections restores both sections. Users without assignment-management
+permission can continue saving model permissions without changing warehouse scope.
+
+The options endpoint requires manage_warehouse_access from the actor's role;
+it does not require warehouse catalog view permission. It returns role,
+assignment (or null), warehouse choices, can_assign_all, can_create and can_change.
+Choices and capabilities respect the actor's warehouse scope. The page disables
+editing when management permission is unavailable, and backend checks remain
+authoritative. Missing warehouse-assignment management permission leaves the original
+CRUD permission editor available with an explanatory message for the scope section.
 
 ## Web pages
 
@@ -203,3 +227,7 @@ Read records include the stock ID, warehouse/product IDs, warehouse name/code,
 product name/SKU, six-decimal quantity, unit name/code and audit fields. Related
 labels are loaded in the stock query. Purchase receipts update the existing
 Stock balance, so the next list/detail request shows the new quantity.
+
+Warehouse assignments are configured from Roles → Manage permissions. There is
+no separate warehouse-assignment navbar entry or page. The options endpoint
+requires a role parameter.

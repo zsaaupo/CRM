@@ -33,7 +33,7 @@ function line() {
     const unitLabel = new Element('input');
     const labels = Object.fromEntries(names.map(name => [name, new Element('label')]));
     const errors = Object.fromEntries([...names, 'non_field_errors'].map(name => [name, new Element()]));
-    const parts = Object.fromEntries(['heading', 'legend', 'remove'].map(name => [name, new Element()]));
+    const parts = Object.fromEntries(['heading', 'legend', 'remove', 'minimum-sale-price', 'minimum-label'].map(name => [name, new Element()]));
     row.querySelector = selector => {
         if (selector === '[data-line-unit-label]') return unitLabel;
         const match = selector.match(/^\[data-line-(field|label|error)="([^"]+)"\]$/);
@@ -45,7 +45,7 @@ function line() {
     return row;
 }
 
-async function setup({ completed = false, failPage = false, conflict = false, edit = true, restricted = false } = {}) {
+async function setup({ completed = false, failPage = false, conflict = false, edit = true, restricted = false, minimumPrice = '8.0000' } = {}) {
     const form = new Element('form');
     const fields = Object.fromEntries(['customer', 'warehouse', 'customer_reference', 'order_date', 'expected_delivery_date', 'currency',
         'billing_address', 'shipping_address', 'exchange_rate', 'status', 'shipping_cost', 'notes', 'csrfmiddlewaretoken'].map(name => [name, new Element('input')]));
@@ -62,7 +62,7 @@ async function setup({ completed = false, failPage = false, conflict = false, ed
     parts.lines.querySelectorAll = () => parts.lines.children;
     const options = { warehouse_scope: {all_warehouses: !restricted, warehouse: restricted ? 1 : null}, base_currency: 'BDT', customer: [], warehouse: [{ value: 1, label: 'Main' }],
         currency: [{ value: 'BDT', label: 'Taka', exchange_rate: '1' }, { value: 'USD', label: 'Dollar', exchange_rate: '120' }],
-        status: [{ value: 'draft', label: 'Draft' }, { value: 'review', label: 'Review' }], product: [{ value: 5, label: 'Rice', unit: 9, unit_label: 'Pieces (PCS)' }] };
+        status: [{ value: 'draft', label: 'Draft' }, { value: 'review', label: 'Review' }], product: [{ value: 5, label: 'Rice', unit: 9, unit_label: 'Pieces (PCS)', currency: 'BDT', minimum_sale_price: minimumPrice }] };
     const record = { id: 7, is_completed: completed, customer: 44, customer_name: 'Historical customer', warehouse: restricted ? 1 : 2,
         warehouse_name: 'Inactive branch', customer_reference: 'REF', order_date: '2026-11-15', expected_delivery_date: null,
         currency: 'USD', exchange_rate: '121.50000000', status: 'review', shipping_cost: '3.0000', notes: 'Agreed terms' };
@@ -100,6 +100,7 @@ const editor = await setup();
 assert.equal(editor.parts.submit.disabled, false, editor.parts.status.textContent);
 assert.equal(editor.fields.status.value, 'review');
 assert.equal(editor.parts.lines.children.length, 26);
+assert.equal(editor.parts.lines.children[0].querySelector('[data-line-minimum-sale-price]').value, '8.0000 BDT');
 assert.equal(editor.fields.exchange_rate.value, '121.50000000');
 assert.equal(editor.fields.warehouse.children.at(-1).textContent, 'Inactive branch (existing warehouse)');
 editor.fields.status.value = 'draft';
@@ -141,3 +142,19 @@ const restrictedEditor = await setup({restricted: true});
 assert.equal(restrictedEditor.fields.warehouse.disabled, true);
 assert.equal(String(restrictedEditor.fields.warehouse.value), '1');
 console.log('Assigned warehouse stays selected and disabled for creation and editing.');
+
+const priceCreator = await setup({edit: false});
+const priceLine = priceCreator.parts.lines.children[0];
+assert.equal(priceLine.querySelector('[data-line-minimum-sale-price]').value, 'Select a product');
+const productField = priceLine.querySelector('[data-line-field="product"]');
+productField.value = '5'; productField.listeners.change();
+assert.equal(priceLine.querySelector('[data-line-minimum-sale-price]').value, '8.0000 BDT');
+priceCreator.fields.currency.value = 'USD'; priceCreator.fields.currency.listeners.change();
+assert.equal(priceLine.querySelector('[data-line-minimum-sale-price]').value, '8.0000 BDT');
+productField.value = ''; productField.listeners.change();
+assert.equal(priceLine.querySelector('[data-line-minimum-sale-price]').value, 'Select a product');
+const noMinimum = await setup({minimumPrice: null});
+assert.equal(noMinimum.parts.lines.children[0].querySelector('[data-line-minimum-sale-price]').value, 'Not set');
+const zeroMinimum = await setup({minimumPrice: '0.0000'});
+assert.equal(zeroMinimum.parts.lines.children[0].querySelector('[data-line-minimum-sale-price]').value, '0.0000 BDT');
+console.log('Minimum sale price displays on existing lines and product changes, with currency and zero/null handling.');

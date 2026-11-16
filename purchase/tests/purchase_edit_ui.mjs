@@ -64,7 +64,10 @@ async function setup({ received = false, failPage = false, conflict = false, edi
     parts.lines.querySelectorAll = () => parts.lines.children;
     const options = { warehouse_scope: {all_warehouses: !restricted, warehouse: restricted ? 1 : null}, base_currency: 'BDT', supplier: [], warehouse: [{ value: 1, label: 'Main' }],
         currency: [{ value: 'BDT', label: 'Taka', exchange_rate: '1' }, { value: 'USD', label: 'Dollar', exchange_rate: '120' }],
-        status: [{ value: 'draft', label: 'Draft' }], product: [{ value: 5, label: 'Rice', unit: 9, unit_label: 'Pieces (PCS)' }] };
+        status: [{ value: 'draft', label: 'Draft' }], product: [
+            { value: 5, label: 'Rice', unit: 9, unit_label: 'Pieces (PCS)', cost_price: '12.3456' },
+            { value: 6, label: 'Free sample', unit: 9, unit_label: 'Pieces (PCS)', cost_price: '0.0000' },
+        ] };
     const record = { id: 7, is_received: received, supplier: 44, supplier_name: 'Historical supplier', warehouse: restricted ? 1 : 2,
         warehouse_name: 'Inactive branch', supplier_reference: 'REF', order_date: '2026-11-15', expected_date: null,
         currency: 'USD', exchange_rate: '121.50000000', status: 'draft', shipping_cost: '3.0000', notes: 'Agreed terms' };
@@ -132,9 +135,30 @@ assert.equal(race.redirects.length, 0);
 
 const creator = await setup({ edit: false });
 assert.equal(creator.parts.lines.children.length, 1);
+const firstLine = creator.parts.lines.children[0];
+const productChoice = firstLine.querySelector('[data-line-field="product"]');
+const unitPrice = firstLine.querySelector('[data-line-field="unit_price"]');
+productChoice.value = '5';
+productChoice.listeners.change();
+assert.equal(unitPrice.value, '12.3456');
+unitPrice.value = '15.0000';
 await creator.form.listeners.submit(event);
 assert.equal(creator.saved[0].method, 'POST');
 assert.equal(creator.saved[0].data.items[0].id, undefined);
+assert.equal(creator.saved[0].data.items[0].unit_price, '15.0000');
+productChoice.value = '6';
+productChoice.listeners.change();
+assert.equal(unitPrice.value, '0.0000');
+productChoice.value = '';
+productChoice.listeners.change();
+assert.equal(unitPrice.value, '');
+creator.parts['add-line'].listeners.click();
+const secondLine = creator.parts.lines.children[1];
+const secondProduct = secondLine.querySelector('[data-line-field="product"]');
+secondProduct.value = '5';
+secondProduct.listeners.change();
+assert.equal(secondLine.querySelector('[data-line-field="unit_price"]').value, '12.3456');
+assert.equal(unitPrice.value, '');
 
 vm.runInContext(catalog, editor.context);
 editor.context.columns = [{ key: 'actions', type: 'edit' }];

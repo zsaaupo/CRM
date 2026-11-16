@@ -3,6 +3,7 @@ from django.urls import path
 from .page_views import (
     AddRolePageView,
     AddUserPageView,
+    EditUserPageView,
     AssignRolePageView,
     LoginPageView,
     ProfilePageView,
@@ -21,6 +22,7 @@ urlpatterns = [
     path('profile/', ProfilePageView.as_view(), name='profile'),
     path('add-user/', AddUserPageView.as_view(), name='add-user'),
     path('users/', UserListPageView.as_view(), name='user-list'),
+    path('users/<int:pk>/edit/', EditUserPageView.as_view(), name='edit-user'),
     path('users/<int:pk>/assign-role/', AssignRolePageView.as_view(), name='assign-role'),
     path('roles/', RoleListPageView.as_view(), name='role-list'),
     path('roles/add/', AddRolePageView.as_view(), name='add-role'),

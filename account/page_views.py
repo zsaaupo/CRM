@@ -9,7 +9,7 @@ from django.views.decorators.cache import never_cache
 from django.views.generic import TemplateView
 
 from .models import Account
-from .permissions import ACCESS_RULES, access_flags, check_assignment_target, check_role_permission_target
+from .permissions import ACCESS_RULES, access_flags, check_assignment_target, check_role_permission_target, check_user_edit_target
 
 
 @method_decorator(never_cache, name='dispatch')
@@ -75,6 +75,19 @@ class UserListPageView(ProtectedAccountPageView):
     extra_context = {'page_label': 'User list', 'page_section': 'users', 'user_page': 'list'}
 
 
+class EditUserPageView(ProtectedAccountPageView):
+    permission_required = ACCESS_RULES['change_user']
+    template_name = 'account/edit_user.html'
+    extra_context = {'page_label': 'Edit user', 'page_section': 'users', 'user_page': 'list'}
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        target = get_object_or_404(get_user_model(), pk=self.kwargs['pk'])
+        check_user_edit_target(self.request.user, target)
+        context['target_user'] = target
+        return context
+
+
 class AssignRolePageView(ProtectedAccountPageView):
     permission_required = ACCESS_RULES['assign_role']
     template_name = 'account/assign_role.html'
@@ -120,6 +133,9 @@ class RolePermissionsPageView(ProtectedAccountPageView):
         context = super().get_context_data(**kwargs)
         context['role'] = get_object_or_404(Group, pk=self.kwargs['pk'])
         check_role_permission_target(self.request.user, context['role'])
+        from .permissions import has_role_permissions
+        context['can_view_warehouse_access'] = has_role_permissions(
+            self.request.user, ('warehouse.manage_warehouse_access',))
         return context
 
 

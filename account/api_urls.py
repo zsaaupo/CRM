@@ -4,6 +4,7 @@ from django.urls import path
 
 from .api_views import (
     AddUserAPIView,
+    EditUserAPIView,
     AssignGroupAPIView,
     GroupDetailAPIView,
     GroupListAPIView,
@@ -26,6 +27,7 @@ urlpatterns = [
     path('logout/', LogoutAPIView.as_view(), name='logout'),
     path('add-user/', AddUserAPIView.as_view(), name='add-user'),
     path('users/', UserListAPIView.as_view(), name='user-list'),
+    path('users/<int:pk>/update/', EditUserAPIView.as_view(), name='edit-user'),
     path('users/<int:pk>/groups/', UserGroupsAPIView.as_view(), name='user-groups'),
     path('assign-group/', AssignGroupAPIView.as_view(), name='assign-group'),
     path('permissions/', PermissionListAPIView.as_view(), name='permission-list'),

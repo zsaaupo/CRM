@@ -54,7 +54,7 @@ class UserListAPIViewTests(APITestCase):
         self.account.image = 'profile_pictures/avatar.png'
         self.account.save(update_fields=['image'])
         rows = self.client.get(self.url).data['results']
-        expected = {'id', 'full_name', 'email', 'image', 'phone_number', 'designation', 'role', 'is_active', 'date_joined'}
+        expected = {'id', 'full_name', 'email', 'image', 'phone_number', 'designation', 'role', 'is_active', 'is_superuser', 'date_joined'}
         for row in rows:
             self.assertEqual(set(row), expected)
         self.assertEqual(rows[1]['phone_number'], '+8801700000000')

@@ -163,7 +163,9 @@ class SalesOptionsAPIView(SalesConcurrencyMixin, WarehouseScopeAPIMixin, BaseAPI
             'product': [
                 {'value': row.pk, 'label': f'{row.sku} — {row.name}', 'unit': row.unit_id,
                  'unit_label': f'{row.unit.name} ({row.unit.code})', 'currency': row.currency_id,
-                 'sale_price': str(row.sale_price), 'tax_rate': str(row.product_tax)}
+                 'sale_price': str(row.sale_price),
+                 'minimum_sale_price': str(row.minimum_sale_price) if row.minimum_sale_price is not None else None,
+                 'tax_rate': str(row.product_tax)}
                 for row in Product.objects.select_related('unit').order_by('name', 'pk')
             ],
         })

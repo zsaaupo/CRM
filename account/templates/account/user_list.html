@@ -3,7 +3,7 @@
 
 {% block title %}User list | eManager{% endblock %}
 {% block content %}
-<div class="workspace-content" data-user-list data-current-user-id="{{ request.user.pk }}" data-superuser="{{ request.user.is_superuser|yesno:'true,false' }}" data-api-url="{% url 'account:user-list' %}" data-login-url="{% url 'account_pages:login' %}" data-assign-role-url="{% url 'account_pages:assign-role' 0 %}">
+<div class="workspace-content" data-user-list data-edit-user-url="{% url 'account_pages:edit-user' 0 %}" data-current-user-id="{{ request.user.pk }}" data-superuser="{{ request.user.is_superuser|yesno:'true,false' }}" data-api-url="{% url 'account:user-list' %}" data-login-url="{% url 'account_pages:login' %}" data-assign-role-url="{% url 'account_pages:assign-role' 0 %}">
     <div class="page-heading">
         <div><p class="page-eyebrow">People &amp; access</p><h1 class="page-title">Users<span class="text-emerald-600">.</span></h1><p class="page-description">The people who make up your workspace.</p></div>
         {% if access.add_user %}<a href="{% url 'account_pages:add-user' %}" class="primary-button compact-primary"><span aria-hidden="true">+</span> Add user</a>{% endif %}
@@ -23,7 +23,7 @@
         <noscript><p class="form-error p-6">Enable JavaScript to load the user list.</p></noscript>
     </section>
     <template id="user-actions-template">
-        <div class="role-actions">{% if access.assign_role %}<a class="role-action" data-assign-role title="Assign role" aria-label="Assign role"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="m12 3 8 3v6c0 5-8 9-8 9S4 17 4 12V6l8-3Z" stroke-linejoin="round"/><path d="m8.5 12 2.5 2.5 4.5-5" stroke-linecap="round" stroke-linejoin="round"/></svg></a>{% endif %}</div>
+        <div class="role-actions">{% if access.change_user %}<a class="role-action" data-edit-user title="Edit user" aria-label="Edit user"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="m16 3 5 5-12 12H4v-5L16 3Z" stroke-linejoin="round"/><path d="m13 6 5 5" stroke-linecap="round"/></svg></a>{% endif %}{% if access.assign_role %}<a class="role-action" data-assign-role title="Assign role" aria-label="Assign role"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="m12 3 8 3v6c0 5-8 9-8 9S4 17 4 12V6l8-3Z" stroke-linejoin="round"/><path d="m8.5 12 2.5 2.5 4.5-5" stroke-linecap="round" stroke-linejoin="round"/></svg></a>{% endif %}</div>
     </template>
 </div>
 {% endblock %}

@@ -79,6 +79,9 @@ export function initializeSalesForm(form) {
         if (!ready || busy || readOnly) return;
         const row = document.getElementById("sale-line-template").content.firstElementChild.cloneNode(true);
         const prefix = `sale-item-${++lineId}`;
+        const minimumPrice = row.querySelector('[data-line-minimum-sale-price]');
+        minimumPrice.id = `${prefix}-minimum-sale-price`;
+        row.querySelector('[data-line-minimum-label]').setAttribute('for', minimumPrice.id);
         for (const input of row.querySelectorAll("[data-line-field], [data-line-unit-label]")) {
             const name = input.dataset.lineField || "unit";
             if (name === "unit" && input.type === "hidden") continue;
@@ -95,6 +98,7 @@ export function initializeSalesForm(form) {
             row.querySelector("[data-line-unit-label]").value = selected?.unit_label ?? "";
             row.querySelector('[data-line-field="unit_price"]').value = selected?.currency === field('currency').value ? selected.sale_price : '';
             row.querySelector('[data-line-field="tax_rate"]').value = selected?.tax_rate ?? '0';
+            updateMinimumPrice(row, selected);
         });
         row.querySelector("[data-line-remove]").addEventListener("click", () => {
             if (busy || lines.children.length <= 1) return;
@@ -107,9 +111,16 @@ export function initializeSalesForm(form) {
             for (const name of lineFields) row.querySelector(`[data-line-field="${name}"]`).value = item[name] ?? '';
             row.querySelector('[data-line-unit-label]').value = item.unit_name || item.unit_code || '';
         }
+        updateMinimumPrice(row, options.product.find(record => String(record.value) === String(product.value)));
         lines.append(row);
         updateLineNumbers();
         if (focus) product.focus();
+    }
+
+    function updateMinimumPrice(row, product) {
+        row.querySelector('[data-line-minimum-sale-price]').value = !product ? 'Select a product'
+            : product.minimum_sale_price == null ? 'Not set'
+            : `${product.minimum_sale_price} ${product.currency || ''}`.trim();
     }
 
     function updateCurrency() {

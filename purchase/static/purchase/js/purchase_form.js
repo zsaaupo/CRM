@@ -92,6 +92,7 @@ export function initializePurchaseForm(form) {
             const selected = options.product.find((record) => String(record.value) === product.value);
             row.querySelector('[data-line-field="unit"]').value = selected?.unit ?? "";
             row.querySelector("[data-line-unit-label]").value = selected?.unit_label ?? "";
+            row.querySelector('[data-line-field="unit_price"]').value = selected?.cost_price ?? "";
         });
         row.querySelector("[data-line-remove]").addEventListener("click", () => {
             if (busy || lines.children.length <= 1) return;

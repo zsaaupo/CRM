@@ -4,6 +4,7 @@ from .api_views import (
     StockDetailAPIView, StockListAPIView,
     RoleWarehouseAccessDetailAPIView, RoleWarehouseAccessListAPIView,
     RoleWarehouseAccessListCreateAPIView, RoleWarehouseAccessUpdateAPIView,
+    RoleWarehouseAccessOptionsAPIView,
     WareHouseDetailAPIView, WareHouseListAPIView, WareHouseListCreateAPIView,
     WareHouseUpdateAPIView,
 )
@@ -12,6 +13,7 @@ from .api_views import (
 app_name = 'warehouse'
 
 urlpatterns = [
+    path('role-warehouse-access/options/', RoleWarehouseAccessOptionsAPIView.as_view(), name='role-warehouse-access-options'),
     path('role-warehouse-access/', RoleWarehouseAccessListCreateAPIView.as_view(), name='role-warehouse-access-list'),
     path('role-warehouse-access/list/', RoleWarehouseAccessListAPIView.as_view(), name='role-warehouse-access-list-view'),
     path('role-warehouse-access/<int:pk>/', RoleWarehouseAccessDetailAPIView.as_view(), name='role-warehouse-access-detail'),

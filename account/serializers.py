@@ -93,7 +93,7 @@ class UserListSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ['id', 'full_name', 'email', 'image', 'phone_number', 'designation', 'role', 'is_active', 'date_joined']
+        fields = ['id', 'full_name', 'email', 'image', 'phone_number', 'designation', 'role', 'is_active', 'is_superuser', 'date_joined']
         read_only_fields = fields
 
     def get_full_name(self, user):
@@ -121,6 +121,30 @@ class UserListSerializer(serializers.ModelSerializer):
         return ', '.join(group.name for group in groups) or None
 
 
+class EditUserSerializer(AccountSerializer):
+    email = serializers.EmailField(max_length=150)
+    image = serializers.ImageField(required=False, allow_null=True)
+
+    class Meta(AccountSerializer.Meta):
+        read_only_fields = [*AccountSerializer.Meta.read_only_fields, 'user']
+        extra_kwargs = {'phone_number': {'required': False, 'allow_blank': True}}
+
+    def validate_email(self, value):
+        email = value.lower()
+        target = self.context['target_user']
+        if User.objects.exclude(pk=target.pk).filter(
+            Q(username__iexact=email) | Q(email__iexact=email) | Q(account__email__iexact=email),
+        ).exists():
+            raise serializers.ValidationError('An account with this email already exists.')
+        return email
+
+    def validate(self, attrs):
+        unsupported = set(self.initial_data) - set(self.fields)
+        if unsupported:
+            raise serializers.ValidationError({name: 'This field cannot be changed here.' for name in sorted(unsupported)})
+        return super().validate(attrs)
+
+
 class PermissionListSerializer(serializers.ModelSerializer):
     app_label = serializers.CharField(source='content_type.app_label', read_only=True)
     model = serializers.CharField(source='content_type.model', read_only=True)
@@ -144,6 +168,7 @@ class GroupDetailSerializer(GroupListSerializer):
 
 
 class GroupPermissionsSerializer(serializers.Serializer):
+    warehouse_access = serializers.DictField(required=False)
     permissions = serializers.ListField(
         child=serializers.IntegerField(min_value=1),
         allow_empty=True,
@@ -160,6 +185,11 @@ class GroupPermissionsSerializer(serializers.Serializer):
                 f'Invalid permission IDs: {", ".join(map(str, invalid_ids))}.',
             )
         return sorted(permission_ids)
+
+    def validate_warehouse_access(self, value):
+        if set(value) != {'warehouse', 'all_warehouses'}:
+            raise serializers.ValidationError('Provide warehouse and all_warehouses for the role scope.')
+        return value
 
 
 class UserGroupsSerializer(serializers.Serializer):

@@ -61,6 +61,12 @@ if (directory) {
         const actions = cell("");
         actions.textContent = "";
         const controls = document.getElementById("user-actions-template").content.cloneNode(true);
+        const edit = controls.querySelector('[data-edit-user]');
+        if (edit) {
+            edit.href = directory.dataset.editUserUrl.replace('/0/', `/${user.id}/`);
+            edit.setAttribute('aria-label', `Edit ${user.full_name || user.email || 'user'}`);
+            if (user.is_superuser && directory.dataset.superuser !== 'true') edit.remove();
+        }
         const assign = controls.querySelector("[data-assign-role]");
         if (assign) {
             assign.href = directory.dataset.assignRoleUrl.replace("/0/", `/${user.id}/`);

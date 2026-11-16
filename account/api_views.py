@@ -3,7 +3,7 @@ from functools import partial
 
 from django.contrib.auth import authenticate, get_user_model, login as auth_login, logout as auth_logout
 from django.contrib.auth.models import Group, Permission
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, OperationalError, transaction
 from django.db.models import Q
 from django.middleware.csrf import get_token
 from django.shortcuts import get_object_or_404
@@ -23,10 +23,11 @@ from rest_framework.views import APIView
 
 from .emails import thread_send_email
 from .models import Account
-from .permissions import ACCESS_RULES, HasRequiredPermissions, check_assignment_target, check_role_permission_target, lock_user_access
+from .permissions import ACCESS_RULES, HasRequiredPermissions, check_assignment_target, check_role_permission_target, check_user_edit_target, lock_user_access
 from .serializers import (
     AccountSerializer,
     AddUserSerializer,
+    EditUserSerializer,
     AssignGroupSerializer,
     GroupDetailSerializer,
     GroupListSerializer,
@@ -167,6 +168,51 @@ class UserListAPIView(ListAPIView):
 
 
 @method_decorator(never_cache, name='dispatch')
+class EditUserAPIView(GenericAPIView):
+    serializer_class = EditUserSerializer
+    parser_classes = [JSONParser, FormParser, MultiPartParser]
+    authentication_classes = [SessionAuthentication]
+    permission_classes = [IsAuthenticated, HasRequiredPermissions]
+    required_permissions = ACCESS_RULES['change_user']
+    http_method_names = ['get', 'patch', 'head', 'options']
+    queryset = User.objects.all()
+
+    def get_account(self, user):
+        return Account.objects.filter(user=user).first() or Account(
+            user=user, full_name=user.get_full_name() or user.get_username(),
+            email=user.email or user.get_username(), phone_number='',
+        )
+
+    def get(self, request, *args, **kwargs):
+        user = self.get_object()
+        check_user_edit_target(request.user, user)
+        return Response(AccountSerializer(self.get_account(user)).data)
+
+    def patch(self, request, *args, **kwargs):
+        try:
+            with transaction.atomic():
+                lock_user_access([request.user.pk, self.kwargs['pk']])
+                user = get_object_or_404(User.objects.select_for_update(), pk=self.kwargs['pk'])
+                check_user_edit_target(request.user, user)
+                account = self.get_account(user)
+                serializer = self.get_serializer(account, data=request.data, partial=True,
+                    context={**self.get_serializer_context(), 'target_user': user})
+                serializer.is_valid(raise_exception=True)
+                email = serializer.validated_data.get('email')
+                if email is not None:
+                    user.username = user.email = email
+                    user.save(update_fields=['username', 'email'])
+                audit = {'modified_by': request.user.get_username()}
+                if account.pk is None:
+                    audit['create_by'] = request.user.get_username()
+                serializer.save(**audit)
+                result = AccountSerializer(serializer.instance).data
+        except IntegrityError as exc:
+            raise ValidationError({'email': 'Could not save the user. This email may already be in use.'}) from exc
+        return Response(result)
+
+
+@method_decorator(never_cache, name='dispatch')
 class PermissionListAPIView(ListAPIView):
     serializer_class = PermissionListSerializer
     authentication_classes = [SessionAuthentication]
@@ -238,14 +284,44 @@ class GroupPermissionsAPIView(GenericAPIView):
 
     def put(self, request, *args, **kwargs):
         with transaction.atomic():
-            group = self.get_object()
-            check_role_permission_target(request.user, group)
+            lock_user_access([request.user.pk])
             serializer = self.get_serializer(data=request.data)
             serializer.is_valid(raise_exception=True)
+            warehouse_data = serializer.validated_data.get('warehouse_access')
+            warehouse_serializer = None
+            if warehouse_data is not None:
+                from warehouse.access import lock_assignment_write
+                from warehouse.models import RoleWarehouseAccess
+                from warehouse.serializers import RoleWarehouseAccessSerializer
+                existing = RoleWarehouseAccess.objects.filter(role_id=self.kwargs['pk']).first()
+                lock_assignment_write(request.user, self.kwargs['pk'], existing.pk if existing else None)
+            group = self.get_object()
+            check_role_permission_target(request.user, group)
+            if warehouse_data is not None:
+                existing = RoleWarehouseAccess.objects.filter(role=group).first()
+                warehouse_serializer = RoleWarehouseAccessSerializer(existing,
+                    data={**warehouse_data, 'role': group.pk}, context=self.get_serializer_context())
+                if not warehouse_serializer.is_valid():
+                    raise ValidationError({'warehouse_access': warehouse_serializer.errors})
+                actor = request.user.get_username()
+                audit = {'modified_by': actor}
+                if existing is None:
+                    audit['create_by'] = actor
+                warehouse_serializer.save(**audit)
             group.permissions.set(serializer.validated_data['permissions'])
             result = GroupListSerializer(group).data
+            if warehouse_serializer is not None:
+                result['warehouse_access'] = warehouse_serializer.data
 
         return Response(result, status=status.HTTP_200_OK)
+
+    def handle_exception(self, exc):
+        if isinstance(exc, OperationalError) and ('locked' in str(exc).lower() or 'deadlock' in str(exc).lower()):
+            from warehouse.access import WarehouseAccessBusy
+            exc = WarehouseAccessBusy()
+        elif isinstance(exc, IntegrityError):
+            exc = ValidationError({'non_field_errors': ['Could not save role settings. Refresh and try again.']})
+        return super().handle_exception(exc)
 
 
 @method_decorator(never_cache, name='dispatch')

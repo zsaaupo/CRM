@@ -1,0 +1,17 @@
+    <section class="user-form-card mt-6" aria-labelledby="warehouse-access-heading"{% if can_view_warehouse_access %} data-role-warehouse-access data-role-id="{{ role.pk }}" data-options-url="{% url 'warehouse:role-warehouse-access-options' %}?role={{ role.pk }}"{% endif %}>
+        <h2 id="warehouse-access-heading" class="section-title">Warehouse access</h2>
+        <p class="section-description">Choose which warehouses users in this role can access. Their allowed actions come from the role's CRUD permissions. Save permissions applies both settings.</p>
+        {% if can_view_warehouse_access %}
+            <p class="form-status mb-5" data-warehouse-feedback role="status" aria-live="polite" tabindex="-1">Loading warehouse access...</p>
+            <button type="button" class="text-button mb-5" data-warehouse-retry hidden>Try loading again</button>
+            <fieldset data-warehouse-fields disabled>
+                <legend class="sr-only">Warehouse access for {{ role.name|default:'selected role' }}</legend>
+                <div class="user-form-grid">
+                    <div class="form-field"><label for="role-warehouse-mode" class="form-label">Access scope</label><select id="role-warehouse-mode" name="warehouse_mode" class="form-input" data-warehouse-mode><option value="none">No warehouse access</option><option value="specific">Specific warehouse</option><option value="all" data-warehouse-all>All warehouses</option></select></div>
+                    <div class="form-field" data-warehouse-select-wrap hidden><label for="role-warehouse-id" class="form-label">Warehouse</label><select id="role-warehouse-id" name="warehouse" class="form-input" data-warehouse-select><option value="">Select a warehouse</option></select></div>
+                </div>
+            </fieldset>
+            <noscript><p class="form-error">Enable JavaScript to manage warehouse access.</p></noscript>
+
+        {% else %}<p class="users-list-status">Warehouse access settings require the Manage warehouse assignments permission.</p>{% endif %}
+    </section>

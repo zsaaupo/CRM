@@ -61,7 +61,7 @@ class RoleWarehouseAccessSerializer(CatalogSerializer):
     @transaction.atomic
     def create(self, validated_data):
         actor = self.context['request'].user
-        scope, _ = lock_assignment_write(actor, validated_data['role'].pk, action='add')
+        scope, _ = lock_assignment_write(actor, validated_data['role'].pk)
         warehouse = validated_data.get('warehouse')
         check_assignment_scope(scope, warehouse.pk if warehouse else None, validated_data.get('all_warehouses', False))
         return super().create(validated_data)

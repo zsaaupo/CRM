@@ -123,8 +123,10 @@ name/SKU, order number and description. Filter items with `?sales_order=<id>`.
 
 GET `/sales-orders/options/` requires both order/item add permissions. It returns
 customer, warehouse, currency, status and product choices. Status choices contain
-all TradeStatus records. Products include unit, currency, sale price and tax defaults; the UI
+all TradeStatus records. Products include unit, currency, sale price, minimum_sale_price (decimal string or null) and tax defaults; the UI
 prefills prices only when currencies match and requires manual prices otherwise.
+Create/edit lines show the minimum sale price read-only in the product currency,
+or Not set when no minimum is configured.
 Customer addresses can prefill editable order address snapshots. Party/catalog
 view permissions are not required just to populate an authorized sales form.
 GET `/sales-orders/edit-options/` requires order view/change and item view.

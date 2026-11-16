@@ -8,6 +8,7 @@ from django.db.models import F
 ACCESS_RULES = {
     'view_users': ('auth.view_user',),
     'add_user': ('auth.add_user',),
+    'change_user': ('auth.change_user',),
     'view_roles': ('auth.view_group',),
     'add_role': ('auth.add_group',),
     'change_role': ('auth.change_group',),
@@ -27,6 +28,11 @@ def access_flags(user):
 def check_assignment_target(actor, target):
     if not actor.is_superuser and (actor.pk == target.pk or target.is_superuser):
         raise PermissionDenied('Only a superuser can change their own role or a superuser role.')
+
+
+def check_user_edit_target(actor, target):
+    if target.is_superuser and not actor.is_superuser:
+        raise PermissionDenied('Only a superuser can edit a superuser account.')
 
 
 def check_role_permission_target(actor, group):

@@ -18,7 +18,8 @@ class PurchasePageTests(TestCase):
         self.user = get_user_model().objects.create_user(username='purchase-page-operator')
         self.role = assign_warehouse_role(self.user, all_warehouses=True).role
         self.unit = UnitOfMeasure.objects.create(name='Pieces', code='PCS')
-        self.product = Product.objects.create(name='Keyboard', sku='KEYBOARD', currency_id='BDT', unit=self.unit)
+        self.product = Product.objects.create(name='Keyboard', sku='KEYBOARD', currency_id='BDT', unit=self.unit,
+                                              cost_price='12.3456')
         self.client = APIClient(enforce_csrf_checks=True)
         self.client.force_login(self.user)
         self.list_url = reverse('purchase_pages:purchase-list')
@@ -106,7 +107,8 @@ class PurchasePageTests(TestCase):
         data = response.data
         self.assertEqual(data['base_currency'], 'BDT')
         self.assertEqual(data['product'], [{'value': self.product.pk, 'label': 'KEYBOARD — Keyboard',
-                                          'unit': self.unit.pk, 'unit_label': 'Pieces (PCS)'}])
+                                          'unit': self.unit.pk, 'unit_label': 'Pieces (PCS)',
+                                          'cost_price': '12.3456'}])
         self.assertTrue(any(row['value'] == 'draft' for row in data['status']))
         self.assertIsNone(next(row for row in data['currency'] if row['value'] == 'USD')['exchange_rate'])
         self.csrf()

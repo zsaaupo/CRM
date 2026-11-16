@@ -51,6 +51,7 @@
                 <div><label class="form-label" data-line-label="unit">Unit</label><input class="form-input" data-line-unit-label readonly><input type="hidden" data-line-field="unit"><p class="form-error" data-line-error="unit" hidden></p></div>
                 {% include 'sale/includes/line_field.html' with name='quantity' label='Quantity' value='1' minimum='0.000001' step='0.000001' only %}
                 {% include 'sale/includes/line_field.html' with name='unit_price' label='Unit price' value='0.0000' only %}
+                <div><label class="form-label" data-line-minimum-label>Minimum sale price</label><input type="text" class="form-input" data-line-minimum-sale-price value="Select a product" readonly><p class="mt-2 text-xs text-stone-500">Catalog price in the product's currency.</p></div>
                 {% include 'sale/includes/line_field.html' with name='discount_amount' label='Line discount' value='0.0000' only %}
                 {% include 'sale/includes/line_field.html' with name='tax_rate' label='Tax (%)' value='0' maximum='100' only %}
                 {% include 'sale/includes/line_field.html' with name='description' label='Description' field_type='text' optional=True only %}

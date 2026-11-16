@@ -31,7 +31,7 @@ def managed_assignments(queryset, actor):
     )
 
 
-def lock_assignment_write(actor, role_id, assignment_id=None, action='change'):
+def lock_assignment_write(actor, role_id, assignment_id=None):
     """Call inside atomic. Serialize scope changes before checking fresh assignments."""
     # A first write also serializes SQLite requests, even when a row is absent.
     lock_user_access([actor.pk])
@@ -39,8 +39,8 @@ def lock_assignment_write(actor, role_id, assignment_id=None, action='change'):
     RoleWarehouseAccess.objects.filter(role_id__in=sorted({role_id, *actor_roles})).update(
         all_warehouses=F('all_warehouses'))
     scope = assignment_manager_scope(actor)
-    if not has_role_permissions(actor, (f'warehouse.{action}_rolewarehouseaccess',)):
-        raise PermissionDenied('Your role does not have permission to change warehouse assignments.')
+    if not has_role_permissions(actor, ('warehouse.manage_warehouse_access',)):
+        raise PermissionDenied('Your role does not have permission to manage warehouse assignments.')
     try:
         target = Group.objects.select_for_update().get(pk=role_id)
     except Group.DoesNotExist as exc:

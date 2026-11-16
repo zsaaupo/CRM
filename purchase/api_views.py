@@ -152,7 +152,7 @@ class PurchaseOptionsAPIView(PurchaseConcurrencyMixin, WarehouseScopeAPIMixin, B
             ],
             'product': [
                 {'value': row.pk, 'label': f'{row.sku} — {row.name}', 'unit': row.unit_id,
-                 'unit_label': f'{row.unit.name} ({row.unit.code})'}
+                 'unit_label': f'{row.unit.name} ({row.unit.code})', 'cost_price': str(row.cost_price)}
                 for row in Product.objects.select_related('unit').order_by('name', 'pk')
             ],
         })

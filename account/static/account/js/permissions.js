@@ -1,5 +1,7 @@
 import { getJSON, putJSON } from "../../js/api.js";
 
+import {initializeRoleWarehouseAccess} from "./role_warehouse_access.js";
+
 const operations = [
     {prefix: "add", label: "Create"},
     {prefix: "view", label: "Read"},
@@ -32,19 +34,21 @@ if (panel) {
     let loadVersion = 0;
     let loaded = false;
     let saving = false;
+    let warehouseController = null;
     function updateControls() {
-        find("permissions-save").disabled = !loaded || saving;
-        find("permissions-reset").disabled = !loaded || saving;
-        find("permission-fields").disabled = !loaded || saving;
+        find("permissions-save").disabled = !loaded || saving || warehouseController?.readyToSave === false;
+        find("permissions-reset").disabled = !loaded || saving || warehouseController?.readyToSave === false;
+        find("permission-fields").disabled = !loaded || saving || warehouseController?.readyToSave === false;
         find("permissions-retry").disabled = saving;
         find("permissions-save-label").textContent = saving ? "Saving..." : "Save permissions";
         find("permissions-save-spinner").hidden = !saving;
         form.setAttribute("aria-busy", String(saving));
+        warehouseController?.setBusy(saving);
     }
     function updateCount() {
         const checkboxes = [...form.querySelectorAll('input[name="permissions"]')];
         const selected = checkboxes.filter((input) => input.checked).length;
-        const changed = checkboxes.some((input) => input.checked !== original.has(Number(input.value)));
+        const changed = checkboxes.some((input) => input.checked !== original.has(Number(input.value))) || warehouseController?.hasChanges();
         find("selection-count").textContent = `${selected} permissions selected${changed ? " \u00b7 Unsaved changes" : ""}`;
     }
     function checkbox(permission, withLabel = false) {
@@ -150,16 +154,24 @@ if (panel) {
     }
     form.addEventListener("submit", async (event) => {
         event.preventDefault();
-        if (!loaded || saving) return;
+        if (!loaded || saving || (warehouseController && !warehouseController.readyToSave)) return;
         const permissions = [...form.querySelectorAll('input[name="permissions"]')]
             .filter((input) => input.checked)
             .map((input) => Number(input.value));
         const feedback = find("permissions-feedback");
         feedback.hidden = true;
+        const payload = {permissions};
+        try {
+            if (warehouseController) payload.warehouse_access = warehouseController.getPayload();
+        } catch (error) {
+            feedback.dataset.tone = 'error'; feedback.textContent = error.message; feedback.hidden = false; feedback.focus();
+            return;
+        }
         saving = true;
         updateControls();
         try {
-            const result = await putJSON(form.action, {permissions}, form.elements.namedItem("csrfmiddlewaretoken").value);
+            const result = await putJSON(form.action, payload, form.elements.namedItem("csrfmiddlewaretoken").value);
+            warehouseController?.acceptSaved(result.warehouse_access);
             original = new Set(result.permissions);
             updateCount();
             feedback.dataset.tone = "success";
@@ -168,7 +180,7 @@ if (panel) {
             window.location.assign(form.dataset.successUrl);
         } catch (error) {
             feedback.dataset.tone = "error";
-            const messages = error.errors?.permissions;
+            const messages = error.errors && Object.keys(error.errors).length ? Object.values(error.errors).map(value => typeof value === "string" ? value : JSON.stringify(value)) : null;
             feedback.textContent = Array.isArray(messages) ? messages.join(" ")
                 : error.status === 404 ? "This role no longer exists. Return to the role list."
                 : error.message || "Could not save permissions. Please try again.";
@@ -181,12 +193,17 @@ if (panel) {
     });
     form.addEventListener("change", updateCount);
     find("permissions-reset").addEventListener("click", () => {
-        if (!loaded || saving) return;
+        if (!loaded || saving || (warehouseController && !warehouseController.readyToSave)) return;
         form.querySelectorAll('input[name="permissions"]').forEach((input) => {
             input.checked = original.has(Number(input.value));
         });
+        warehouseController?.reset();
         updateCount();
     });
     find("permissions-retry").addEventListener("click", loadPermissions);
+    const warehousePanel = panel.querySelector('[data-role-warehouse-access]');
+    if (warehousePanel) warehouseController = initializeRoleWarehouseAccess(warehousePanel, () => {
+        updateControls(); if (loaded) updateCount();
+    });
     loadPermissions();
 }

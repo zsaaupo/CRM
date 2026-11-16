@@ -34,7 +34,6 @@ class Stock(TimeStampedModel):
 
 
 class RoleWarehouseAccess(TimeStampedModel):
-    """Warehouse scope inherited by users assigned to this role."""
 
     role = models.OneToOneField(
         'auth.Group', on_delete=models.CASCADE, related_name='warehouse_access',
@@ -52,6 +51,7 @@ class RoleWarehouseAccess(TimeStampedModel):
         ordering = ['role_id']
         verbose_name = 'role warehouse access'
         verbose_name_plural = 'role warehouse access assignments'
+        permissions = [('manage_warehouse_access', 'Manage warehouse assignments')]
         constraints = [
             models.CheckConstraint(
                 condition=models.Q(all_warehouses=False) | models.Q(warehouse__isnull=True),
