@@ -1,0 +1,4 @@
+{% include 'inventory/includes/field.html' with name='code' label='Code' required=True maxlength=code_maxlength locked=lock_code hint='Use a unique code. It cannot be changed after creation.' only %}
+{% include 'inventory/includes/field.html' with name='name' label='Name' required=True maxlength=name_maxlength only %}
+{% include 'inventory/includes/field.html' with name='description' label='Description' field_type='textarea' only %}
+{% include 'inventory/includes/field.html' with name='is_active' label='Active' field_type='checkbox' checked=True only %}

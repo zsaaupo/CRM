@@ -38,7 +38,7 @@ export function initializeRecordDetail(panel, onLoad = () => {}) {
             if (image) {
                 find("image-wrapper").hidden = !record.image;
                 if (record.image) {
-                    image.alt = record.name || "Product";
+                    image.alt = record.name || record.full_name || "Record";
                     image.src = record.image;
                 } else image.removeAttribute("src");
             }

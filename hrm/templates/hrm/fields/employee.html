@@ -1,0 +1,18 @@
+{% include 'inventory/includes/field.html' with name='employee_code' label='Employee code' required=True maxlength=40 hint='Use a unique employee code. Codes remain reserved after deletion.' only %}
+{% include 'inventory/includes/field.html' with name='full_name' label='Full name' required=True maxlength=150 only %}
+{% include 'inventory/includes/field.html' with name='image' label='Picture' field_type='file' hint='Choose an employee picture. Leave empty to keep the current picture when editing.' only %}
+{% if page_mode == 'edit' %}
+<div class="user-form-full" data-current-image hidden><p class="form-label">Current picture</p><img data-current-image-preview alt="Current employee picture" class="max-h-32 max-w-full rounded-lg object-contain"></div>
+{% endif %}
+{% include 'inventory/includes/field.html' with name='work_email' label='Work email' field_type='email' maxlength=254 only %}
+{% include 'inventory/includes/field.html' with name='work_phone' label='Work phone' field_type='tel' maxlength=32 only %}
+{% include 'inventory/includes/field.html' with name='department' label='Department' field_type='select' only %}
+{% include 'inventory/includes/field.html' with name='designation' label='Designation' field_type='select' only %}
+{% include 'inventory/includes/field.html' with name='employment_type' label='Employment type' field_type='select' required=True value='full-time' only %}
+{% include 'inventory/includes/field.html' with name='status' label='Employee status' field_type='select' required=True value='active' only %}
+{% include 'inventory/includes/field.html' with name='joining_date' label='Joining date' field_type='date' required=True value=joining_date_default only %}
+{% include 'inventory/includes/field.html' with name='leaving_date' label='Leaving date' field_type='date' nullable_field=True only %}
+{% include 'inventory/includes/field.html' with name='reports_to' label='Reporting manager' field_type='select' only %}
+{% include 'inventory/includes/field.html' with name='workplace' label='Workplace' maxlength=200 only %}
+{% include 'inventory/includes/field.html' with name='warehouse' label='Warehouse' field_type='select' hint='Choose the warehouse where this employee works, if applicable.' only %}
+{% if can_link_user %}{% include 'inventory/includes/field.html' with name='user' label='Login account' field_type='select' hint='Choose an existing login account, or leave empty.' only %}{% endif %}

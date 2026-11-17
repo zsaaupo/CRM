@@ -74,6 +74,7 @@ TEMPLATES = [
                 'purchase.context_processors.purchase_navigation',
                 'sale.context_processors.sale_navigation',
                 'people.context_processors.people_navigation',
+                'hrm.context_processors.hrm_navigation',
                 'common.context_processors.settings_navigation',
                 'report.context_processors.report_actions',
             ],

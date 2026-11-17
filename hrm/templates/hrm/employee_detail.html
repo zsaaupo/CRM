@@ -1,0 +1,42 @@
+{% extends "layouts/dashboard.html" %}
+{% load static %}
+{% block title %}Employee details | eManager{% endblock %}
+{% block content %}
+<div class="workspace-content" data-record-detail data-api-url="{{ detail_api_url }}" data-title-field="full_name" data-login-url="{% url 'account_pages:login' %}">
+    <div class="page-heading">
+        <div class="min-w-0 max-w-full"><p class="page-eyebrow">HRM</p><h1 class="page-title break-all"><span data-record-title>Employee details</span><span class="text-emerald-600">.</span></h1><p class="page-description">Contact information, employment details and workplace.</p></div>
+        <div class="flex flex-wrap gap-3"><a href="{{ list_url }}" class="secondary-button">Back to employees <span aria-hidden="true">&rarr;</span></a>{% if edit_url %}<a href="{{ edit_url }}" class="primary-button compact-primary">Edit employee</a>{% endif %}</div>
+    </div>
+    {% include 'includes/detail_status.html' %}
+    <div data-record-content hidden>
+        <figure class="user-form-card mb-6" data-record-image-wrapper hidden><img data-record-image class="max-h-72 max-w-full rounded-xl object-contain" alt=""></figure>
+        <section class="user-form-card mb-6" aria-labelledby="employee-contact-heading">
+            <h2 id="employee-contact-heading" class="section-title mb-6">Employee information</h2>
+            <dl class="profile-grid">
+                {% include 'includes/detail_field.html' with name='employee_code' label='Employee code' only %}
+                {% include 'includes/detail_field.html' with name='full_name' label='Full name' only %}
+                {% include 'includes/detail_field.html' with name='work_email' label='Work email' only %}
+                {% include 'includes/detail_field.html' with name='work_phone' label='Work phone' only %}
+                {% include 'includes/detail_field.html' with name='user_username' label='Login account' only %}
+            </dl>
+        </section>
+        <section class="user-form-card mb-6" aria-labelledby="employee-employment-heading">
+            <h2 id="employee-employment-heading" class="section-title mb-6">Employment details</h2>
+            <dl class="profile-grid">
+                {% include 'includes/detail_field.html' with name='department_name' label='Department' only %}
+                {% include 'includes/detail_field.html' with name='designation_name' label='Designation' only %}
+                {% include 'includes/detail_field.html' with name='employment_type_name' label='Employment type' only %}
+                {% include 'includes/detail_field.html' with name='status_name' label='Employee status' only %}
+                {% include 'includes/detail_field.html' with name='joining_date' label='Joining date' only %}
+                {% include 'includes/detail_field.html' with name='leaving_date' label='Leaving date' only %}
+                {% include 'includes/detail_field.html' with name='reports_to_name' label='Reporting manager' only %}
+                {% include 'includes/detail_field.html' with name='workplace' label='Workplace' only %}
+                {% include 'includes/detail_field.html' with name='warehouse_name' label='Warehouse' only %}
+            </dl>
+        </section>
+        {% include 'includes/detail_audit.html' %}
+    </div>
+    <noscript><p class="form-error">Enable JavaScript to load employee details.</p></noscript>
+</div>
+{% endblock %}
+{% block workspace_js %}<script type="module" src="{% static 'hrm/js/employee_detail.js' %}"></script>{% endblock %}

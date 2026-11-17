@@ -24,7 +24,7 @@ export function catalogRow(record, columns, editUrlTemplate = "", onDelete = nul
                 const view = document.createElement("a");
                 view.href = viewUrlTemplate.replace("/0/", `/${encodeURIComponent(record.id)}/`);
                 view.className = "icon-button";
-                view.title = `View ${record.name || record.order_number || record.transfer_number || record.code || record.id}`;
+                view.title = `View ${record.name || record.full_name || record.order_number || record.transfer_number || record.code || record.id}`;
                 view.setAttribute("aria-label", view.title);
                 view.append(actionIcon("M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12ZM15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"));
                 actions.append(view);
@@ -38,8 +38,8 @@ export function catalogRow(record, columns, editUrlTemplate = "", onDelete = nul
                 } else link.href = editUrlTemplate.replace("/0/", `/${encodeURIComponent(record.id)}/`);
                 link.dataset.catalogEditAction = "";
                 link.className = "icon-button";
-                link.setAttribute("aria-label", `Edit ${record.name || record.order_number || record.transfer_number || record.code || record.id}`);
-                link.title = `Edit ${record.name || record.order_number || record.transfer_number || record.code || record.id}`;
+                link.setAttribute("aria-label", `Edit ${record.name || record.full_name || record.order_number || record.transfer_number || record.code || record.id}`);
+                link.title = `Edit ${record.name || record.full_name || record.order_number || record.transfer_number || record.code || record.id}`;
                 link.append(actionIcon("m16 3 5 5-12 12-6 1 1-6L16 3ZM13 6l5 5"));
                 actions.append(link);
             }
@@ -77,7 +77,7 @@ export function catalogRow(record, columns, editUrlTemplate = "", onDelete = nul
                 remove.className = "icon-button inventory-delete-button";
                 remove.dataset.catalogDeleteAction = "";
                 remove.disabled = Boolean(deleteDisabledField && record[deleteDisabledField] === true);
-                remove.title = `Delete ${record.name || record.order_number || record.transfer_number || record.code || record.id}`;
+                remove.title = `Delete ${record.name || record.full_name || record.order_number || record.transfer_number || record.code || record.id}`;
                 remove.setAttribute("aria-label", remove.title);
                 remove.append(actionIcon("M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"));
                 remove.addEventListener("click", () => {
@@ -92,7 +92,7 @@ export function catalogRow(record, columns, editUrlTemplate = "", onDelete = nul
             const avatar = document.createElement("span");
             avatar.className = "user-avatar inventory-product-thumb";
             avatar.setAttribute("aria-hidden", "true");
-            avatar.textContent = (record.name || "P").trim().slice(0, 1).toUpperCase();
+            avatar.textContent = (record.name || record.full_name || "P").trim().slice(0, 1).toUpperCase();
             if (record.image) {
                 const image = document.createElement("img");
                 image.className = "avatar-image";
@@ -238,7 +238,7 @@ if (panel) {
 
     function openDelete(record, trigger) {
         pendingDelete = {record, trigger};
-        find("delete-name").textContent = record.name || record.order_number || record.transfer_number || record.code || record.id;
+        find("delete-name").textContent = record.name || record.full_name || record.order_number || record.transfer_number || record.code || record.id;
         find("delete-error").hidden = true;
         deleteDialog.showModal();
         find("delete-cancel").focus();
@@ -333,7 +333,7 @@ if (panel) {
                 await deleteJSON(url, csrf);
                 deleteDialog.close();
                 find("feedback").dataset.tone = "success";
-                find("feedback").textContent = `${record.name || record.order_number || record.transfer_number || record.code || record.id} deleted.`;
+                find("feedback").textContent = `${record.name || record.full_name || record.order_number || record.transfer_number || record.code || record.id} deleted.`;
                 find("feedback").hidden = false;
                 await load(nextPage);
                 find("feedback").focus();
