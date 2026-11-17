@@ -16,6 +16,9 @@ db.sqlite3-journal
 
 # Collected deployment assets
 staticfiles/
+.runtime/
+output/pdf/
+tmp/pdfs/
 
 # User-uploaded files
 media/

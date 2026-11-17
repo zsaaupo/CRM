@@ -5,6 +5,7 @@ import vm from 'node:vm';
 import {URL} from 'node:url';
 
 const source = (await readFile(new URL('../static/account/js/edit_user.js', import.meta.url), 'utf8'))
+    .replace(/\r\n/g, '\n')
     .replace(/^import .*;\r?\n/gm, '').replace('    loadUser();\n}', '    globalThis.ready = loadUser();\n}');
 class Element {
     constructor() { this.listeners = {}; this.dataset = {}; this.attributes = {}; this.value = '';

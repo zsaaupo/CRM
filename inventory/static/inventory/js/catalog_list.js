@@ -13,6 +13,7 @@ function actionIcon(pathData) {
 
 export function catalogRow(record, columns, editUrlTemplate = "", onDelete = null, viewUrlTemplate = "", editDisabledField = "", onReceive = null, onComplete = null, deleteDisabledField = "", completeLabel = "sale") {
     const row = document.createElement("tr");
+    row.dataset.recordId = String(record.id);
     for (const column of columns) {
         const cell = document.createElement("td");
         const value = record[column.key];

@@ -43,6 +43,8 @@ INSTALLED_APPS = [
     'purchase',
     'sale',
     'people',
+    'report',
+    'hrm',
 ]
 
 MIDDLEWARE = [
@@ -73,12 +75,22 @@ TEMPLATES = [
                 'sale.context_processors.sale_navigation',
                 'people.context_processors.people_navigation',
                 'common.context_processors.settings_navigation',
+                'report.context_processors.report_actions',
             ],
         },
     },
 ]
 
 WSGI_APPLICATION = 'eManager_project01.wsgi.application'
+
+# Shared report branding. Set a local PNG/JPEG/WebP path to include a company logo.
+REPORT_COMPANY = {
+    'name': 'eManager',
+    'address': 'House:- 06, Road:- 2B, Block:- J, Dhaka 1212',
+    'phone': '01920000000',
+    'email': 'emanagerz95@gmail.com',
+    'logo_path': '',
+}
 
 LOGIN_URL = 'account_pages:login'
 LOGIN_REDIRECT_URL = 'dashboard'

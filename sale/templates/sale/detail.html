@@ -5,7 +5,7 @@
 <div class="workspace-content" data-record-detail data-api-url="{{ detail_api_url }}" data-title-field="order_number" data-login-url="{% url 'account_pages:login' %}">
     <div class="page-heading">
         <div class="min-w-0 max-w-full"><p class="page-eyebrow">Sales</p><h1 class="page-title break-all"><span data-record-title>Sales details</span><span class="text-emerald-600">.</span></h1><p class="page-description">Order information, products and totals.</p></div>
-        <div class="flex gap-3"><a href="{{ list_url }}" class="secondary-button">Back to sales <span aria-hidden="true">&rarr;</span></a>{% if edit_url %}<a href="{{ edit_url }}" class="primary-button compact-primary" data-sale-edit hidden>Edit sale</a>{% endif %}</div>
+        <div class="flex gap-3">{% include 'report/includes/download_button.html' %}<a href="{{ list_url }}" class="secondary-button">Back to sales <span aria-hidden="true">&rarr;</span></a>{% if edit_url %}<a href="{{ edit_url }}" class="primary-button compact-primary" data-sale-edit hidden>Edit sale</a>{% endif %}</div>
     </div>
     {% include 'includes/detail_status.html' %}
     <div data-record-content hidden>
