@@ -8,7 +8,7 @@
         <a href="{{ list_url }}" class="secondary-button">Back to {{ resource.plural }} <span aria-hidden="true">&rarr;</span></a>
     </div>
     <div{% if is_product %} class="user-form-layout"{% endif %}>
-        <form method="post" action="{{ create_api_url }}" enctype="multipart/form-data" class="user-form-card{% if not is_product %} max-w-2xl{% endif %}" data-catalog-form data-options-url="{{ options_api_url }}" data-detail-url="{{ detail_api_url }}" data-method="{{ form_method|default:'POST' }}" data-success-url="{{ list_url }}" novalidate>
+        <form method="post" action="{{ create_api_url }}" enctype="multipart/form-data" class="user-form-card{% if not is_product %} max-w-2xl{% endif %}" data-catalog-form data-readonly-field="{{ readonly_field }}" data-readonly-message="{{ readonly_message }}" data-options-url="{{ options_api_url }}" data-detail-url="{{ detail_api_url }}" data-method="{{ form_method|default:'POST' }}" data-success-url="{{ list_url }}" novalidate>
             {% csrf_token %}
             <div class="form-status mb-7" data-catalog-form-status role="status" aria-live="polite" tabindex="-1" hidden></div>
             <button type="button" class="secondary-button mb-5" data-catalog-load-retry hidden>Try loading again</button>
@@ -21,7 +21,7 @@
                 <div class="user-form-grid">{% include fields_template %}</div>
             </fieldset>
             {% endif %}
-            <div class="user-form-actions"><a href="{{ list_url }}" class="secondary-button">Cancel</a><button type="submit" class="primary-button compact-primary" data-catalog-submit{% if is_product or detail_api_url %} disabled{% endif %}><span data-submit-label>{{ save_label }}</span><span class="button-spinner" data-submit-spinner hidden aria-hidden="true"></span></button></div>
+            <div class="user-form-actions"><a href="{{ list_url }}" class="secondary-button">Cancel</a><button type="submit" class="primary-button compact-primary" data-catalog-submit{% if is_product or detail_api_url or options_api_url %} disabled{% endif %}><span data-submit-label>{{ save_label }}</span><span class="button-spinner" data-submit-spinner hidden aria-hidden="true"></span></button></div>
             <noscript><p class="form-error">Enable JavaScript to save this {{ resource.singular }}.</p></noscript>
         </form>
         {% if is_product %}<aside class="user-form-aside"><span class="user-aside-icon" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m12 3 9 5-9 5-9-5 9-5ZM3 8v9l9 5 9-5V8M12 13v9M7.5 5.5l9 5" stroke-linejoin="round"/></svg></span><h2>A place in your catalog</h2><p>Use a unique SKU and choose the unit, type and status that describe this product.</p><div class="user-aside-note"><span class="status-dot" aria-hidden="true"></span><span>Product images are optional. You can add extra specifications such as color or size.</span></div><p class="mt-5">Prices use the currency you enter. Review the details before adding your product.</p></aside>{% endif %}

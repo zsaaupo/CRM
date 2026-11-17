@@ -10,5 +10,8 @@ def warehouse_navigation(request):
     return {'warehouse_access': {
         'view': can_view,
         'stock': can_view_stock,
+        'transfers': scoped and has_role_permissions(user, ('warehouse.view_warehousetransfer',)),
+        'add_transfer': scoped and has_role_permissions(user, ('warehouse.view_warehousetransfer',
+                        'warehouse.add_warehousetransfer')) and all_warehouse_access(warehouse_scope(user)),
         'add': can_view and has_role_permissions(user, ('warehouse.add_warehouse',)) and all_warehouse_access(warehouse_scope(user)),
     }}

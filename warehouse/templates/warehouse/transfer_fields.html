@@ -1,0 +1,4 @@
+{% include 'inventory/includes/field.html' with name='source_warehouse' label='Source warehouse' field_type='select' required=True only %}
+{% include 'inventory/includes/field.html' with name='destination_warehouse' label='Destination warehouse' field_type='select' required=True only %}
+{% include 'inventory/includes/field.html' with name='transfer_date' label='Transfer date' field_type='date' required=True value=today|date:'Y-m-d' only %}
+{% include 'inventory/includes/field.html' with name='notes' label='Notes' field_type='textarea' only %}

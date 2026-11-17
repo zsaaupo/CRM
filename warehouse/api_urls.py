@@ -7,12 +7,21 @@ from .api_views import (
     RoleWarehouseAccessOptionsAPIView,
     WareHouseDetailAPIView, WareHouseListAPIView, WareHouseListCreateAPIView,
     WareHouseUpdateAPIView,
+    WarehouseTransferListCreateAPIView, WarehouseTransferListAPIView, WarehouseTransferDetailAPIView,
+    WarehouseTransferUpdateAPIView, TransferCompleteAPIView, TransferOptionsAPIView, TransferEditOptionsAPIView,
 )
 
 
 app_name = 'warehouse'
 
 urlpatterns = [
+    path('transfers/options/', TransferOptionsAPIView.as_view(), name='transfer-options'),
+    path('transfers/edit-options/', TransferEditOptionsAPIView.as_view(), name='transfer-edit-options'),
+    path('transfers/complete/', TransferCompleteAPIView.as_view(), name='transfer-complete'),
+    path('transfers/', WarehouseTransferListCreateAPIView.as_view(), name='transfer-list'),
+    path('transfers/list/', WarehouseTransferListAPIView.as_view(), name='transfer-list-view'),
+    path('transfers/<int:pk>/', WarehouseTransferDetailAPIView.as_view(), name='transfer-detail'),
+    path('transfers/<int:pk>/update/', WarehouseTransferUpdateAPIView.as_view(), name='transfer-update'),
     path('role-warehouse-access/options/', RoleWarehouseAccessOptionsAPIView.as_view(), name='role-warehouse-access-options'),
     path('role-warehouse-access/', RoleWarehouseAccessListCreateAPIView.as_view(), name='role-warehouse-access-list'),
     path('role-warehouse-access/list/', RoleWarehouseAccessListAPIView.as_view(), name='role-warehouse-access-list-view'),

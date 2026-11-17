@@ -4,9 +4,10 @@ from common.view import (
 )
 
 from django.db import OperationalError, transaction
+from django.db.models import Prefetch
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import never_cache
-from rest_framework.generics import RetrieveAPIView
+from rest_framework.generics import GenericAPIView, RetrieveAPIView
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework import serializers
@@ -16,12 +17,14 @@ from django.shortcuts import get_object_or_404
 from account.permissions import has_role_permissions
 
 from .access import WarehouseAccessBusy, lock_assignment_write, managed_assignments
-from .models import Stock, RoleWarehouseAccess, WareHouse
-from .scope import WarehouseScopeAPIMixin, all_warehouse_access, scoped_queryset, warehouse_scope
+from .models import Stock, RoleWarehouseAccess, WareHouse, WarehouseTransfer, WarehouseTransferItem
+from .scope import HasWarehouseAccess, WarehouseScopeAPIMixin, all_warehouse_access, scoped_queryset, warehouse_scope
 from .serializers import (
     StockFilterSerializer, StockReadSerializer, RoleWarehouseAccessFilterSerializer,
     RoleWarehouseAccessSerializer, WareHouseSerializer,
+    WarehouseTransferSerializer, TransferCompleteSerializer,
 )
+from .services import TransferBusy, complete_transfer, lock_transfer, transfer_queryset
 
 
 class WarehouseRecordScopeMixin(WarehouseScopeAPIMixin):
@@ -69,6 +72,90 @@ class StockDetailAPIView(WarehouseScopeAPIMixin, BaseAPIMixin, RetrieveAPIView):
     serializer_class = StockReadSerializer
     queryset = StockListAPIView.queryset
     http_method_names = ['get', 'head', 'options']
+
+
+class WarehouseTransferAPIMixin:
+    role_permissions_only = True
+    serializer_class = WarehouseTransferSerializer
+    queryset = WarehouseTransfer.objects.select_related('source_warehouse', 'destination_warehouse').prefetch_related(
+        Prefetch('items', queryset=WarehouseTransferItem.objects.select_related('product', 'unit')))
+    response_key = 'warehouse_transfer'
+    ordering = ['-transfer_date', '-pk']
+    search_fields = ['transfer_number', 'source_warehouse__name', 'destination_warehouse__name',
+                     'items__product__name', 'items__product__sku', 'notes']
+
+    def get_permissions(self):
+        return [*super().get_permissions(), HasWarehouseAccess()]
+
+    def get_queryset(self):
+        return transfer_queryset(super().get_queryset(), self.request.warehouse_scope,
+            write=self.request.method in ('PUT', 'PATCH', 'DELETE')).distinct()
+
+    def handle_exception(self, exc):
+        if isinstance(exc, OperationalError) and ('locked' in str(exc).lower() or 'deadlock' in str(exc).lower()):
+            exc = TransferBusy()
+        return super().handle_exception(exc)
+
+
+class WarehouseTransferListCreateAPIView(WarehouseTransferAPIMixin, BaseListCreateAPIView):
+    pass
+
+
+class WarehouseTransferListAPIView(WarehouseTransferAPIMixin, BaseListAPIView):
+    pass
+
+
+class WarehouseTransferDetailAPIView(WarehouseTransferAPIMixin, BaseDetailAPIView):
+    @transaction.atomic
+    def perform_destroy(self, instance):
+        current = lock_transfer(instance.pk, self.request.user, 'delete')
+        current.items.all().delete()
+        super().perform_destroy(current)
+
+
+class WarehouseTransferUpdateAPIView(WarehouseTransferAPIMixin, BaseUpdateAPIView):
+    pass
+
+
+@method_decorator(never_cache, name='dispatch')
+class TransferCompleteAPIView(WarehouseTransferAPIMixin, BaseAPIMixin, GenericAPIView):
+    serializer_class = TransferCompleteSerializer
+    required_permissions = ('warehouse.change_warehousetransfer',)
+    http_method_names = ['post', 'options']
+
+    def post(self, request):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        record, completed_now = complete_transfer(request.user, serializer.validated_data['transfer_id'])
+        return Response({
+            'message': 'Transfer completed and stock updated in both warehouses.' if completed_now
+                       else 'Transfer was already completed. Stock was not moved again.',
+            'completed_now': completed_now,
+            'warehouse_transfer': WarehouseTransferSerializer(record, context=self.get_serializer_context()).data,
+        })
+
+
+@method_decorator(never_cache, name='dispatch')
+class TransferOptionsAPIView(WarehouseTransferAPIMixin, BaseAPIMixin, APIView):
+    required_permissions = ('warehouse.add_warehousetransfer',)
+    http_method_names = ['get', 'head', 'options']
+
+    def get(self, request):
+        if not all_warehouse_access(request.warehouse_scope):
+            raise PermissionDenied('Creating or editing transfers requires access to both warehouses.')
+        from inventory.models import Product
+        warehouses = [{'value': row.pk, 'label': str(row)}
+                      for row in WareHouse.objects.filter(is_active=True).order_by('name', 'pk')]
+        return Response({
+            'source_warehouse': warehouses, 'destination_warehouse': warehouses,
+            'product': [{'value': row.pk, 'label': f'{row.sku} — {row.name}', 'unit': row.unit_id,
+                         'unit_label': f'{row.unit.name} ({row.unit.code})'}
+                        for row in Product.objects.select_related('unit').order_by('name', 'pk')],
+        })
+
+
+class TransferEditOptionsAPIView(TransferOptionsAPIView):
+    required_permissions = ('warehouse.view_warehousetransfer', 'warehouse.change_warehousetransfer')
 
 
 class RoleWarehouseAccessAPIMixin:

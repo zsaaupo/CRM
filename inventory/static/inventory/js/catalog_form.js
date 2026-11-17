@@ -14,9 +14,10 @@ if (form) {
     const retry = form.querySelector("[data-catalog-load-retry]");
     let ready = !form.dataset.optionsUrl && !form.dataset.detailUrl;
     let loading = false;
+    let readOnly = false;
 
     function setDisabled(disabled) {
-        for (const input of [...controls, submit]) input.disabled = disabled || input.dataset.locked === "true";
+        for (const input of [...controls, submit]) input.disabled = disabled || readOnly || input.dataset.locked === "true";
     }
 
     async function initialize() {
@@ -34,6 +35,10 @@ if (form) {
                 form.dataset.optionsUrl ? getJSON(form.dataset.optionsUrl) : null,
                 form.dataset.detailUrl ? getJSON(form.dataset.detailUrl) : null,
             ]);
+            if (form.dataset.readonlyField && record?.[form.dataset.readonlyField] === true) {
+                readOnly = true;
+                throw new Error(form.dataset.readonlyMessage || 'This record is read-only. Return to the list.');
+            }
             if (form.dataset.optionsUrl) {
                 const selects = [...form.querySelectorAll("[data-options-field]")];
                 for (const select of selects) {
@@ -52,11 +57,18 @@ if (form) {
                         select.append(option);
                     }
                     const value = select.dataset.default;
+                    if (form.dataset.readonlyField && record?.[select.name] != null
+                        && !options[select.name].some(item => String(item.value) === String(record[select.name]))) {
+                        const existing = document.createElement('option');
+                        existing.value = String(record[select.name]);
+                        existing.textContent = `${record[`${select.name}_name`] || record[select.name]} (existing)`;
+                        select.append(existing);
+                    }
                     if (value && options[select.name].some((item) => String(item.value) === value)) select.value = value;
                     if (select.dataset.locked === "true" && !select.value) {
                         throw new Error(`The selected ${select.dataset.label.toLowerCase()} is unavailable. Return to the list and choose a valid entry.`);
                     }
-                    if (select.required && options[select.name].length === 0) missing.push(select.dataset.label.toLowerCase());
+                    if (select.required && select.children.length <= 1) missing.push(select.dataset.label.toLowerCase());
                 }
                 if (missing.length) throw new Error(`No ${missing.join(", ")} records are available. Add the missing records or ask your administrator, then try loading again.`);
             }
@@ -173,6 +185,11 @@ if (form) {
             window.location.assign(form.dataset.successUrl);
         } catch (error) {
             const general = [];
+            if (form.dataset.readonlyField && error.status === 409) {
+                try { readOnly = (await getJSON(form.dataset.detailUrl))?.[form.dataset.readonlyField] === true; }
+                catch { /* Keep the original API error if access changed. */ }
+                if (readOnly) ready = false;
+            }
             if (error instanceof APIError) {
                 for (const [name, value] of Object.entries(error.errors)) {
                     const message = Array.isArray(value) ? value.join(" ") : String(value);
@@ -180,7 +197,7 @@ if (form) {
                 }
             }
             status.dataset.tone = "error";
-            status.textContent = error.status === 403
+            status.textContent = readOnly ? form.dataset.readonlyMessage || 'This record is read-only. Return to the list.' : error.status === 403
                 ? "Your session or permissions have changed. Refresh this page and try again."
                 : general.join(" ") || "Could not save. Check the highlighted fields and try again.";
             status.hidden = false;

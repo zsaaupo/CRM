@@ -1,0 +1,29 @@
+{% extends "layouts/dashboard.html" %}
+{% load static %}
+{% block title %}Transfer details | eManager{% endblock %}
+{% block content %}
+<div class="workspace-content" data-record-detail data-api-url="{{ detail_api_url }}" data-title-field="transfer_number" data-login-url="{% url 'account_pages:login' %}">
+    <div class="page-heading">
+        <div class="min-w-0 max-w-full"><p class="page-eyebrow">Warehouses</p><h1 class="page-title break-all"><span data-record-title>Transfer details</span><span class="text-emerald-600">.</span></h1><p class="page-description">Product movement between warehouses.</p></div>
+        <a href="{{ list_url }}" class="secondary-button">Back to transfers <span aria-hidden="true">&rarr;</span></a>
+    </div>
+    {% include 'includes/detail_status.html' %}
+    <div data-record-content hidden>
+        <section class="user-form-card mb-6" aria-labelledby="transfer-information-heading">
+            <h2 id="transfer-information-heading" class="section-title mb-6">Transfer information</h2>
+            <dl class="profile-grid">
+                {% include 'includes/detail_field.html' with name='transfer_number' label='Transfer number' only %}
+                {% include 'includes/detail_field.html' with name='transfer_date' label='Date' only %}
+                {% include 'includes/detail_field.html' with name='source_warehouse_name' label='Source warehouse' only %}
+                {% include 'includes/detail_field.html' with name='destination_warehouse_name' label='Destination warehouse' only %}
+                {% include 'includes/detail_field.html' with name='is_completed' label='Completed' kind='boolean' only %}
+                {% include 'includes/detail_field.html' with name='notes' label='Notes' only %}
+            </dl>
+        </section>
+        <section class="user-form-card mb-6" aria-labelledby="transfer-products-heading"><h2 id="transfer-products-heading" class="section-title mb-6">Products</h2><div class="users-table-scroll"><table class="users-table"><caption class="sr-only">Products in this transfer</caption><thead><tr><th scope="col">Line</th><th scope="col">SKU</th><th scope="col">Product</th><th scope="col">Quantity</th><th scope="col">Unit</th></tr></thead><tbody data-transfer-items></tbody></table></div></section>
+        {% include 'includes/detail_audit.html' %}
+    </div>
+    <noscript><p class="form-error">Enable JavaScript to load transfer details.</p></noscript>
+</div>
+{% endblock %}
+{% block workspace_js %}<script type="module" src="{% static 'warehouse/js/transfer_detail.js' %}"></script>{% endblock %}

@@ -231,3 +231,78 @@ Stock balance, so the next list/detail request shows the new quantity.
 Warehouse assignments are configured from Roles → Manage permissions. There is
 no separate warehouse-assignment navbar entry or page. The options endpoint
 requires a role parameter.
+
+## Warehouse transfers
+
+Each transfer contains multiple product lines moving from one source warehouse to
+one destination. Each line records its product, unit and quantity (six decimal
+places). Creating, editing
+or deleting a draft never changes stock. Completed transfers cannot be edited or
+deleted, including through the dedicated update endpoint.
+
+| URL | Methods | Purpose |
+| --- | --- | --- |
+| `/warehouse/api/transfers/` | GET, POST | List and create drafts |
+| `/warehouse/api/transfers/list/` | GET | Paginated read-only list |
+| `/warehouse/api/transfers/<id>/` | GET, PUT, PATCH, DELETE | Read, edit or delete a draft |
+| `/warehouse/api/transfers/<id>/update/` | PUT, PATCH | Update a draft |
+| `/warehouse/api/transfers/options/` | GET | Creation choices; requires add permission |
+| `/warehouse/api/transfers/edit-options/` | GET | Editing choices; requires view/change permissions |
+| `/warehouse/api/transfers/complete/` | POST | Move stock once and lock the transfer |
+
+Create example:
+
+```json
+{"source_warehouse": 1, "destination_warehouse": 2, "notes": "Branch replenishment",
+ "items": [{"line_number": 1, "product": 7, "unit": 1, "quantity": "2.500000"},
+           {"line_number": 2, "product": 8, "unit": 2, "quantity": "3.000000"}]}
+```
+
+The transfer date defaults to today. Transfer numbers and audit values are
+server-controlled; sending `is_completed` through draft CRUD cannot complete it.
+Create returns a `warehouse_transfer` object; updates return the saved object.
+
+Complete example:
+
+```json
+{"transfer_id": 7, "is_completed": true}
+```
+
+Success returns `completed_now` and `warehouse_transfer`. The source balance is
+decreased and the destination balance increased in one transaction. A missing
+destination balance is created; existing balances are reused. Both warehouses
+must be active, source stock must cover the quantity, and destination stock must
+fit the quantity limit. Any failure rolls back both balances and the completion
+flag. Repeating a successful request returns `completed_now: false` without moving
+stock again. Concurrent completions and draft writes serialize with completion.
+Validation errors return 400; completed-record edits and busy transactions return
+409. A busy response can be retried safely.
+
+CRUD permissions are `warehouse.view_warehousetransfer`,
+`warehouse.add_warehousetransfer`, `warehouse.change_warehousetransfer` and
+`warehouse.delete_warehousetransfer`, inherited from the user's role. Completion
+requires change permission. Authentication, CSRF and valid role warehouse scope
+are required. Warehouse writes require access to both the source and destination,
+so the current single-warehouse role setting allows writes only for All warehouses
+roles and superusers. A specific-warehouse role can read incoming/outgoing
+transfers involving its warehouse; unrelated transfer IDs return 404 and are
+excluded from search, counts and pagination.
+
+Warehouses → Transfer list and Add transfer use the existing dashboard design.
+Lists include view, edit, red delete and Complete transfer icons according to
+permissions. Completed rows keep edit/delete/complete visible but disabled.
+Create/edit save through the APIs and return to the transfer list. Direct edit
+pages and edits racing completion also become read-only. The detail page shows
+the transfer, warehouses, product, quantity and audit information through the API.
+
+Multi-product transfers require a nonempty items array on creation. Each line must
+use its product unit. GET responses include all items, item_count and a product
+summary. PATCH can update only header fields without changing items. When items
+is supplied it replaces the complete line selection: include existing line IDs
+to retain them, omit IDs for new lines, and omit removed lines. Line numbers and
+IDs must be unique; IDs must belong to this transfer. Header CRUD permissions
+cover all nested item actions. Completed headers and items remain read-only.
+Repeated products are combined before stock checks, and a failure on any line
+rolls back every product. The create/edit page supports Add item and Remove item;
+details show a product table. Existing single-product transfers are migrated
+to one line, preserving audit values and completion state without moving stock.

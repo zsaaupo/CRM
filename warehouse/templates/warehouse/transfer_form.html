@@ -1,0 +1,23 @@
+{% extends "layouts/dashboard.html" %}
+{% load static %}
+{% block title %}{{ form_heading }} | eManager{% endblock %}
+{% block content %}
+<div class="workspace-content">
+    <div class="page-heading"><div><p class="page-eyebrow">Warehouses</p><h1 class="page-title">{{ form_heading }}<span class="text-emerald-600">.</span></h1><p class="page-description">{{ form_description }}</p></div><a href="{{ list_url }}" class="secondary-button">Back to transfers <span aria-hidden="true">&rarr;</span></a></div>
+    <form method="post" action="{{ create_api_url }}" data-transfer-form data-method="{{ form_method|default:'POST' }}" data-options-url="{{ options_api_url }}" data-detail-url="{{ detail_api_url }}" data-success-url="{{ list_url }}" novalidate>
+        {% csrf_token %}
+        <div class="form-status mb-5" data-transfer-status role="status" aria-live="polite" tabindex="-1" hidden></div>
+        <button type="button" class="secondary-button mb-5" data-transfer-retry hidden>Try loading again</button>
+        <fieldset class="user-form-card" data-transfer-header disabled><legend class="sr-only">Transfer details</legend><h2 class="section-title">Transfer details</h2><p class="section-description">Every product goes from the source warehouse to the destination warehouse.</p><div class="user-form-grid">{% include 'warehouse/transfer_fields.html' %}</div></fieldset>
+        <section class="user-form-card mt-6" aria-labelledby="transfer-products-heading"><div class="flex items-center justify-between gap-4"><h2 id="transfer-products-heading" class="section-title">Products</h2><button type="button" class="secondary-button" data-transfer-add-line disabled><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke-linecap="round"/></svg>Add item</button></div><p class="section-description">Add at least one product. Quantities use each product's unit. Stock moves only when you complete this transfer.</p><div class="space-y-6" data-transfer-lines></div></section>
+        <div class="user-form-actions"><a href="{{ list_url }}" class="secondary-button">Cancel</a><button type="submit" class="primary-button compact-primary" data-transfer-submit disabled><span data-submit-label>{{ save_label }}</span><span class="button-spinner" data-submit-spinner hidden aria-hidden="true"></span></button></div>
+        <noscript><p class="form-error">Enable JavaScript to load and save transfer products.</p></noscript>
+    </form>
+    <template id="transfer-line-template"><fieldset class="rounded-xl border border-stone-200 p-5" data-transfer-line><legend class="sr-only" data-line-legend>Transfer item</legend><div class="mb-5 flex items-center justify-between gap-4"><h3 class="section-title" data-line-heading>Item</h3><button type="button" class="icon-button inventory-delete-button" data-line-remove title="Remove item" aria-label="Remove item"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7" stroke-linecap="round"/></svg></button></div><p class="form-error mb-4" data-line-error="non_field_errors" hidden></p><div class="user-form-grid">
+        {% include 'sale/includes/line_field.html' with name='product' label='Product' field_type='select' only %}
+        <div><label class="form-label" data-line-label="unit">Unit</label><input class="form-input" data-line-unit-label readonly><input type="hidden" data-line-field="unit"><p class="form-error" data-line-error="unit" hidden></p></div>
+        {% include 'sale/includes/line_field.html' with name='quantity' label='Quantity' value='1' minimum='0.000001' step='0.000001' only %}
+    </div></fieldset></template>
+</div>
+{% endblock %}
+{% block workspace_js %}<script type="module" src="{% static 'warehouse/js/transfer_form.js' %}"></script>{% endblock %}
