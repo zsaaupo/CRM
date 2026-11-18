@@ -3,7 +3,7 @@ from django.contrib.auth.models import Group, Permission
 from django.test import Client, TestCase
 from django.urls import reverse
 
-from hrm.catalog import RESOURCES
+from hrm.catalog import EMPLOYEE_RESOURCES as RESOURCES
 from hrm.models import Employee
 
 

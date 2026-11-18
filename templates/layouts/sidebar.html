@@ -81,24 +81,16 @@
             {% endfor %}
         </div>
         {% endif %}
-        {% if hrm_menu %}
+        {% if hrm_menu or hrm_attendance_menu or hrm_leave_menu %}
         <button type="button" class="sidebar-link sidebar-group-toggle {% if page_section == 'hrm' %}is-current{% endif %}" data-nav-toggle data-hrm-toggle aria-controls="hrm-submenu" aria-expanded="{% if page_section == 'hrm' %}true{% else %}false{% endif %}">
             <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M9 5V3h6v2M3 11h18M9 11v3h6v-3" stroke-linecap="round" stroke-linejoin="round"/></svg>
             <span>HRM</span>
             <svg class="sidebar-chevron" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m9 5 7 7-7 7" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
         <div id="hrm-submenu" class="sidebar-submenu" {% if page_section != 'hrm' %}hidden{% endif %}>
-            <button type="button" class="sidebar-sub-link sidebar-group-toggle sidebar-subgroup-toggle {% if page_section == 'hrm' %}is-current{% endif %}" data-nav-toggle data-employee-toggle aria-controls="hrm-employee-submenu" aria-expanded="{% if page_section == 'hrm' %}true{% else %}false{% endif %}">
-                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M9 5V3h6v2M3 11h18M9 11v3h6v-3" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                <span>Employee</span>
-                <svg class="sidebar-chevron" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m9 5 7 7-7 7" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            </button>
-            <div id="hrm-employee-submenu" class="sidebar-submenu sidebar-nested-submenu" {% if page_section != 'hrm' %}hidden{% endif %}>
-                {% for item in hrm_menu %}
-                <a href="{{ item.list_url }}" data-nav-item class="sidebar-sub-link {% if hrm_key == item.key and page_mode != 'add' %}is-current{% endif %}" {% if hrm_key == item.key and page_mode != 'add' %}aria-current="page"{% endif %}>{{ item.label }}</a>
-                {% if item.key == 'employee' and item.can_add %}<a href="{{ item.add_url }}" data-nav-item class="sidebar-sub-link {% if hrm_key == 'employee' and page_mode == 'add' %}is-current{% endif %}" {% if hrm_key == 'employee' and page_mode == 'add' %}aria-current="page"{% endif %}>Add employee</a>{% endif %}
-                {% endfor %}
-            </div>
+            {% include 'hrm/includes/sidebar_group.html' with menu=hrm_menu group_key='employee' group_label='Employee' add_label='Add employee' %}
+            {% include 'hrm/includes/sidebar_group.html' with menu=hrm_attendance_menu group_key='attendance' group_label='Attendance' add_label='Add attendance record' %}
+            {% include 'hrm/includes/sidebar_group.html' with menu=hrm_leave_menu group_key='leave' group_label='Leave' add_key='leave-request' add_label='Apply for leave' %}
         </div>
         {% endif %}
         {% if sale_access.view %}

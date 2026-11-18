@@ -115,6 +115,22 @@ export function catalogRow(record, columns, editUrlTemplate = "", onDelete = nul
             cell.append(badge);
         } else if (column.type === "boolean") {
             cell.textContent = value === true ? "Yes" : value === false ? "No" : "\u2014";
+        } else if (column.type === "weekdays") {
+            const weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+            cell.textContent = Array.isArray(value) && value.length
+                ? weekdays.filter((day, index) => value.includes(index)).join(", ") : "\u2014";
+        } else if (column.type === "datetime") {
+            // Use the date and time supplied by the API so the browser's timezone cannot shift them.
+            const timestamp = /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})(:\d{2})?/.exec(value ?? "");
+            if (timestamp) {
+                const [, date, hours, minutes, seconds = ""] = timestamp;
+                const hour = Number(hours) % 24;
+                const clockSeconds = seconds === ":00" ? "" : seconds;
+                const period = hour < 12 ? "AM" : "PM";
+                cell.textContent = `${date} ${hour % 12 || 12}:${minutes}${clockSeconds} ${period}`;
+            } else {
+                cell.textContent = value || "\u2014";
+            }
         } else {
             cell.textContent = column.type === "price" ? `${record.currency || ""} ${value ?? "0"}`.trim()
                 : value === null || value === undefined || value === "" ? "\u2014" : String(value);

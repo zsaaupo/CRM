@@ -1,3 +1,5 @@
+from calendar import day_name
+
 from django.core.exceptions import ImproperlyConfigured
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
@@ -5,7 +7,8 @@ from django.utils import timezone
 
 from account.page_views import ProtectedAccountPageView
 from .catalog import RESOURCE_MAP
-from .models import Employee
+from .models import Employee, EmployeeAttendanceStatus, LeaveRequest
+from .permissions import REVIEW_LEAVE_PERMISSION, can_apply_for_leave, leave_requests_for_user
 
 
 class HRMPageView(ProtectedAccountPageView):
@@ -31,7 +34,7 @@ class HRMPageView(ProtectedAccountPageView):
         resource, user = self.resource, self.request.user
         context.update({
             'resource': resource, 'page_section': 'hrm', 'section_label': 'HRM',
-            'hrm_key': resource.key, 'page_mode': self.mode,
+            'hrm_key': resource.key, 'hrm_group': resource.group, 'page_mode': self.mode,
             'page_label': f'{resource.singular.capitalize()} list',
             'list_url': reverse(f'hrm_pages:{resource.key}-list'),
             'add_url': reverse(f'hrm_pages:add-{resource.key}'),
@@ -41,6 +44,13 @@ class HRMPageView(ProtectedAccountPageView):
             'list_description': f'Your {resource.plural}, in one place.',
             'columns': [{'key': key, 'label': label, 'type': kind} for key, label, kind in resource.columns],
         })
+        if resource.key == 'leave-request':
+            context.update({
+                'can_add': can_apply_for_leave(user), 'can_delete': False, 'add_label': 'Apply for leave',
+                'view_url_template': reverse('hrm_pages:leave-request-detail', args=[0]),
+            })
+            context['columns'].append({'key': 'actions', 'label': 'Actions', 'type': 'edit'})
+            return context
         if resource.key == 'employee':
             context.update({'soft_delete': True,
                             'soft_delete_description': 'The employee record will be retained.'})
@@ -83,19 +93,26 @@ class HRMAddPageView(HRMPageView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        employee = self.resource_key == 'employee'
-        heading = f'Add {self.resource.singular}'
+        resource = self.resource
+        employee = resource.key == 'employee'
+        heading = f'Add {resource.singular}'
+        today = timezone.localdate().isoformat()
         context.update({
             'page_label': heading, 'form_heading': heading, 'save_label': heading,
-            'create_api_url': reverse(f'hrm:{self.resource.key}-list'),
-            'fields_template': 'hrm/fields/employee.html' if employee else 'hrm/fields/lookup.html',
+            'create_api_url': reverse(f'hrm:{resource.key}-list'),
+            'fields_template': f'hrm/fields/{resource.fields}.html',
             'form_description': 'Enter employment details and a work contact.' if employee else
-                                f'Create a {self.resource.singular} for your team.',
-            'options_api_url': reverse('hrm:employee-options') if employee else '',
+                                f'Create a new {resource.singular} for your team.',
+            'options_api_url': reverse(f'hrm:{resource.key}-options') if resource.has_options else '',
             'can_link_user': self.request.user.has_perm('auth.change_user'),
-            'joining_date_default': timezone.localdate().isoformat(),
-            'code_maxlength': 32 if self.resource_key == 'employee-status' else 40,
-            'name_maxlength': 100 if self.resource_key == 'employee-status' else 150,
+            'joining_date_default': today, 'today': today,
+            'weekday_names': day_name,
+            'attendance_status_default': EmployeeAttendanceStatus.Code.UNRECORDED,
+            'attendance_timezone': timezone.get_current_timezone_name(),
+            'code_maxlength': resource.model._meta.get_field('code').max_length
+                              if resource.fields in ('lookup', 'work_schedule', 'leave_type') else None,
+            'name_maxlength': resource.model._meta.get_field('name').max_length
+                              if resource.fields in ('lookup', 'work_schedule', 'holiday', 'leave_type') else None,
         })
         return context
 
@@ -114,8 +131,52 @@ class HRMEditPageView(HRMAddPageView):
             'detail_api_url': reverse(f'hrm:{self.resource.key}-detail', args=[target.pk]),
             'form_description': f'Update your {self.resource.singular} details.',
         })
+        if self.resource.has_options:
+            context['options_api_url'] = reverse(f'hrm:{self.resource.key}-edit-options', args=[target.pk])
         if isinstance(target, Employee):
-            context['options_api_url'] = reverse('hrm:employee-edit-options', args=[target.pk])
             if target.user_id and target.user.is_superuser and not self.request.user.is_superuser:
                 context['can_link_user'] = False
+        return context
+
+
+class LeaveRequestListPageView(HRMListPageView):
+    resource_key = 'leave-request'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        if self.request.user.has_perm('hrm.view_leavetype'):
+            context['secondary_url'] = reverse('hrm_pages:leave-type-list')
+            context['secondary_label'] = 'Manage leave types'
+        return context
+
+
+class LeaveApplyPageView(HRMAddPageView):
+    resource_key = 'leave-request'
+
+    def has_permission(self):
+        return can_apply_for_leave(self.request.user)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context.update({
+            'page_label': 'Apply for leave', 'form_heading': 'Apply for leave', 'save_label': 'Submit request',
+            'form_description': 'Choose a leave type and enter the dates of your request.',
+            'can_choose_employee': self.request.user.has_perm(REVIEW_LEAVE_PERMISSION),
+        })
+        return context
+
+
+class LeaveRequestDetailPageView(HRMPageView):
+    template_name = 'hrm/leave_request_detail.html'
+    resource_key = 'leave-request'
+    mode = 'detail'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        user = self.request.user
+        queryset = LeaveRequest.objects.select_related('employee', 'leave_type', 'reviewed_by')
+        leave = get_object_or_404(leave_requests_for_user(queryset, user), pk=self.kwargs['pk'])
+        context.update({'page_label': 'Leave request details', 'leave': leave})
+        if leave.status == LeaveRequest.Status.PENDING and user.has_perm(REVIEW_LEAVE_PERMISSION) and leave.employee.user_id != user.pk:
+            context['review_api_url'] = reverse('hrm:leave-request-review', args=[leave.pk])
         return context

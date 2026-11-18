@@ -1,0 +1,4 @@
+{% include 'inventory/includes/field.html' with name='employee' label='Employee' field_type='select' required=True only %}
+{% include 'inventory/includes/field.html' with name='schedule' label='Work schedule' field_type='select' required=True only %}
+{% include 'inventory/includes/field.html' with name='effective_from' label='Effective from' field_type='date' required=True value=today only %}
+{% include 'inventory/includes/field.html' with name='effective_to' label='Effective to' field_type='date' nullable_field=True hint='Leave blank for an ongoing assignment. The end date is included.' only %}

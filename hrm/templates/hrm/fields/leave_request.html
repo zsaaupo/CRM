@@ -1,0 +1,5 @@
+{% if can_choose_employee %}{% include 'inventory/includes/field.html' with name='employee' label='Employee' field_type='select' required=True only %}{% endif %}
+{% include 'inventory/includes/field.html' with name='leave_type' label='Leave type' field_type='select' required=True only %}
+{% include 'inventory/includes/field.html' with name='start_date' label='Start date' field_type='date' required=True only %}
+{% include 'inventory/includes/field.html' with name='end_date' label='End date' field_type='date' required=True hint='The end date is included.' only %}
+{% include 'inventory/includes/field.html' with name='reason' label='Reason' field_type='textarea' only %}

@@ -1,0 +1,14 @@
+{% include 'hrm/fields/lookup.html' %}
+<fieldset class="user-form-full" data-number-checkbox-group="working_days" tabindex="-1" aria-describedby="id_working_days_error">
+    <legend class="form-label">Working days</legend>
+    <div class="flex flex-wrap gap-3">
+        {% for day in weekday_names %}
+        <label class="inventory-check-label"><input type="checkbox" class="inventory-check-input" value="{{ forloop.counter0 }}"><span>{{ day }}</span></label>
+        {% endfor %}
+    </div>
+    <p id="id_working_days_error" class="form-error" data-error-for="working_days" hidden></p>
+</fieldset>
+{% include 'inventory/includes/field.html' with name='start_time' label='Start time' field_type='time' required=True step='1' only %}
+{% include 'inventory/includes/field.html' with name='end_time' label='End time' field_type='time' required=True step='1' hint='Enter an earlier end time for a shift that ends the next day.' only %}
+{% include 'inventory/includes/field.html' with name='break_minutes' label='Break minutes' field_type='number' required=True value='0' step='1' maximum='32767' only %}
+{% include 'inventory/includes/field.html' with name='grace_minutes' label='Grace minutes' field_type='number' required=True value='0' step='1' maximum='32767' only %}

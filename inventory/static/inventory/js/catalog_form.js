@@ -10,6 +10,8 @@ if (form) {
     const fields = [...form.querySelectorAll("input, select, textarea")]
         .filter((input) => input.name && input.name !== "csrfmiddlewaretoken");
     const controls = fields.filter((input) => !input.disabled || input.dataset.locked === "true");
+    const checkboxGroups = [...form.querySelectorAll("[data-number-checkbox-group]")];
+    const loadedTimes = new Map();
     const csrf = form.elements.namedItem("csrfmiddlewaretoken").value;
     const retry = form.querySelector("[data-catalog-load-retry]");
     let ready = !form.dataset.optionsUrl && !form.dataset.detailUrl;
@@ -17,7 +19,9 @@ if (form) {
     let readOnly = false;
 
     function setDisabled(disabled) {
-        for (const input of [...controls, submit]) input.disabled = disabled || readOnly || input.dataset.locked === "true";
+        for (const input of [...controls, ...checkboxGroups, submit]) {
+            input.disabled = disabled || readOnly || input.dataset.locked === "true";
+        }
     }
 
     async function initialize() {
@@ -77,7 +81,18 @@ if (form) {
                 for (const input of fields) {
                     if (!(input.name in record) || input.type === "file") continue;
                     if (input.type === "checkbox") input.checked = record[input.name];
+                    else if (input.type === "datetime-local" || input.type === "time") {
+                        const value = record[input.name] ?? "";
+                        input.value = value.slice(0, input.type === "datetime-local" ? 19 : 8);
+                        loadedTimes.set(input, input.value);
+                    }
                     else input.value = input.dataset.jsonField ? JSON.stringify(record[input.name] ?? {}) : record[input.name] ?? "";
+                }
+                for (const group of checkboxGroups) {
+                    const values = record[group.dataset.numberCheckboxGroup];
+                    for (const input of group.querySelectorAll('input[type="checkbox"]')) {
+                        input.checked = Array.isArray(values) && values.includes(Number(input.value));
+                    }
                 }
                 const image = form.querySelector("[data-current-image-preview]");
                 if (image && record.image) {
@@ -104,7 +119,7 @@ if (form) {
     if (!ready) initialize();
 
     function fieldError(name, message) {
-        const input = form.elements.namedItem(name);
+        const input = form.elements.namedItem(name) || checkboxGroups.find(group => group.dataset.numberCheckboxGroup === name);
         const box = [...form.querySelectorAll("[data-error-for]")].find((element) => element.dataset.errorFor === name);
         if (!input || !box) return false;
         input.setAttribute("aria-invalid", "true");
@@ -114,8 +129,10 @@ if (form) {
     }
 
     form.addEventListener("input", (event) => {
-        event.target.removeAttribute("aria-invalid");
-        const error = [...form.querySelectorAll("[data-error-for]")].find((box) => box.dataset.errorFor === event.target.name);
+        const group = event.target.closest("[data-number-checkbox-group]");
+        (group || event.target).removeAttribute("aria-invalid");
+        const name = group ? group.dataset.numberCheckboxGroup : event.target.name;
+        const error = [...form.querySelectorAll("[data-error-for]")].find((box) => box.dataset.errorFor === name);
         if (error) error.hidden = true;
     });
 
@@ -128,6 +145,7 @@ if (form) {
         const payload = {};
         for (const input of controls) {
             input.removeAttribute("aria-invalid");
+            if (loadedTimes.get(input) === input.value) continue;
             if (!input.checkValidity()) {
                 fieldError(input.name, input.validationMessage);
                 invalid ??= input;
@@ -147,6 +165,15 @@ if (form) {
                 payload[input.name] = input.type === "checkbox" ? input.checked
                     : input.value === "" && (input.dataset.nullableField || input.type === "number") ? null
                     : input.value;
+            }
+        }
+        for (const group of checkboxGroups) {
+            const name = group.dataset.numberCheckboxGroup;
+            group.removeAttribute("aria-invalid");
+            payload[name] = [...group.querySelectorAll('input[type="checkbox"]:checked')].map(input => Number(input.value));
+            if (!payload[name].length) {
+                fieldError(name, "Select at least one option.");
+                invalid ??= group;
             }
         }
         if (invalid) {

@@ -1,0 +1,36 @@
+{% extends 'layouts/dashboard.html' %}
+{% load static %}
+{% block title %}Leave request details | eManager{% endblock %}
+{% block content %}
+<div class="workspace-content">
+    <div class="page-heading">
+        <div><p class="page-eyebrow">HRM</p><h1 class="page-title">Leave request<span class="text-emerald-600">.</span></h1></div>
+        <a href="{{ list_url }}" class="secondary-button">Back to request list <span aria-hidden="true">&rarr;</span></a>
+    </div>
+    <section class="user-form-card max-w-2xl" aria-label="Leave request details">
+        <dl class="profile-grid">
+            <div><dt>Employee</dt><dd>{% if leave.employee.is_archived %}Archived employee{% else %}{{ leave.employee.full_name }}{% endif %}</dd></div>
+            <div><dt>Leave type</dt><dd>{{ leave.leave_type.name }}</dd></div>
+            <div><dt>Start date</dt><dd>{{ leave.start_date|date:'Y-m-d' }}</dd></div>
+            <div><dt>End date</dt><dd>{{ leave.end_date|date:'Y-m-d' }}</dd></div>
+            <div><dt>Status</dt><dd>{{ leave.get_status_display }}</dd></div>
+            {% if leave.reviewed_at %}
+            <div><dt>Reviewed by</dt><dd>{{ leave.reviewed_by.get_username }}</dd></div>
+            <div><dt>Reviewed at</dt><dd>{{ leave.reviewed_at|date:'Y-m-d H:i' }}</dd></div>
+            {% endif %}
+            {% if leave.reason %}<div class="user-form-full"><dt>Reason</dt><dd>{{ leave.reason|linebreaksbr }}</dd></div>{% endif %}
+        </dl>
+        {% if review_api_url %}
+        <form method="post" action="{{ review_api_url }}" data-leave-review>
+            {% csrf_token %}
+            <p class="form-status mt-5" data-leave-review-status role="alert" tabindex="-1" hidden></p>
+            <div class="user-form-actions">
+                <button type="submit" name="status" value="rejected" class="secondary-button">Reject request</button>
+                <button type="submit" name="status" value="approved" class="primary-button compact-primary">Approve request</button>
+            </div>
+        </form>
+        {% endif %}
+    </section>
+</div>
+{% endblock %}
+{% block workspace_js %}{% if review_api_url %}<script type="module" src="{% static 'hrm/js/leave_review.js' %}"></script>{% endif %}{% endblock %}

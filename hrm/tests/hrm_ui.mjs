@@ -171,6 +171,69 @@ assert.equal(viewActions[0].children[0].tagName, 'SVG');
 const combined = vm.runInContext("catalogRow(person, [{key:'actions'}], '/hrm/employees/0/edit/', () => {}, '/hrm/employees/0/')", listContext);
 assert.equal(combined.children[0].children[0].children.length, 3);
 
+const attendanceRow = vm.runInContext(`catalogRow({id: 8, check_in: '2026-11-18T22:15:00+06:00',
+    check_out: '2026-11-19T00:00:00+06:00', missing: null},
+    ['check_in', 'check_out', 'missing'].map(key => ({key, type: 'datetime'})))`, listContext);
+assert.deepEqual(attendanceRow.children.map(cell => cell.textContent),
+    ['2026-11-18 10:15 PM', '2026-11-19 12:00 AM', '\u2014']);
+
+async function attendanceForm(fields, groups, record = null) {
+    const form = new Element('form');
+    form.action = record ? '/update/' : '/create/';
+    form.dataset = {detailUrl: record ? '/detail/' : '', method: record ? 'PATCH' : 'POST', successUrl: '/list/'};
+    const error = new Element();
+    error.dataset.errorFor = 'working_days';
+    const parts = Object.fromEntries(['form-status', 'submit', 'load-retry']
+        .map(name => [`[data-catalog-${name}]`, new Element()]));
+    parts['[data-submit-label]'] = new Element();
+    parts['[data-submit-spinner]'] = new Element();
+    form.querySelector = selector => parts[selector];
+    form.querySelectorAll = selector => ({
+        'input, select, textarea': fields, '[data-number-checkbox-group]': groups, '[data-error-for]': [error],
+    })[selector] || [];
+    form.elements = {namedItem: name => name === 'csrfmiddlewaretoken' ? {value: 'csrf'} : null};
+    const requests = [];
+    vm.runInNewContext(formSource, {
+        document: {querySelector: () => form}, APIError,
+        getJSON: async () => record,
+        postJSON: async (url, data) => requests.push(structuredClone(data)),
+        patchJSON: async (url, data) => requests.push(structuredClone(data)),
+        window: {location: {assign() {}}},
+    });
+    await new Promise(resolve => setImmediate(resolve));
+    return {form, error, requests};
+}
+
+const workingDays = new Element('fieldset');
+workingDays.dataset.numberCheckboxGroup = 'working_days';
+const days = Array.from({length: 7}, (_, day) => Object.assign(new Element('input'), {value: day, checked: false}));
+workingDays.querySelectorAll = selector => selector.endsWith(':checked') ? days.filter(day => day.checked) : days;
+const scheduleForm = await attendanceForm([], [workingDays]);
+await scheduleForm.form.listeners.submit(event);
+assert.equal(scheduleForm.requests.length, 0);
+assert.equal(workingDays.attributes['aria-invalid'], 'true');
+assert.equal(scheduleForm.error.hidden, false);
+days[0].checked = days[6].checked = true;
+await scheduleForm.form.listeners.submit(event);
+assert.deepEqual(scheduleForm.requests[0].working_days, [0, 6]);
+const scheduleEdit = await attendanceForm([], [workingDays], {id: 1, working_days: [2, 5]});
+assert.deepEqual(days.filter(day => day.checked).map(day => Number(day.value)), [2, 5]);
+await scheduleEdit.form.listeners.submit(event);
+assert.deepEqual(scheduleEdit.requests[0].working_days, [2, 5]);
+
+const checkIn = Object.assign(new Element('input'), {name: 'check_in', type: 'datetime-local'});
+const checkOut = Object.assign(new Element('input'), {name: 'check_out', type: 'datetime-local'});
+checkOut.dataset.nullableField = 'true';
+const attendanceEdit = await attendanceForm([checkIn, checkOut], [], {
+    id: 1, check_in: '2026-11-18T22:00:30.456000+06:00', check_out: '2026-11-19T06:00:00+06:00',
+});
+assert.equal(checkIn.value, '2026-11-18T22:00:30');
+assert.equal(checkOut.value, '2026-11-19T06:00:00');
+checkOut.value = '';
+await attendanceEdit.form.listeners.submit(event);
+assert.deepEqual(attendanceEdit.requests[0], {check_out: null});
+console.log('Attendance forms passed: numeric weekdays, edit values, overnight timestamps and clearing checkout.');
+
 const detailSource = (await readFile(new URL('../../static/js/record_detail.js', import.meta.url), 'utf8'))
     .replace(/^import .*;\r?\n/gm, '').replace(/^export /gm, '');
 const detailPanel = new Element();

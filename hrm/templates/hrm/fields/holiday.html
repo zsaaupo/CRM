@@ -1,0 +1,3 @@
+{% include 'inventory/includes/field.html' with name='name' label='Name' maxlength=name_maxlength required=True only %}
+{% include 'inventory/includes/field.html' with name='date' label='Date' field_type='date' required=True only %}
+{% include 'inventory/includes/field.html' with name='warehouse' label='Warehouse' field_type='select' hint='Leave blank for a company-wide holiday.' only %}

@@ -1,0 +1,1 @@
+leave_status = (("pending", "Pending"), ("approved", "Approved"), ("rejected", "Rejected"))

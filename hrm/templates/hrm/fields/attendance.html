@@ -1,0 +1,6 @@
+{% include 'inventory/includes/field.html' with name='employee' label='Employee' field_type='select' required=True only %}
+{% include 'inventory/includes/field.html' with name='work_date' label='Work date' field_type='date' required=True value=today hint='Use the date the shift starts.' only %}
+{% include 'inventory/includes/field.html' with name='status' label='Status' field_type='select' required=True value=attendance_status_default only %}
+{% include 'inventory/includes/field.html' with name='check_in' label='Check-in' field_type='datetime-local' nullable_field=True step='1' hint='Enter times in '|add:attendance_timezone|add:'.' only %}
+{% include 'inventory/includes/field.html' with name='check_out' label='Check-out' field_type='datetime-local' nullable_field=True step='1' hint='For an overnight shift, use the next day’s date.' only %}
+{% include 'inventory/includes/field.html' with name='notes' label='Notes' field_type='textarea' only %}
