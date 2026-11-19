@@ -35,7 +35,10 @@ sets is_completed and fulfilled_at, then locks the header and items against edit
 and deletion. Repeated product lines are combined; shortages roll back the entire
 completion. Retries cannot deduct twice. Completed rows keep edit/delete visible
 but disabled, along with completion. This follows the purchase receipt flow with a stock decrease.
-StockMovement, reservations, invoices, payments, returns and refunds remain future work.
+Sales return drafts reference completed sales and their original line items.
+Completing a return restores stock to the original warehouse once. Partial
+returns share the sold quantity limit per line, and completed returns are
+read-only. See [Sales returns](API.md#sales-returns) for requests and permissions.
 
 Programmatic callers must run full_clean() for model validation. Use the API
 serializers/services for transactional writes; normal Django save()

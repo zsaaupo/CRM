@@ -87,6 +87,8 @@ if (panel) {
     initializeRecordDetail(panel, async (record) => {
         const edit = panel.querySelector('[data-sale-edit]');
         if (edit) edit.hidden = record.is_completed !== false;
+        const returnLink = panel.querySelector('[data-sale-return]');
+        if (returnLink) returnLink.hidden = record.is_completed !== true;
         const section = panel.querySelector("[data-sale-items]");
         if (section && !items) items = initializeSalesItems(section, record.currency);
         if (items) await items.ready;

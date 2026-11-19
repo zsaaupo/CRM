@@ -156,3 +156,58 @@ class SalesOrderItem(TimeStampedModel):
 
     def __str__(self):
         return f'{self.sales_order.order_number} / {self.line_number}'
+
+
+def generate_return_number():
+    return f'SR-{uuid.uuid4().hex.upper()}'
+
+
+class SalesReturn(TimeStampedModel):
+    return_number = models.CharField(max_length=50, unique=True, default=generate_return_number, editable=False)
+    sales_order = models.ForeignKey(SalesOrder, on_delete=models.PROTECT, related_name='returns')
+    return_date = models.DateField(default=timezone.localdate)
+    notes = models.TextField(blank=True)
+    is_completed = models.BooleanField(default=False, editable=False)
+    completed_at = models.DateTimeField(null=True, blank=True, editable=False)
+
+    class Meta:
+        ordering = ['-return_date', '-pk']
+        constraints = [models.CheckConstraint(
+            condition=Q(is_completed=False, completed_at__isnull=True) | Q(is_completed=True, completed_at__isnull=False),
+            name='sale_return_completion_valid',
+        )]
+
+    def clean(self):
+        super().clean()
+        order = SalesOrder.objects.filter(pk=self.sales_order_id).first()
+        if order is None:
+            return
+        if not order.is_completed or order.warehouse_id is None:
+            raise ValidationError({'sales_order': 'Choose a completed sale with a warehouse.'})
+        if self.return_date and self.return_date < order.order_date:
+            raise ValidationError({'return_date': 'The return date cannot be before the sales order date.'})
+
+    def __str__(self):
+        return self.return_number
+
+
+class SalesReturnItem(TimeStampedModel):
+    sales_return = models.ForeignKey(SalesReturn, on_delete=models.PROTECT, related_name='items')
+    sales_order_item = models.ForeignKey(SalesOrderItem, on_delete=models.PROTECT, related_name='return_items')
+    quantity = models.DecimalField(max_digits=18, decimal_places=6,
+                                   validators=[MinValueValidator(Decimal('0.000001'))])
+
+    class Meta:
+        ordering = ['sales_order_item__line_number', 'pk']
+        constraints = [
+            models.UniqueConstraint(fields=['sales_return', 'sales_order_item'], name='sale_return_order_item_unique'),
+            models.CheckConstraint(condition=Q(quantity__gt=0), name='sale_return_item_quantity_positive'),
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.sales_return_id and self.sales_order_item_id:
+            item = SalesOrderItem.objects.filter(pk=self.sales_order_item_id).first()
+            record = SalesReturn.objects.filter(pk=self.sales_return_id).first()
+            if item and record and item.sales_order_id != record.sales_order_id:
+                raise ValidationError({'sales_order_item': 'Choose an item from the original sales order.'})

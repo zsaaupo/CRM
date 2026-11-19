@@ -149,5 +149,27 @@ and preserves unchanged historical customer links even after Party soft deletion
 Deleted customers cannot be selected for new assignments.
 
 Validation errors return 400, permission failures 403, missing records 404 and
-locked orders 409. No restore, stock, invoice, payment or return endpoints exist
-in this version.
+locked orders 409.
+
+## Sales returns
+
+Open **Sales > Sales returns**, or choose **Create return** from a completed
+sale. Choose return quantities against the original sale lines, then save the
+draft. Completion restores stock to the original sale warehouse and locks the
+return. A draft leaves stock unchanged. Remaining quantity is calculated per
+sale line using completed returns.
+
+| Method and path under `/sale/api/` | Purpose |
+| --- | --- |
+| `GET sales-returns/` or `sales-returns/list/` | Paginated, searchable list |
+| `POST sales-returns/` | Create a draft with `sales_order`, optional `return_date` and `notes`, and `items` containing `sales_order_item` and `quantity` |
+| `GET/PATCH/DELETE sales-returns/<id>/` | Read, edit, or delete a draft. Read completed records here as well |
+| `PUT/PATCH sales-returns/<id>/update/` | Update a draft. An `items` payload replaces the draft lines |
+| `GET sales-returns/options/?sales_order=<id>` | Returnable quantities for a completed sale. Omit the query parameter to list eligible sales |
+| `POST sales-returns/complete/` | Send `return_id` and `is_completed: true` to complete the return |
+
+Return permissions use the existing sales role and warehouse scope. Creating a
+draft requires `add_salesreturn`, `add_salesreturnitem`, `view_salesorder`, and
+`view_salesorderitem`. View line details with `view_salesreturnitem`. Completing
+a draft requires `change_salesreturn`. A completion retry returns
+`completed_now: false` after the first successful completion.

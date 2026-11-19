@@ -5,6 +5,8 @@ from .api_views import (
     SalesOrderItemListCreateAPIView, SalesOrderItemUpdateAPIView, SalesOrderListAPIView,
     SalesEditOptionsAPIView, SalesOptionsAPIView, SalesOrderListCreateAPIView, SalesOrderUpdateAPIView, SaleCompleteAPIView,
 )
+from .return_api import (SalesReturnCompleteAPIView, SalesReturnDetailAPIView, SalesReturnListAPIView,
+                         SalesReturnListCreateAPIView, SalesReturnOptionsAPIView, SalesReturnUpdateAPIView)
 
 
 app_name = 'sale'
@@ -21,4 +23,11 @@ urlpatterns = [
     path('sales-order-items/list/', SalesOrderItemListAPIView.as_view(), name='sales-order-item-list-view'),
     path('sales-order-items/<int:pk>/', SalesOrderItemDetailAPIView.as_view(), name='sales-order-item-detail'),
     path('sales-order-items/<int:pk>/update/', SalesOrderItemUpdateAPIView.as_view(), name='sales-order-item-update'),
+    path('sales-returns/', SalesReturnListCreateAPIView.as_view(), name='sales-return-list'),
+    path('sales-returns/list/', SalesReturnListAPIView.as_view(), name='sales-return-list-view'),
+    path('sales-returns/options/', SalesReturnOptionsAPIView.as_view(), name='sales-return-options'),
+    path('sales-returns/complete/', SalesReturnCompleteAPIView.as_view(), name='sales-return-complete'),
+    path('sales-returns/<int:pk>/', SalesReturnDetailAPIView.as_view(), name='sales-return-detail'),
+    path('sales-returns/<int:pk>/update/', SalesReturnUpdateAPIView.as_view(), name='sales-return-update'),
+    path('sales-returns/<int:pk>/options/', SalesReturnOptionsAPIView.as_view(), name='sales-return-edit-options'),
 ]
