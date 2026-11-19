@@ -1,0 +1,20 @@
+{% extends 'layouts/dashboard.html' %}
+{% load static %}
+{% block title %}Payroll reports | eManager{% endblock %}
+{% block content %}
+<div class="workspace-content" data-payroll-report data-report-url="{{ report_api_url }}" data-payslip-pdf-template="{% url 'report:payslip-pdf' 0 %}">
+    <div class="page-heading"><div><p class="page-eyebrow">HRM · Salary</p><h1 class="page-title">Payroll reports</h1></div></div>
+    <form class="user-form-card mb-5 max-w-2xl" data-report-filters>
+        <div class="user-form-grid">
+            <div><label class="form-label" for="report-month">Payroll month</label><input type="month" class="form-input" id="report-month" name="month" value="{{ month_default }}"></div>
+            <div><label class="form-label" for="report-currency">Currency</label><input class="form-input" id="report-currency" name="currency" maxlength="3" value="{{ currency_default }}"></div>
+            <div><label class="form-label" for="report-employee">Employee code</label><input class="form-input" id="report-employee" name="employee_code" maxlength="40"></div>
+            <p class="text-sm text-stone-500 self-end">Clear the month and enter an employee code to view salary history.</p>
+        </div>
+        <div class="user-form-actions"><button class="primary-button compact-primary" type="submit">View report</button><a class="secondary-button" data-report-export hidden>Export CSV</a></div>
+    </form>
+    <p class="form-status mb-4" data-operation-status role="status" aria-live="polite" tabindex="-1" hidden></p>
+    <div data-report-results class="space-y-5"></div>
+</div>
+{% endblock %}
+{% block workspace_js %}<script type="module" src="{% static 'hrm/js/payroll_operations.js' %}"></script>{% endblock %}

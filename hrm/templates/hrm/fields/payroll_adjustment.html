@@ -1,0 +1,11 @@
+{% include 'inventory/includes/field.html' with name='employee' label='Employee' field_type='select' required=True only %}
+{% include 'inventory/includes/field.html' with name='currency' label='Currency' field_type='select' required=True value=currency_default only %}
+{% include 'inventory/includes/field.html' with name='component' label='Salary component' field_type='select' required=True only %}
+{% include 'inventory/includes/field.html' with name='source' label='Source' field_type='select' required=True value='manual' only %}
+{% include 'inventory/includes/field.html' with name='effective_on' label='Effective date' field_type='date' required=True value=today only %}
+{% include 'inventory/includes/field.html' with name='amount' label='Amount' field_type='number' minimum='0.0001' hint='Required for all sources except overtime. Overtime uses the minutes, rate and multiplier below.' only %}
+{% include 'inventory/includes/field.html' with name='reason' label='Reason' field_type='textarea' required=True maxlength=255 only %}
+{% include 'inventory/includes/field.html' with name='overtime_minutes' label='Overtime minutes' field_type='number' minimum='1' step='1' only %}
+{% include 'inventory/includes/field.html' with name='hourly_rate' label='Overtime hourly rate' field_type='number' minimum='0.0001' only %}
+{% include 'inventory/includes/field.html' with name='multiplier' label='Overtime multiplier' field_type='number' minimum='0.0001' only %}
+{% include 'inventory/includes/field.html' with name='correction_of' label='Earlier approved payslip' field_type='select' hint='Required for a correction.' only %}

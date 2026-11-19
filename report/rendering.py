@@ -58,14 +58,14 @@ def asset_fetcher(company):
     return fetch
 
 
-def render_pdf(document):
+def render_pdf(document, template_name='report/document.html'):
     try:
         CSS, HTML, FontConfiguration = pdf_engine()
         fonts = FontConfiguration()
         fetch = asset_fetcher(document['company'])
         css = CSS(string=(ASSETS / 'document.css').read_text(encoding='utf-8'),
                   base_url='report-asset:///', url_fetcher=fetch, font_config=fonts)
-        html = render_to_string('report/document.html', {'report': document})
+        html = render_to_string(template_name, {'report': document})
         return HTML(string=html, base_url='report-asset:///', url_fetcher=fetch).write_pdf(
             stylesheets=[css], font_config=fonts, pdf_tags=True)
     except (ImportError, OSError, ValueError, RuntimeError):

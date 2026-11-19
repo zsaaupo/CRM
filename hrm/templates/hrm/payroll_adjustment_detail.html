@@ -1,0 +1,19 @@
+{% extends 'layouts/dashboard.html' %}
+{% load static %}
+{% block title %}Payroll adjustment | eManager{% endblock %}
+{% block content %}
+<div class="workspace-content" data-payroll-adjustment data-detail-url="{{ detail_api_url }}" data-review-url="{{ review_api_url }}">
+    <div class="page-heading"><div><p class="page-eyebrow">HRM · Salary</p><h1 class="page-title">Payroll adjustment</h1></div>
+        <a class="secondary-button" href="{{ list_url }}">Back to payroll adjustments</a></div>
+    <p class="form-status mb-4" data-operation-status role="status" aria-live="polite" tabindex="-1" hidden></p>
+    <section class="user-form-card max-w-2xl">
+        <dl class="space-y-3" data-adjustment-details></dl>
+        <form class="user-form-actions" data-adjustment-review hidden>
+            {% csrf_token %}
+            <button class="primary-button compact-primary" type="submit" value="approved" hidden>Approve adjustment</button>
+            <button class="secondary-button" type="submit" value="cancelled" hidden>Cancel adjustment</button>
+        </form>
+    </section>
+</div>
+{% endblock %}
+{% block workspace_js %}<script type="module" src="{% static 'hrm/js/payroll_operations.js' %}"></script>{% endblock %}

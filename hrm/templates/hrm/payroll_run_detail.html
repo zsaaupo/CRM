@@ -1,0 +1,20 @@
+{% extends "layouts/dashboard.html" %}
+{% load static %}
+{% block title %}Payroll run | eManager{% endblock %}
+{% block content %}
+<div class="workspace-content" data-payroll-workspace data-detail-url="{{ detail_api_url }}" data-payslip-pdf-template="{{ payslip_pdf_template }}">
+    <div class="page-heading">
+        <div><p class="page-eyebrow">HRM · Salary</p><h1 class="page-title">Payroll run for {{ run.period.month|date:'F Y' }}</h1>
+            <p class="page-description">{{ run.currency_id }} · {{ run.get_status_display }}</p></div>
+        <div class="flex flex-wrap gap-3">
+            {% if recalculate_url %}<a href="{{ recalculate_url }}" class="primary-button compact-primary">Recalculate</a>{% endif %}
+            <a href="{{ list_url }}" class="secondary-button">Back to payroll runs</a>
+        </div>
+    </div>
+    <button type="button" class="secondary-button mb-4" data-payroll-detail-retry hidden>Retry loading</button>
+    {% include 'hrm/includes/payroll_results.html' with results_title='Saved payslips' %}
+    {% include 'hrm/includes/payroll_operations.html' %}
+    <noscript><p class="form-error">Enable JavaScript to load the payslips.</p></noscript>
+</div>
+{% endblock %}
+{% block workspace_js %}<script type="module" src="{% static 'hrm/js/payroll.js' %}"></script>{% endblock %}

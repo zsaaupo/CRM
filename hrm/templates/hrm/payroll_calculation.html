@@ -1,0 +1,34 @@
+{% extends "layouts/dashboard.html" %}
+{% load static %}
+{% block title %}Calculate payroll | eManager{% endblock %}
+{% block content %}
+<div class="workspace-content" data-payroll-workspace>
+    <div class="page-heading">
+        <div><p class="page-eyebrow">HRM · Salary</p><h1 class="page-title">Calculate payroll</h1></div>
+        <a href="{{ list_url }}" class="secondary-button">Back to payroll runs</a>
+    </div>
+    <form class="user-form-card max-w-2xl mb-6" method="post" action="{{ calculate_api_url }}" data-payroll-form
+          data-preview-url="{{ preview_api_url }}" data-options-url="{{ options_api_url }}"
+          data-detail-template="{{ detail_url_template }}" data-initial-currency="{{ initial_currency }}">
+        {% csrf_token %}
+        <div class="user-form-grid">
+            <div>
+                <label class="form-label" for="payroll-month">Payroll month</label>
+                <input class="form-input" type="month" id="payroll-month" name="month" value="{{ initial_month }}" required>
+            </div>
+            <div>
+                <label class="form-label" for="payroll-currency">Currency</label>
+                <select class="form-input" id="payroll-currency" name="currency" required disabled><option value="">Loading currencies…</option></select>
+            </div>
+        </div>
+        <div class="user-form-actions">
+            <button type="button" class="secondary-button" data-payroll-retry hidden>Reload currencies</button>
+            <button type="submit" class="secondary-button" data-payroll-preview disabled>Preview</button>
+            <button type="submit" class="primary-button compact-primary" data-payroll-save disabled>Calculate and save</button>
+        </div>
+    </form>
+    {% include 'hrm/includes/payroll_results.html' with results_title='Payroll preview' %}
+    <noscript><p class="form-error">Enable JavaScript to preview and calculate payroll.</p></noscript>
+</div>
+{% endblock %}
+{% block workspace_js %}<script type="module" src="{% static 'hrm/js/payroll.js' %}"></script>{% endblock %}

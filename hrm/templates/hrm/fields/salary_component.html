@@ -1,0 +1,3 @@
+{% include 'hrm/fields/lookup.html' %}
+{% include 'inventory/includes/field.html' with name='type' label='Component type' field_type='select' required=True only %}
+{% include 'inventory/includes/field.html' with name='category' label='Category' maxlength=64 only %}

@@ -1,0 +1,5 @@
+{% include 'inventory/includes/field.html' with name='salary_structure' label='Salary structure' field_type='select' required=True only %}
+{% include 'inventory/includes/field.html' with name='component' label='Salary component' field_type='select' required=True only %}
+{% include 'inventory/includes/field.html' with name='calculation_method' label='Calculation method' field_type='select' required=True only %}
+{% include 'inventory/includes/field.html' with name='fixed_amount' label='Fixed amount' field_type='number' maximum='99999999999999.9999' hint='For a fixed amount rule, use the salary structure currency. Leave blank for other rules.' only %}
+{% include 'inventory/includes/field.html' with name='percentage' label='Percentage of basic salary' field_type='number' maximum='99999.9999' hint='For a percentage rule, enter 40 for 40%. Leave blank for other rules.' only %}

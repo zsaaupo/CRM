@@ -1,0 +1,12 @@
+<p class="form-status mb-4" data-payroll-status role="status" aria-live="polite" tabindex="-1" hidden></p>
+<section class="users-panel" data-payroll-results aria-labelledby="payroll-results-heading" hidden>
+    <div class="users-toolbar"><h2 id="payroll-results-heading" class="section-title">{{ results_title }}</h2></div>
+    <ul class="px-6 pb-3 text-sm text-red-700" data-payroll-blockers hidden></ul>
+    <div class="users-table-scroll">
+        <table class="users-table">
+            <caption class="sr-only">{{ results_title }} by employee</caption>
+            <thead><tr><th scope="col">Employee</th><th scope="col">Gross pay</th><th scope="col">Deductions</th><th scope="col">Net pay</th><th scope="col">Breakdown</th></tr></thead>
+            <tbody data-payroll-rows></tbody>
+        </table>
+    </div>
+</section>

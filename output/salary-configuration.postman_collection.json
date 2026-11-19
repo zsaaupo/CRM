@@ -1,0 +1,2033 @@
+{
+  "info": {
+    "name": "eManager HRM - Salary Configuration CRUD",
+    "description": "Run this collection against your local development database. It creates disposable salary fixtures and deletes them in dependency order at the end.\n\nSet login_email, login_password, and employee_id locally before running. Use an active email-login account with view, add, change, and delete grants for all four salary models. Do not share saved credentials.\n\nLeave the cookie jar enabled. Use the same base_url host for all requests and omit the trailing slash.\n\nChoose an existing active test employee and a date range where the employee has no compensation assignment. Change effective_from and effective_to if the defaults overlap.\n\nRun all folders in order. When sending individual requests, start with the two session requests and create related records before referencing their captured IDs.",
+    "schema": "https://schema.postman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "noauth"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://127.0.0.1:8000",
+      "type": "string",
+      "description": "Origin of the local Django server, without a trailing slash."
+    },
+    {
+      "key": "login_email",
+      "value": "",
+      "type": "string",
+      "description": "Email address of an active test account."
+    },
+    {
+      "key": "login_password",
+      "value": "",
+      "type": "string",
+      "description": "Set locally in Postman."
+    },
+    {
+      "key": "employee_id",
+      "value": "",
+      "type": "string",
+      "description": "Existing active test employee primary key."
+    },
+    {
+      "key": "currency",
+      "value": "BDT",
+      "type": "string",
+      "description": "Existing inventory currency code."
+    },
+    {
+      "key": "effective_from",
+      "value": "2026-12-01",
+      "type": "string",
+      "description": "First day of a free compensation period for the test employee."
+    },
+    {
+      "key": "effective_to",
+      "value": "2026-12-31",
+      "type": "string",
+      "description": "Last day of the test compensation period."
+    },
+    {
+      "key": "csrf_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "run_code",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "basic_component_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "rent_component_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "medical_component_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "structure_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "basic_line_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "rent_line_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "medical_line_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "compensation_id",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Session and CSRF",
+      "item": [
+        {
+          "name": "Get CSRF token and start a fresh test run",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/account/api/login/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "if (pm.response.code !== 200) {",
+                  "    pm.execution.setNextRequest(null);",
+                  "} else {",
+                  "    const token = pm.response.json().csrfToken;",
+                  "    pm.test('CSRF token returned', function () { pm.expect(token).to.be.a('string'); });",
+                  "    pm.collectionVariables.set('csrf_token', token);",
+                  "    const suffix = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);",
+                  "    pm.collectionVariables.set('run_code', 'pm-' + suffix);",
+                  "    for (const key of [\"basic_component_id\",\"rent_component_id\",\"medical_component_id\",\"structure_id\",\"basic_line_id\",\"rent_line_id\",\"medical_line_id\",\"compensation_id\"]) pm.collectionVariables.set(key, '');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Log in and save rotated CSRF token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRFToken",
+                "value": "{{csrf_token}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{base_url}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/account/api/login/",
+            "body": {
+              "mode": "raw",
+              "raw": "{{login_body}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const email = pm.variables.get('login_email');",
+                  "const password = pm.variables.get('login_password');",
+                  "if (!email || !password) throw new Error('Set login_email and login_password before running login.');",
+                  "pm.variables.set('login_body', JSON.stringify({email, password}));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "if (pm.response.code !== 200) {",
+                  "    pm.execution.setNextRequest(null);",
+                  "} else {",
+                  "    const token = pm.response.json().csrfToken;",
+                  "    pm.test('Rotated CSRF token returned', function () { pm.expect(token).to.be.a('string'); });",
+                  "    pm.collectionVariables.set('csrf_token', token);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2. Salary components",
+      "item": [
+        {
+          "name": "Create basic salary component",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRFToken",
+                "value": "{{csrf_token}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{base_url}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/hrm/api/salary-components/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"{{run_code}}-basic\",\n  \"name\": \"Basic salary example\",\n  \"type\": \"earning\",\n  \"category\": \"basic\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "if (pm.response.code !== 201) {",
+                  "    pm.execution.setNextRequest(null);",
+                  "} else {",
+                  "    const record = pm.response.json().salary_component;",
+                  "    pm.test('Response contains the new record ID', function () {",
+                  "        pm.expect(record.id).to.be.a('number');",
+                  "    });",
+                  "    pm.collectionVariables.set('basic_component_id', String(record.id));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create house rent component",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRFToken",
+                "value": "{{csrf_token}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{base_url}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/hrm/api/salary-components/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"{{run_code}}-rent\",\n  \"name\": \"Rent example\",\n  \"type\": \"earning\",\n  \"category\": \"allowance\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "if (pm.response.code !== 201) {",
+                  "    pm.execution.setNextRequest(null);",
+                  "} else {",
+                  "    const record = pm.response.json().salary_component;",
+                  "    pm.test('Response contains the new record ID', function () {",
+                  "        pm.expect(record.id).to.be.a('number');",
+                  "    });",
+                  "    pm.collectionVariables.set('rent_component_id', String(record.id));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create medical allowance component",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRFToken",
+                "value": "{{csrf_token}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{base_url}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/hrm/api/salary-components/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"{{run_code}}-medical\",\n  \"name\": \"Medical example\",\n  \"type\": \"earning\",\n  \"category\": \"allowance\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "if (pm.response.code !== 201) {",
+                  "    pm.execution.setNextRequest(null);",
+                  "} else {",
+                  "    const record = pm.response.json().salary_component;",
+                  "    pm.test('Response contains the new record ID', function () {",
+                  "        pm.expect(record.id).to.be.a('number');",
+                  "    });",
+                  "    pm.collectionVariables.set('medical_component_id', String(record.id));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List salary components",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/hrm/api/salary-components/?q={{run_code}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "if (pm.response.code !== 200) {",
+                  "    pm.execution.setNextRequest(null);",
+                  "} else {",
+                  "    pm.test('The list includes the test record', function () {",
+                  "        const rows = pm.response.json().results;",
+                  "        pm.expect(rows.some(row => String(row.id) === pm.collectionVariables.get('basic_component_id'))).to.equal(true);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List salary components using the read-only route",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/hrm/api/salary-components/list/?q={{run_code}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "if (pm.response.code !== 200) {",
+                  "    pm.execution.setNextRequest(null);",
+                  "} else {",
+                  "    pm.test('The list includes the test record', function () {",
+                  "        const rows = pm.response.json().results;",
+                  "        pm.expect(rows.some(row => String(row.id) === pm.collectionVariables.get('basic_component_id'))).to.equal(true);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get basic salary component",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/hrm/api/salary-components/{{basic_component_id}}/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "if (pm.response.code !== 200) {",
+                  "    pm.execution.setNextRequest(null);",
+                  "} else {",
+                  "    pm.test('The response identifies the test record', function () {",
+                  "        pm.expect(String(pm.response.json().id)).to.equal(pm.collectionVariables.get('basic_component_id'));",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Patch basic salary component",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRFToken",
+                "value": "{{csrf_token}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{base_url}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/hrm/api/salary-components/{{basic_component_id}}/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Basic salary patched\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "if (pm.response.code !== 200) {",
+                  "    pm.execution.setNextRequest(null);",
+                  "} else {",
+                  "    pm.test('The response identifies the test record', function () {",
+                  "        pm.expect(String(pm.response.json().id)).to.equal(pm.collectionVariables.get('basic_component_id'));",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Put basic salary component using the update route",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRFToken",
+                "value": "{{csrf_token}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{base_url}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/hrm/api/salary-components/{{basic_component_id}}/update/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"{{run_code}}-basic\",\n  \"name\": \"Basic salary updated\",\n  \"type\": \"earning\",\n  \"category\": \"basic\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "if (pm.response.code !== 200) {",
+                  "    pm.execution.setNextRequest(null);",
+                  "} else {",
+                  "    pm.test('The response identifies the test record', function () {",
+                  "        pm.expect(String(pm.response.json().id)).to.equal(pm.collectionVariables.get('basic_component_id'));",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "3. Salary structures",
+      "item": [
+        {
+          "name": "Create salary structure",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRFToken",
+                "value": "{{csrf_token}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{base_url}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/hrm/api/salary-structures/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"{{run_code}}-monthly\",\n  \"name\": \"Monthly payroll example\",\n  \"currency\": \"{{currency}}\",\n  \"is_active\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "if (pm.response.code !== 201) {",
+                  "    pm.execution.setNextRequest(null);",
+                  "} else {",
+                  "    const record = pm.response.json().salary_structure;",
+                  "    pm.test('Response contains the new record ID', function () {",
+                  "        pm.expect(record.id).to.be.a('number');",
+                  "    });",
+                  "    pm.collectionVariables.set('structure_id', String(record.id));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List salary structures",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/hrm/api/salary-structures/?q={{run_code}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "if (pm.response.code !== 200) {",
+                  "    pm.execution.setNextRequest(null);",
+                  "} else {",
+                  "    pm.test('The list includes the test record', function () {",
+                  "        const rows = pm.response.json().results;",
+                  "        pm.expect(rows.some(row => String(row.id) === pm.collectionVariables.get('structure_id'))).to.equal(true);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List salary structures using the read-only route",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/hrm/api/salary-structures/list/?q={{run_code}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "if (pm.response.code !== 200) {",
+                  "    pm.execution.setNextRequest(null);",
+                  "} else {",
+                  "    pm.test('The list includes the test record', function () {",
+                  "        const rows = pm.response.json().results;",
+                  "        pm.expect(rows.some(row => String(row.id) === pm.collectionVariables.get('structure_id'))).to.equal(true);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get salary structure",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/hrm/api/salary-structures/{{structure_id}}/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "if (pm.response.code !== 200) {",
+                  "    pm.execution.setNextRequest(null);",
+                  "} else {",
+                  "    pm.test('The response identifies the test record', function () {",
+                  "        pm.expect(String(pm.response.json().id)).to.equal(pm.collectionVariables.get('structure_id'));",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Patch salary structure",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRFToken",
+                "value": "{{csrf_token}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{base_url}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/hrm/api/salary-structures/{{structure_id}}/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"description\": \"Updated with PATCH\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "if (pm.response.code !== 200) {",
+                  "    pm.execution.setNextRequest(null);",
+                  "} else {",
+                  "    pm.test('The response identifies the test record', function () {",
+                  "        pm.expect(String(pm.response.json().id)).to.equal(pm.collectionVariables.get('structure_id'));",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Put salary structure using the update route",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRFToken",
+                "value": "{{csrf_token}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{base_url}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/hrm/api/salary-structures/{{structure_id}}/update/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"{{run_code}}-monthly\",\n  \"name\": \"Monthly payroll updated\",\n  \"currency\": \"{{currency}}\",\n  \"is_active\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "if (pm.response.code !== 200) {",
+                  "    pm.execution.setNextRequest(null);",
+                  "} else {",
+                  "    pm.test('The response identifies the test record', function () {",
+                  "        pm.expect(String(pm.response.json().id)).to.equal(pm.collectionVariables.get('structure_id'));",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "4. Salary structure lines",
+      "item": [
+        {
+          "name": "Create basic salary line",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRFToken",
+                "value": "{{csrf_token}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{base_url}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/hrm/api/salary-structure-lines/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"salary_structure\": \"{{structure_id}}\",\n  \"component\": \"{{basic_component_id}}\",\n  \"calculation_method\": \"basic_salary\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "if (pm.response.code !== 201) {",
+                  "    pm.execution.setNextRequest(null);",
+                  "} else {",
+                  "    const record = pm.response.json().salary_structure_line;",
+                  "    pm.test('Response contains the new record ID', function () {",
+                  "        pm.expect(record.id).to.be.a('number');",
+                  "    });",
+                  "    pm.collectionVariables.set('basic_line_id', String(record.id));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create percentage-based house rent line",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRFToken",
+                "value": "{{csrf_token}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{base_url}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/hrm/api/salary-structure-lines/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"salary_structure\": \"{{structure_id}}\",\n  \"component\": \"{{rent_component_id}}\",\n  \"calculation_method\": \"percentage_of_basic\",\n  \"percentage\": \"40.0000\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "if (pm.response.code !== 201) {",
+                  "    pm.execution.setNextRequest(null);",
+                  "} else {",
+                  "    const record = pm.response.json().salary_structure_line;",
+                  "    pm.test('Response contains the new record ID', function () {",
+                  "        pm.expect(record.id).to.be.a('number');",
+                  "    });",
+                  "    pm.collectionVariables.set('rent_line_id', String(record.id));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create fixed medical allowance line",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRFToken",
+                "value": "{{csrf_token}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{base_url}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/hrm/api/salary-structure-lines/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"salary_structure\": \"{{structure_id}}\",\n  \"component\": \"{{medical_component_id}}\",\n  \"calculation_method\": \"fixed\",\n  \"fixed_amount\": \"3000.0000\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "if (pm.response.code !== 201) {",
+                  "    pm.execution.setNextRequest(null);",
+                  "} else {",
+                  "    const record = pm.response.json().salary_structure_line;",
+                  "    pm.test('Response contains the new record ID', function () {",
+                  "        pm.expect(record.id).to.be.a('number');",
+                  "    });",
+                  "    pm.collectionVariables.set('medical_line_id', String(record.id));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List structure lines",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/hrm/api/salary-structure-lines/?salary_structure={{structure_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "if (pm.response.code !== 200) {",
+                  "    pm.execution.setNextRequest(null);",
+                  "} else {",
+                  "    pm.test('The list includes the test record', function () {",
+                  "        const rows = pm.response.json().results;",
+                  "        pm.expect(rows.some(row => String(row.id) === pm.collectionVariables.get('basic_line_id'))).to.equal(true);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List structure lines using the read-only route",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/hrm/api/salary-structure-lines/list/?salary_structure={{structure_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "if (pm.response.code !== 200) {",
+                  "    pm.execution.setNextRequest(null);",
+                  "} else {",
+                  "    pm.test('The list includes the test record', function () {",
+                  "        const rows = pm.response.json().results;",
+                  "        pm.expect(rows.some(row => String(row.id) === pm.collectionVariables.get('basic_line_id'))).to.equal(true);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get house rent line",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/hrm/api/salary-structure-lines/{{rent_line_id}}/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "if (pm.response.code !== 200) {",
+                  "    pm.execution.setNextRequest(null);",
+                  "} else {",
+                  "    pm.test('The response identifies the test record', function () {",
+                  "        pm.expect(String(pm.response.json().id)).to.equal(pm.collectionVariables.get('rent_line_id'));",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Patch house rent line",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRFToken",
+                "value": "{{csrf_token}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{base_url}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/hrm/api/salary-structure-lines/{{rent_line_id}}/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"percentage\": \"35.0000\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "if (pm.response.code !== 200) {",
+                  "    pm.execution.setNextRequest(null);",
+                  "} else {",
+                  "    pm.test('The response identifies the test record', function () {",
+                  "        pm.expect(String(pm.response.json().id)).to.equal(pm.collectionVariables.get('rent_line_id'));",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Put house rent line using the update route",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRFToken",
+                "value": "{{csrf_token}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{base_url}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/hrm/api/salary-structure-lines/{{rent_line_id}}/update/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"salary_structure\": \"{{structure_id}}\",\n  \"component\": \"{{rent_component_id}}\",\n  \"calculation_method\": \"percentage_of_basic\",\n  \"percentage\": \"40.0000\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "if (pm.response.code !== 200) {",
+                  "    pm.execution.setNextRequest(null);",
+                  "} else {",
+                  "    pm.test('The response identifies the test record', function () {",
+                  "        pm.expect(String(pm.response.json().id)).to.equal(pm.collectionVariables.get('rent_line_id'));",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "5. Employee compensation",
+      "item": [
+        {
+          "name": "Assign employee compensation",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRFToken",
+                "value": "{{csrf_token}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{base_url}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/hrm/api/employee-compensations/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"employee\": \"{{employee_id}}\",\n  \"salary_structure\": \"{{structure_id}}\",\n  \"basic_salary\": \"30000.0000\",\n  \"effective_from\": \"{{effective_from}}\",\n  \"effective_to\": \"{{effective_to}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const id = pm.variables.get('employee_id');",
+                  "if (!/^[1-9]\\d*$/.test(String(id || ''))) throw new Error('Set employee_id to an existing active test employee ID.');"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "if (pm.response.code !== 201) {",
+                  "    pm.execution.setNextRequest(null);",
+                  "} else {",
+                  "    const record = pm.response.json().employee_compensation;",
+                  "    pm.test('Response contains the new record ID', function () {",
+                  "        pm.expect(record.id).to.be.a('number');",
+                  "    });",
+                  "    pm.collectionVariables.set('compensation_id', String(record.id));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List employee compensation records",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/hrm/api/employee-compensations/?employee={{employee_id}}&salary_structure={{structure_id}}&from_date={{effective_from}}&to_date={{effective_to}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "if (pm.response.code !== 200) {",
+                  "    pm.execution.setNextRequest(null);",
+                  "} else {",
+                  "    pm.test('The list includes the test record', function () {",
+                  "        const rows = pm.response.json().results;",
+                  "        pm.expect(rows.some(row => String(row.id) === pm.collectionVariables.get('compensation_id'))).to.equal(true);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List employee compensation records using the read-only route",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/hrm/api/employee-compensations/list/?employee={{employee_id}}&salary_structure={{structure_id}}&from_date={{effective_from}}&to_date={{effective_to}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "if (pm.response.code !== 200) {",
+                  "    pm.execution.setNextRequest(null);",
+                  "} else {",
+                  "    pm.test('The list includes the test record', function () {",
+                  "        const rows = pm.response.json().results;",
+                  "        pm.expect(rows.some(row => String(row.id) === pm.collectionVariables.get('compensation_id'))).to.equal(true);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get employee compensation",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/hrm/api/employee-compensations/{{compensation_id}}/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "if (pm.response.code !== 200) {",
+                  "    pm.execution.setNextRequest(null);",
+                  "} else {",
+                  "    pm.test('The response identifies the test record', function () {",
+                  "        pm.expect(String(pm.response.json().id)).to.equal(pm.collectionVariables.get('compensation_id'));",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Patch employee compensation",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRFToken",
+                "value": "{{csrf_token}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{base_url}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/hrm/api/employee-compensations/{{compensation_id}}/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"basic_salary\": \"32000.0000\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "if (pm.response.code !== 200) {",
+                  "    pm.execution.setNextRequest(null);",
+                  "} else {",
+                  "    pm.test('The response identifies the test record', function () {",
+                  "        pm.expect(String(pm.response.json().id)).to.equal(pm.collectionVariables.get('compensation_id'));",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Put employee compensation using the update route",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRFToken",
+                "value": "{{csrf_token}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{base_url}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/hrm/api/employee-compensations/{{compensation_id}}/update/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"employee\": \"{{employee_id}}\",\n  \"salary_structure\": \"{{structure_id}}\",\n  \"basic_salary\": \"33000.0000\",\n  \"effective_from\": \"{{effective_from}}\",\n  \"effective_to\": \"{{effective_to}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "if (pm.response.code !== 200) {",
+                  "    pm.execution.setNextRequest(null);",
+                  "} else {",
+                  "    pm.test('The response identifies the test record', function () {",
+                  "        pm.expect(String(pm.response.json().id)).to.equal(pm.collectionVariables.get('compensation_id'));",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reject overlapping compensation",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRFToken",
+                "value": "{{csrf_token}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{base_url}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/hrm/api/employee-compensations/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"employee\": \"{{employee_id}}\",\n  \"salary_structure\": \"{{structure_id}}\",\n  \"basic_salary\": \"35000.0000\",\n  \"effective_from\": \"{{effective_from}}\",\n  \"effective_to\": \"{{effective_to}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 400', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "if (pm.response.code !== 400) {",
+                  "    pm.execution.setNextRequest(null);",
+                  "} else {",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reject deleting an assigned basic salary line",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRFToken",
+                "value": "{{csrf_token}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{base_url}}"
+              }
+            ],
+            "url": "{{base_url}}/hrm/api/salary-structure-lines/{{basic_line_id}}/"
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const id = pm.collectionVariables.get('basic_line_id');",
+                  "if (!/^[1-9]\\d*$/.test(id || '')) throw new Error('Create and assign the test structure before running this request.');",
+                  "pm.variables.set('basic_line_id', id);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 409', function () {",
+                  "    pm.response.to.have.status(409);",
+                  "});",
+                  "if (pm.response.code !== 409) {",
+                  "    pm.execution.setNextRequest(null);",
+                  "} else {",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "6. Delete test records in dependency order",
+      "description": "Deletes only the salary fixtures whose IDs were captured by this run.",
+      "item": [
+        {
+          "name": "Delete test compensation",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRFToken",
+                "value": "{{csrf_token}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{base_url}}"
+              }
+            ],
+            "url": "{{base_url}}/hrm/api/employee-compensations/{{compensation_id}}/"
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const id = pm.collectionVariables.get('compensation_id');",
+                  "if (!/^[1-9]\\d*$/.test(id || '')) throw new Error('Run the create request first to capture the disposable record ID.');",
+                  "pm.variables.set('compensation_id', id);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 204', function () {",
+                  "    pm.response.to.have.status(204);",
+                  "});",
+                  "if (pm.response.code !== 204) {",
+                  "    pm.execution.setNextRequest(null);",
+                  "} else {",
+                  "    pm.collectionVariables.set('compensation_id', '');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete test medical allowance line",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRFToken",
+                "value": "{{csrf_token}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{base_url}}"
+              }
+            ],
+            "url": "{{base_url}}/hrm/api/salary-structure-lines/{{medical_line_id}}/"
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const id = pm.collectionVariables.get('medical_line_id');",
+                  "if (!/^[1-9]\\d*$/.test(id || '')) throw new Error('Run the create request first to capture the disposable record ID.');",
+                  "pm.variables.set('medical_line_id', id);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 204', function () {",
+                  "    pm.response.to.have.status(204);",
+                  "});",
+                  "if (pm.response.code !== 204) {",
+                  "    pm.execution.setNextRequest(null);",
+                  "} else {",
+                  "    pm.collectionVariables.set('medical_line_id', '');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete test house rent line",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRFToken",
+                "value": "{{csrf_token}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{base_url}}"
+              }
+            ],
+            "url": "{{base_url}}/hrm/api/salary-structure-lines/{{rent_line_id}}/"
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const id = pm.collectionVariables.get('rent_line_id');",
+                  "if (!/^[1-9]\\d*$/.test(id || '')) throw new Error('Run the create request first to capture the disposable record ID.');",
+                  "pm.variables.set('rent_line_id', id);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 204', function () {",
+                  "    pm.response.to.have.status(204);",
+                  "});",
+                  "if (pm.response.code !== 204) {",
+                  "    pm.execution.setNextRequest(null);",
+                  "} else {",
+                  "    pm.collectionVariables.set('rent_line_id', '');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete test basic salary line",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRFToken",
+                "value": "{{csrf_token}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{base_url}}"
+              }
+            ],
+            "url": "{{base_url}}/hrm/api/salary-structure-lines/{{basic_line_id}}/"
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const id = pm.collectionVariables.get('basic_line_id');",
+                  "if (!/^[1-9]\\d*$/.test(id || '')) throw new Error('Run the create request first to capture the disposable record ID.');",
+                  "pm.variables.set('basic_line_id', id);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 204', function () {",
+                  "    pm.response.to.have.status(204);",
+                  "});",
+                  "if (pm.response.code !== 204) {",
+                  "    pm.execution.setNextRequest(null);",
+                  "} else {",
+                  "    pm.collectionVariables.set('basic_line_id', '');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete test salary structure",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRFToken",
+                "value": "{{csrf_token}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{base_url}}"
+              }
+            ],
+            "url": "{{base_url}}/hrm/api/salary-structures/{{structure_id}}/"
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const id = pm.collectionVariables.get('structure_id');",
+                  "if (!/^[1-9]\\d*$/.test(id || '')) throw new Error('Run the create request first to capture the disposable record ID.');",
+                  "pm.variables.set('structure_id', id);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 204', function () {",
+                  "    pm.response.to.have.status(204);",
+                  "});",
+                  "if (pm.response.code !== 204) {",
+                  "    pm.execution.setNextRequest(null);",
+                  "} else {",
+                  "    pm.collectionVariables.set('structure_id', '');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete test medical component",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRFToken",
+                "value": "{{csrf_token}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{base_url}}"
+              }
+            ],
+            "url": "{{base_url}}/hrm/api/salary-components/{{medical_component_id}}/"
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const id = pm.collectionVariables.get('medical_component_id');",
+                  "if (!/^[1-9]\\d*$/.test(id || '')) throw new Error('Run the create request first to capture the disposable record ID.');",
+                  "pm.variables.set('medical_component_id', id);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 204', function () {",
+                  "    pm.response.to.have.status(204);",
+                  "});",
+                  "if (pm.response.code !== 204) {",
+                  "    pm.execution.setNextRequest(null);",
+                  "} else {",
+                  "    pm.collectionVariables.set('medical_component_id', '');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete test rent component",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRFToken",
+                "value": "{{csrf_token}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{base_url}}"
+              }
+            ],
+            "url": "{{base_url}}/hrm/api/salary-components/{{rent_component_id}}/"
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const id = pm.collectionVariables.get('rent_component_id');",
+                  "if (!/^[1-9]\\d*$/.test(id || '')) throw new Error('Run the create request first to capture the disposable record ID.');",
+                  "pm.variables.set('rent_component_id', id);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 204', function () {",
+                  "    pm.response.to.have.status(204);",
+                  "});",
+                  "if (pm.response.code !== 204) {",
+                  "    pm.execution.setNextRequest(null);",
+                  "} else {",
+                  "    pm.collectionVariables.set('rent_component_id', '');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete test basic salary component",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRFToken",
+                "value": "{{csrf_token}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{base_url}}"
+              }
+            ],
+            "url": "{{base_url}}/hrm/api/salary-components/{{basic_component_id}}/"
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const id = pm.collectionVariables.get('basic_component_id');",
+                  "if (!/^[1-9]\\d*$/.test(id || '')) throw new Error('Run the create request first to capture the disposable record ID.');",
+                  "pm.variables.set('basic_component_id', id);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 204', function () {",
+                  "    pm.response.to.have.status(204);",
+                  "});",
+                  "if (pm.response.code !== 204) {",
+                  "    pm.execution.setNextRequest(null);",
+                  "} else {",
+                  "    pm.collectionVariables.set('basic_component_id', '');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

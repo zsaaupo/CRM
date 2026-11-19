@@ -17,7 +17,7 @@
             {% else %}
             <fieldset>
                 <legend class="section-title">{{ resource.singular|capfirst }} details</legend>
-                {% if hrm_group != 'attendance' and hrm_group != 'leave' %}<p class="section-description">Enter a clear name and the details below.</p>{% endif %}
+                {% if hrm_group != 'attendance' and hrm_group != 'leave' and hrm_group != 'salary' %}<p class="section-description">Enter a clear name and the details below.</p>{% endif %}
                 <div class="user-form-grid">{% include fields_template %}</div>
             </fieldset>
             {% endif %}

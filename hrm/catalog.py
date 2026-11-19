@@ -1,8 +1,10 @@
 from dataclasses import dataclass
 
 from .models import (
-    Attendance, Department, Designation, Employee, EmployeeAttendanceStatus, EmployeeScheduleAssignment,
-    EmployeeStatus, EmploymentType, Holiday, LeaveRequest, LeaveType, WorkSchedule,
+    Attendance, Department, Designation, Employee, EmployeeAttendanceStatus, EmployeeCompensation, EmployeeLoan,
+    EmployeeScheduleAssignment, EmployeeStatus, EmploymentType, Holiday, LeaveRequest, LeaveType, LoanInstallment,
+    PayrollAdjustment, PayrollDeductionRule, PayrollRun,
+    SalaryComponent, SalaryStructure, SalaryStructureLine, WorkSchedule,
 )
 
 
@@ -76,5 +78,52 @@ LEAVE_TYPE_RESOURCE = HRMResource(
     (('name', 'Name', 'text'), ('code', 'Code', 'text'), ('is_paid', 'Paid', 'boolean'), ('is_active', 'Status', 'status')),
     group='leave', fields='leave_type',
 )
-RESOURCES = (*EMPLOYEE_RESOURCES, *ATTENDANCE_RESOURCES, LEAVE_TYPE_RESOURCE)
-RESOURCE_MAP = {resource.key: resource for resource in (*RESOURCES, LEAVE_REQUEST_RESOURCE)}
+SALARY_RESOURCES = (
+    HRMResource('salary-component', 'salary-components', 'salary component', 'salary components', SalaryComponent,
+                (('name', 'Name', 'text'), ('code', 'Code', 'text'), ('type_name', 'Type', 'text'),
+                 ('category', 'Category', 'text'), ('is_active', 'Status', 'status')),
+                group='salary', fields='salary_component', has_options=True),
+    HRMResource('salary-structure', 'salary-structures', 'salary structure', 'salary structures', SalaryStructure,
+                (('name', 'Name', 'text'), ('code', 'Code', 'text'), ('currency', 'Currency', 'text'),
+                 ('is_active', 'Status', 'status')),
+                group='salary', fields='salary_structure', has_options=True),
+    HRMResource('salary-structure-line', 'salary-structure-lines', 'salary structure line', 'salary structure lines',
+                SalaryStructureLine,
+                (('salary_structure_name', 'Salary structure', 'text'), ('component_name', 'Component', 'text'),
+                 ('calculation_method_name', 'Calculation method', 'text'), ('fixed_amount', 'Fixed amount', 'text'),
+                 ('percentage', 'Percentage', 'text')),
+                group='salary', fields='salary_structure_line', has_options=True),
+    HRMResource('employee-compensation', 'employee-compensations', 'employee compensation',
+                'employee compensation records', EmployeeCompensation,
+                (('employee_name', 'Employee', 'text'), ('salary_structure_name', 'Salary structure', 'text'),
+                 ('basic_salary', 'Basic salary', 'price'), ('effective_from', 'Effective from', 'text'),
+                 ('effective_to', 'Effective to', 'text')),
+                group='salary', fields='employee_compensation', has_options=True),
+)
+PAYROLL_INPUT_RESOURCES = (
+    HRMResource('payroll-adjustment', 'payroll-adjustments', 'payroll adjustment', 'payroll adjustments', PayrollAdjustment,
+        (('employee_name', 'Employee', 'text'), ('source_name', 'Source', 'text'), ('component_name', 'Component', 'text'),
+         ('effective_on', 'Effective date', 'text'), ('amount', 'Amount', 'price'), ('status_name', 'Status', 'text')),
+        group='salary', fields='payroll_adjustment', has_options=True),
+    HRMResource('payroll-deduction-rule', 'payroll-deduction-rules', 'payroll deduction rule', 'payroll deduction rules',
+        PayrollDeductionRule, (('salary_structure_name', 'Structure', 'text'), ('component_name', 'Component', 'text'),
+         ('method_name', 'Calculation', 'text'), ('value', 'Rate or amount', 'text'), ('effective_from', 'Starts', 'text'),
+         ('effective_to', 'Ends', 'text'), ('reference', 'Policy reference', 'text')),
+        group='salary', fields='payroll_deduction_rule', has_options=True),
+    HRMResource('employee-loan', 'employee-loans', 'employee loan', 'employee loans', EmployeeLoan,
+        (('employee_name', 'Employee', 'text'), ('reference', 'Reference', 'text'), ('principal', 'Principal', 'price'),
+         ('balance', 'Outstanding balance', 'price'), ('disbursed_on', 'Disbursed', 'text')),
+        group='salary', fields='employee_loan', has_options=True),
+    HRMResource('loan-installment', 'loan-installments', 'loan installment', 'loan installments', LoanInstallment,
+        (('loan_reference', 'Loan', 'text'), ('month', 'Due month', 'text'), ('amount', 'Amount', 'price'),
+         ('recovered', 'Recovered', 'boolean')),
+        group='salary', fields='loan_installment', has_options=True),
+)
+RESOURCES = (*EMPLOYEE_RESOURCES, *ATTENDANCE_RESOURCES, LEAVE_TYPE_RESOURCE, *SALARY_RESOURCES, *PAYROLL_INPUT_RESOURCES)
+PAYROLL_RUN_RESOURCE = HRMResource(
+    'payroll-run', 'payroll-runs', 'payroll run', 'payroll runs', PayrollRun,
+    (('month', 'Month', 'text'), ('currency', 'Currency', 'text'), ('status_name', 'Status', 'text'),
+     ('calculated_at', 'Calculated at', 'datetime'), ('calculated_by', 'Calculated by', 'text')),
+    group='salary',
+)
+RESOURCE_MAP = {resource.key: resource for resource in (*RESOURCES, LEAVE_REQUEST_RESOURCE, PAYROLL_RUN_RESOURCE)}

@@ -1,5 +1,6 @@
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db import OperationalError, transaction
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from django.utils.decorators import method_decorator
@@ -10,22 +11,26 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from common.view import BaseAPIMixin, BaseDetailAPIView, BaseListAPIView, BaseListCreateAPIView, BaseUpdateAPIView
+from inventory.models import Currency
 from warehouse.models import WareHouse
 
 from .models import (
     Attendance, Department, Designation, Employee, EmployeeAttendanceStatus, EmployeeScheduleAssignment,
-    EmployeeStatus, EmploymentType, Holiday, LeaveRequest, LeaveType, WorkSchedule,
+    EmployeeCompensation, EmployeeStatus, EmploymentType, Holiday, LeaveRequest, LeaveType,
+    SalaryComponent, SalaryStructure, SalaryStructureLine, WorkSchedule,
 )
 from .permissions import ADD_LEAVE_PERMISSION, REVIEW_LEAVE_PERMISSION, VIEW_LEAVE_PERMISSION, leave_requests_for_user
 from .serializers import (
     AttendanceFilterSerializer, AttendanceSerializer, DepartmentSerializer, DesignationSerializer,
-    EmployeeAttendanceStatusSerializer, EmployeeDetailSerializer, EmployeeFilterSerializer,
+    EmployeeAttendanceStatusSerializer, EmployeeCompensationFilterSerializer, EmployeeCompensationSerializer,
+    EmployeeDetailSerializer, EmployeeFilterSerializer,
     EmployeeScheduleAssignmentFilterSerializer, EmployeeScheduleAssignmentSerializer, EmployeeSerializer,
     EmployeeStatusSerializer, EmploymentTypeSerializer, HolidayFilterSerializer, HolidaySerializer,
     LeaveRequestFilterSerializer, LeaveRequestSerializer, LeaveReviewSerializer, LeaveTypeSerializer,
-    WorkScheduleSerializer,
+    SalaryComponentSerializer, SalaryStructureLineFilterSerializer, SalaryStructureLineSerializer,
+    SalaryStructureSerializer, WorkScheduleSerializer,
 )
-from .services import LeaveAlreadyReviewed, review_leave_request
+from .services import LeaveAlreadyReviewed, check_basic_salary_line_removal, lock_salary_record, review_leave_request
 
 
 class HRMLookupQuerysetMixin:
@@ -251,15 +256,17 @@ class EmployeeScheduleAssignmentResource:
     ordering = ['employee_id', '-effective_from', '-pk']
 
 
-class EmployeeScheduleAssignmentListFilters(AttendanceDateFilters):
-    filter_serializer_class = EmployeeScheduleAssignmentFilterSerializer
-
+class EffectiveDateFilters(AttendanceDateFilters):
     def filter_dates(self, queryset, from_date, to_date):
         if from_date:
             queryset = queryset.filter(Q(effective_to__isnull=True) | Q(effective_to__gte=from_date))
         if to_date:
             queryset = queryset.filter(effective_from__lte=to_date)
         return queryset
+
+
+class EmployeeScheduleAssignmentListFilters(EffectiveDateFilters):
+    filter_serializer_class = EmployeeScheduleAssignmentFilterSerializer
 
 
 class EmployeeScheduleAssignmentListCreateAPIView(
@@ -353,7 +360,7 @@ class AttendanceUpdateAPIView(AttendanceResource, BaseUpdateAPIView):
 
 
 @method_decorator(never_cache, name='dispatch')
-class AttendanceFormOptionsAPIView(BaseAPIMixin, APIView):
+class HRMFormOptionsAPIView(BaseAPIMixin, APIView):
     model = None
     http_method_names = ['get', 'head', 'options']
 
@@ -365,6 +372,19 @@ class AttendanceFormOptionsAPIView(BaseAPIMixin, APIView):
 
     def get(self, request, pk=None):
         record = get_object_or_404(self.model, pk=pk) if pk is not None else None
+        return Response(self.get_options(record))
+
+    @staticmethod
+    def employee_choices(record):
+        employees = Employee.objects.order_by('full_name', 'pk').values_list('pk', 'full_name', 'employee_code')
+        choices = [{'value': pk, 'label': f'{name} ({code})'} for pk, name, code in employees]
+        if record and not any(choice['value'] == record.employee_id for choice in choices):
+            choices.append({'value': record.employee_id, 'label': 'Archived employee (existing)'})
+        return choices
+
+
+class AttendanceFormOptionsAPIView(HRMFormOptionsAPIView):
+    def get_options(self, record):
         options = {}
 
         def lookup_choices(model, field, value_field='pk', include=()):
@@ -374,10 +394,7 @@ class AttendanceFormOptionsAPIView(BaseAPIMixin, APIView):
                     queryset.order_by('name', 'pk').values_list(value_field, 'name')]
 
         if self.model in (Attendance, EmployeeScheduleAssignment):
-            employees = list(Employee.objects.order_by('full_name', 'pk').values_list('pk', 'full_name', 'employee_code'))
-            options['employee'] = [{'value': value, 'label': f'{name} ({code})'} for value, name, code in employees]
-            if record and not any(value == record.employee_id for value, _, _ in employees):
-                options['employee'].append({'value': record.employee_id, 'label': 'Archived employee (existing)'})
+            options['employee'] = self.employee_choices(record)
         if self.model is Attendance:
             options['status'] = lookup_choices(EmployeeAttendanceStatus, 'status', 'code',
                                               include=(EmployeeAttendanceStatus.Code.UNRECORDED,))
@@ -385,7 +402,7 @@ class AttendanceFormOptionsAPIView(BaseAPIMixin, APIView):
             options['schedule'] = lookup_choices(WorkSchedule, 'schedule')
         elif self.model is Holiday:
             options['warehouse'] = lookup_choices(WareHouse, 'warehouse')
-        return Response(options)
+        return options
 
 
 class LeaveTypeResource(HRMLookupQuerysetMixin):
@@ -483,3 +500,150 @@ class LeaveRequestReviewAPIView(BaseAPIMixin, APIView):
         except DjangoValidationError as exc:
             raise ValidationError(exc.message_dict) from exc
         return Response(LeaveRequestSerializer(leave).data)
+
+
+class SalaryConfigurationBusy(APIException):
+    status_code = 409
+    default_detail = 'This salary configuration is being updated. Please retry.'
+    default_code = 'salary_configuration_busy'
+
+
+class SalaryConfigurationResource:
+    def handle_exception(self, exc):
+        if isinstance(exc, OperationalError) and ('locked' in str(exc).lower() or 'deadlock' in str(exc).lower()):
+            exc = SalaryConfigurationBusy()
+        return super().handle_exception(exc)
+
+
+class SalaryComponentResource(SalaryConfigurationResource, HRMLookupQuerysetMixin):
+    queryset = SalaryComponent.objects.all()
+    serializer_class = SalaryComponentSerializer
+    search_fields = [*HRMLookupQuerysetMixin.search_fields, 'type', 'category']
+
+
+class SalaryComponentListCreateAPIView(SalaryComponentResource, BaseListCreateAPIView):
+    response_key = 'salary_component'
+
+
+class SalaryComponentListAPIView(SalaryComponentResource, BaseListAPIView):
+    pass
+
+
+class SalaryComponentDetailAPIView(SalaryComponentResource, BaseDetailAPIView):
+    pass
+
+
+class SalaryComponentUpdateAPIView(SalaryComponentResource, BaseUpdateAPIView):
+    pass
+
+
+class SalaryStructureResource(SalaryConfigurationResource, HRMLookupQuerysetMixin):
+    queryset = SalaryStructure.objects.all()
+    serializer_class = SalaryStructureSerializer
+
+
+class SalaryStructureListCreateAPIView(SalaryStructureResource, BaseListCreateAPIView):
+    response_key = 'salary_structure'
+
+
+class SalaryStructureListAPIView(SalaryStructureResource, BaseListAPIView):
+    pass
+
+
+class SalaryStructureDetailAPIView(SalaryStructureResource, BaseDetailAPIView):
+    pass
+
+
+class SalaryStructureUpdateAPIView(SalaryStructureResource, BaseUpdateAPIView):
+    pass
+
+
+class SalaryStructureLineResource(SalaryConfigurationResource):
+    queryset = SalaryStructureLine.objects.select_related('salary_structure', 'component')
+    serializer_class = SalaryStructureLineSerializer
+    search_fields = ['salary_structure__code', 'salary_structure__name', 'component__code', 'component__name']
+    ordering = ['salary_structure_id', 'pk']
+
+
+class SalaryStructureLineListFilters:
+    def get_queryset(self):
+        filters = SalaryStructureLineFilterSerializer(data=self.request.query_params.dict())
+        filters.is_valid(raise_exception=True)
+        return super().get_queryset().filter(**filters.validated_data)
+
+
+class SalaryStructureLineListCreateAPIView(SalaryStructureLineResource, SalaryStructureLineListFilters, BaseListCreateAPIView):
+    response_key = 'salary_structure_line'
+
+
+class SalaryStructureLineListAPIView(SalaryStructureLineResource, SalaryStructureLineListFilters, BaseListAPIView):
+    pass
+
+
+class SalaryStructureLineDetailAPIView(SalaryStructureLineResource, BaseDetailAPIView):
+    @transaction.atomic
+    def perform_destroy(self, instance):
+        line = lock_salary_record(SalaryStructureLine, instance.pk)
+        lock_salary_record(SalaryStructure, line.salary_structure_id)
+        check_basic_salary_line_removal(line)
+        return super().perform_destroy(line)
+
+
+class SalaryStructureLineUpdateAPIView(SalaryStructureLineResource, BaseUpdateAPIView):
+    pass
+
+
+class EmployeeCompensationResource(SalaryConfigurationResource):
+    queryset = EmployeeCompensation.objects.select_related('employee', 'salary_structure')
+    serializer_class = EmployeeCompensationSerializer
+    search_fields = ['salary_structure__code', 'salary_structure__name']
+    ordering = ['employee_id', '-effective_from', '-pk']
+
+
+class EmployeeCompensationListFilters(EffectiveDateFilters):
+    filter_serializer_class = EmployeeCompensationFilterSerializer
+
+
+class EmployeeCompensationListCreateAPIView(EmployeeCompensationResource, EmployeeCompensationListFilters, BaseListCreateAPIView):
+    response_key = 'employee_compensation'
+
+
+class EmployeeCompensationListAPIView(EmployeeCompensationResource, EmployeeCompensationListFilters, BaseListAPIView):
+    pass
+
+
+class EmployeeCompensationDetailAPIView(EmployeeCompensationResource, BaseDetailAPIView):
+    pass
+
+
+class EmployeeCompensationUpdateAPIView(EmployeeCompensationResource, BaseUpdateAPIView):
+    pass
+
+
+class SalaryFormOptionsAPIView(HRMFormOptionsAPIView):
+    def get_options(self, record):
+        def lookup_choices(model, field, value_field='pk', eligibility=None):
+            existing = getattr(record, f'{field}_id', None)
+            available = Q(is_active=True) if eligibility is None else Q(is_active=True) & eligibility
+            rows = model.objects.filter(available | Q(**{value_field: existing})).order_by('name', 'pk')
+            return [{'value': value, 'label': f'{name} ({code})'}
+                    for value, name, code in rows.values_list(value_field, 'name', 'code')]
+
+        if self.model is SalaryComponent:
+            return {'type': [{'value': value, 'label': label} for value, label in SalaryComponent.Kind.choices]}
+        if self.model is SalaryStructure:
+            return {'currency': lookup_choices(Currency, 'currency', 'code')}
+        if self.model is SalaryStructureLine:
+            return {
+                'salary_structure': lookup_choices(SalaryStructure, 'salary_structure'),
+                'component': lookup_choices(SalaryComponent, 'component'),
+                'calculation_method': [{'value': value, 'label': label}
+                                       for value, label in SalaryStructureLine.CalculationMethod.choices],
+            }
+
+        basic_lines = SalaryStructureLine.objects.filter(calculation_method=SalaryStructureLine.CalculationMethod.BASIC_SALARY)
+        return {
+            'employee': self.employee_choices(record),
+            'salary_structure': lookup_choices(SalaryStructure, 'salary_structure',
+                                               eligibility=Q(pk__in=basic_lines.values('salary_structure_id'))),
+        }

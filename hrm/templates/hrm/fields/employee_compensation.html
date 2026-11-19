@@ -1,0 +1,5 @@
+{% include 'inventory/includes/field.html' with name='employee' label='Employee' field_type='select' required=True only %}
+{% include 'inventory/includes/field.html' with name='salary_structure' label='Salary structure' field_type='select' required=True hint='Only active structures with a basic salary rule can be selected for new assignments.' only %}
+{% include 'inventory/includes/field.html' with name='basic_salary' label='Monthly basic salary' field_type='number' required=True minimum='0.0001' maximum='99999999999999.9999' hint='Enter the amount in the salary structure currency.' only %}
+{% include 'inventory/includes/field.html' with name='effective_from' label='Effective from' field_type='date' required=True value=today only %}
+{% include 'inventory/includes/field.html' with name='effective_to' label='Effective to' field_type='date' nullable_field=True hint='The end date is included. Leave blank for ongoing compensation.' only %}

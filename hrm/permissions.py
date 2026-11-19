@@ -8,6 +8,14 @@ from .models import Employee
 REVIEW_LEAVE_PERMISSION = 'hrm.review_leaverequest'
 VIEW_LEAVE_PERMISSION = 'hrm.view_leaverequest'
 ADD_LEAVE_PERMISSION = 'hrm.add_leaverequest'
+PAYROLL_VIEW = ('hrm.view_payrollrun',)
+PAYROLL_DETAIL = (*PAYROLL_VIEW, 'hrm.view_payslip', 'hrm.view_payslipline')
+PAYROLL_CALCULATE = (*PAYROLL_DETAIL, 'hrm.calculate_payrollrun')
+PAYROLL_REVIEW = (*PAYROLL_DETAIL, 'hrm.review_payrollrun')
+PAYROLL_APPROVE = (*PAYROLL_DETAIL, 'hrm.approve_payrollrun')
+PAYROLL_PAYMENT_VIEW = (*PAYROLL_DETAIL, 'hrm.view_salarypayment')
+PAYROLL_PAYMENT_WRITE = (*PAYROLL_PAYMENT_VIEW, 'hrm.record_salarypayment')
+PAYROLL_REVIEW_ADJUSTMENT = ('hrm.view_payrolladjustment', 'hrm.review_payrolladjustment')
 
 
 def leave_requests_for_user(queryset, user):

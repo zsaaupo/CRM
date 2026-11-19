@@ -2,9 +2,25 @@ from django.core.exceptions import PermissionDenied
 from django.db import transaction
 from django.db.models import F
 from django.utils import timezone
+from rest_framework.exceptions import NotFound
 
 from common.serializers import AUDIT_FIELDS
-from .models import Employee, LeaveRequest
+from common.view import RecordInUse
+from .models import Employee, EmployeeCompensation, LeaveRequest, SalaryStructureLine
+
+
+def lock_salary_record(model, pk):
+    """Call in a transaction. The update also acquires a write lock on SQLite."""
+    records = model.objects.filter(pk=pk)
+    if not records.update(updated_at=F('updated_at')):
+        raise NotFound('Salary configuration record not found.')
+    return records.get()
+
+
+def check_basic_salary_line_removal(line):
+    if (line.calculation_method == SalaryStructureLine.CalculationMethod.BASIC_SALARY
+            and EmployeeCompensation.objects.filter(salary_structure_id=line.salary_structure_id).exists()):
+        raise RecordInUse('An assigned salary structure must keep its basic salary line.')
 
 
 class LeaveAlreadyReviewed(Exception):

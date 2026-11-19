@@ -189,3 +189,45 @@ Configure at least one active paid or unpaid leave type before submitting reques
   `{"status": "rejected"}`. It requires view and `hrm.review_leaverequest`, applies
   only to pending requests, and records the logged-in reviewer and review time.
   Reviewers cannot decide their own requests.
+
+## Payroll workflow
+
+Open **HRM > Salary > Payroll run list**. Preview a month and currency, save the
+calculation, mark the run reviewed, then approve it. Reviewers can return a run
+to calculation, reject it, or cancel it before approval. Recalculate a run with
+changed inputs or a run saved before migration `0013` to refresh its snapshot.
+Approved amounts are locked. A correction uses a payroll adjustment linked to
+the earlier approved payslip in a later period.
+
+The API uses the existing session and CSRF flow. Give payroll readers
+`hrm.view_payrollrun`, `hrm.view_payslip`, and `hrm.view_payslipline`. Grant
+`hrm.calculate_payrollrun`, `hrm.review_payrollrun`, or `hrm.approve_payrollrun`
+as required by each role. Viewing payment attempts also requires
+`hrm.view_salarypayment`. Creating and resolving them requires
+`hrm.record_salarypayment`. Adjustment review requires
+`hrm.view_payrolladjustment` and `hrm.review_payrolladjustment`.
+
+| Request | JSON or filters |
+| --- | --- |
+| `POST /hrm/api/payroll-runs/preview/` | `month` as `YYYY-MM-01`, `currency` |
+| `POST /hrm/api/payroll-runs/calculate/` | Same inputs and the returned `preview_token` |
+| `POST /hrm/api/payroll-runs/<id>/review/`, `approve/`, `return/` | Optional `note` |
+| `POST /hrm/api/payroll-runs/<id>/reject/`, `cancel/` | Required `note` |
+| `POST /hrm/api/payroll-runs/<id>/payments/` | `payslip` ID, `amount`, `method`, unique UUID `request_key` |
+| `POST /hrm/api/payroll-runs/<id>/payments/<payment_id>/resolve/` | `status` `succeeded` with `reference` and `paid_on`, or `failed` with `failure_reason` |
+| `GET /hrm/api/payroll-reports/` | `month` and/or `employee_code`, optional `currency`, optional `export=csv` |
+| `GET /report/api/payslips/<id>/pdf/` | Approved payslip PDF |
+
+The Salary menu has CRUD pages for payroll adjustments, deduction rules,
+employee loans, and loan installments. Open an adjustment to approve or cancel
+it. Overtime uses the entered minutes, hourly rate, and multiplier. Deduction
+rules are effective by payroll month and apply a fixed amount or a percentage
+of recurring gross earnings. Use the policy reference field for the verified
+rule. Approved one-off adjustments are added to the applicable payroll month.
+
+Finance records payment attempts and their outcomes after the actual
+disbursement. Pending attempts reserve the balance. Failed attempts release it.
+Retry an interrupted API request with the same `request_key`. A loan installment
+is marked recovered when the corresponding payslip is fully settled. Payroll
+reports include monthly totals, department expenses, employee salary history,
+and a CSV for accounting handoff.

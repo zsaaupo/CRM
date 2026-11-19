@@ -1,4 +1,5 @@
 from django.urls import path
+from .catalog import PAYROLL_INPUT_RESOURCES
 
 from .api_views import (
     AttendanceDetailAPIView, AttendanceFormOptionsAPIView, AttendanceListAPIView, AttendanceListCreateAPIView,
@@ -7,6 +8,8 @@ from .api_views import (
     DesignationDetailAPIView, DesignationListAPIView, DesignationListCreateAPIView, DesignationUpdateAPIView,
     EmployeeAttendanceStatusDetailAPIView, EmployeeAttendanceStatusListAPIView,
     EmployeeAttendanceStatusListCreateAPIView, EmployeeAttendanceStatusUpdateAPIView,
+    EmployeeCompensationDetailAPIView, EmployeeCompensationListAPIView, EmployeeCompensationListCreateAPIView,
+    EmployeeCompensationUpdateAPIView,
     EmployeeDetailAPIView, EmployeeEditOptionsAPIView, EmployeeListAPIView, EmployeeListCreateAPIView,
     EmployeeOptionsAPIView, EmployeeUpdateAPIView,
     EmployeeScheduleAssignmentDetailAPIView, EmployeeScheduleAssignmentListAPIView,
@@ -17,9 +20,24 @@ from .api_views import (
     LeaveRequestDetailAPIView, LeaveRequestListAPIView, LeaveRequestListCreateAPIView, LeaveRequestOptionsAPIView,
     LeaveRequestReviewAPIView, LeaveTypeDetailAPIView, LeaveTypeListAPIView, LeaveTypeListCreateAPIView,
     LeaveTypeUpdateAPIView,
+    SalaryComponentDetailAPIView, SalaryComponentListAPIView, SalaryComponentListCreateAPIView,
+    SalaryComponentUpdateAPIView, SalaryFormOptionsAPIView,
+    SalaryStructureDetailAPIView, SalaryStructureListAPIView, SalaryStructureListCreateAPIView,
+    SalaryStructureLineDetailAPIView, SalaryStructureLineListAPIView, SalaryStructureLineListCreateAPIView,
+    SalaryStructureLineUpdateAPIView, SalaryStructureUpdateAPIView,
     WorkScheduleDetailAPIView, WorkScheduleListAPIView, WorkScheduleListCreateAPIView, WorkScheduleUpdateAPIView,
 )
-from .models import Attendance, EmployeeScheduleAssignment, Holiday
+from .models import (
+    Attendance, EmployeeCompensation, EmployeeScheduleAssignment, Holiday, SalaryComponent, SalaryStructure,
+    SalaryStructureLine,
+)
+from .payroll_api import (
+    PayrollCalculateAPIView, PayrollOptionsAPIView, PayrollPreviewAPIView, PayrollRunDetailAPIView, PayrollRunListAPIView,
+    PayrollRunTransitionAPIView, SalaryPaymentCreateAPIView, SalaryPaymentResolveAPIView,
+)
+from .payroll_inputs import PayrollAdjustmentReviewAPIView, input_urls
+from .payroll_reports import PayrollReportAPIView
+from .payroll_workflow import RUN_ACTIONS
 
 
 app_name = 'hrm'
@@ -92,4 +110,46 @@ urlpatterns = [
     path('leave-requests/options/', LeaveRequestOptionsAPIView.as_view(), name='leave-request-options'),
     path('leave-requests/<int:pk>/', LeaveRequestDetailAPIView.as_view(), name='leave-request-detail'),
     path('leave-requests/<int:pk>/review/', LeaveRequestReviewAPIView.as_view(), name='leave-request-review'),
+    path('salary-components/', SalaryComponentListCreateAPIView.as_view(), name='salary-component-list'),
+    path('salary-components/list/', SalaryComponentListAPIView.as_view(), name='salary-component-list-view'),
+    path('salary-components/options/', SalaryFormOptionsAPIView.as_view(model=SalaryComponent), name='salary-component-options'),
+    path('salary-components/<int:pk>/options/', SalaryFormOptionsAPIView.as_view(model=SalaryComponent),
+         name='salary-component-edit-options'),
+    path('salary-components/<int:pk>/', SalaryComponentDetailAPIView.as_view(), name='salary-component-detail'),
+    path('salary-components/<int:pk>/update/', SalaryComponentUpdateAPIView.as_view(), name='salary-component-update'),
+    path('salary-structures/', SalaryStructureListCreateAPIView.as_view(), name='salary-structure-list'),
+    path('salary-structures/list/', SalaryStructureListAPIView.as_view(), name='salary-structure-list-view'),
+    path('salary-structures/options/', SalaryFormOptionsAPIView.as_view(model=SalaryStructure), name='salary-structure-options'),
+    path('salary-structures/<int:pk>/options/', SalaryFormOptionsAPIView.as_view(model=SalaryStructure),
+         name='salary-structure-edit-options'),
+    path('salary-structures/<int:pk>/', SalaryStructureDetailAPIView.as_view(), name='salary-structure-detail'),
+    path('salary-structures/<int:pk>/update/', SalaryStructureUpdateAPIView.as_view(), name='salary-structure-update'),
+    path('salary-structure-lines/', SalaryStructureLineListCreateAPIView.as_view(), name='salary-structure-line-list'),
+    path('salary-structure-lines/list/', SalaryStructureLineListAPIView.as_view(), name='salary-structure-line-list-view'),
+    path('salary-structure-lines/options/', SalaryFormOptionsAPIView.as_view(model=SalaryStructureLine),
+         name='salary-structure-line-options'),
+    path('salary-structure-lines/<int:pk>/options/', SalaryFormOptionsAPIView.as_view(model=SalaryStructureLine),
+         name='salary-structure-line-edit-options'),
+    path('salary-structure-lines/<int:pk>/', SalaryStructureLineDetailAPIView.as_view(), name='salary-structure-line-detail'),
+    path('salary-structure-lines/<int:pk>/update/', SalaryStructureLineUpdateAPIView.as_view(), name='salary-structure-line-update'),
+    path('employee-compensations/', EmployeeCompensationListCreateAPIView.as_view(), name='employee-compensation-list'),
+    path('employee-compensations/list/', EmployeeCompensationListAPIView.as_view(), name='employee-compensation-list-view'),
+    path('employee-compensations/options/', SalaryFormOptionsAPIView.as_view(model=EmployeeCompensation),
+         name='employee-compensation-options'),
+    path('employee-compensations/<int:pk>/options/', SalaryFormOptionsAPIView.as_view(model=EmployeeCompensation),
+         name='employee-compensation-edit-options'),
+    path('employee-compensations/<int:pk>/', EmployeeCompensationDetailAPIView.as_view(), name='employee-compensation-detail'),
+    path('employee-compensations/<int:pk>/update/', EmployeeCompensationUpdateAPIView.as_view(), name='employee-compensation-update'),
+    path('payroll-runs/list/', PayrollRunListAPIView.as_view(), name='payroll-run-list-view'),
+    path('payroll-runs/options/', PayrollOptionsAPIView.as_view(), name='payroll-run-options'),
+    path('payroll-runs/preview/', PayrollPreviewAPIView.as_view(), name='payroll-run-preview'),
+    path('payroll-runs/calculate/', PayrollCalculateAPIView.as_view(), name='payroll-run-calculate'),
+    path('payroll-runs/<int:pk>/', PayrollRunDetailAPIView.as_view(), name='payroll-run-detail'),
+    path('payroll-runs/<int:pk>/payments/', SalaryPaymentCreateAPIView.as_view(), name='salary-payment-create'),
+    path('payroll-runs/<int:pk>/payments/<int:payment_id>/resolve/', SalaryPaymentResolveAPIView.as_view(), name='salary-payment-resolve'),
+    path('payroll-adjustments/<int:pk>/review/', PayrollAdjustmentReviewAPIView.as_view(), name='payroll-adjustment-review'),
+    path('payroll-reports/', PayrollReportAPIView.as_view(), name='payroll-report'),
 ]
+urlpatterns += [path(f'payroll-runs/<int:pk>/{action}/', PayrollRunTransitionAPIView.as_view(action=action),
+                     name=f'payroll-run-{action}') for action in RUN_ACTIONS]
+urlpatterns += input_urls(PAYROLL_INPUT_RESOURCES)

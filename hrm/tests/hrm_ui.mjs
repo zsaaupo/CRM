@@ -215,11 +215,11 @@ assert.equal(workingDays.attributes['aria-invalid'], 'true');
 assert.equal(scheduleForm.error.hidden, false);
 days[0].checked = days[6].checked = true;
 await scheduleForm.form.listeners.submit(event);
-assert.deepEqual(scheduleForm.requests[0].working_days, [0, 6]);
+assert.deepEqual(Array.from(scheduleForm.requests[0].working_days), [0, 6]);
 const scheduleEdit = await attendanceForm([], [workingDays], {id: 1, working_days: [2, 5]});
 assert.deepEqual(days.filter(day => day.checked).map(day => Number(day.value)), [2, 5]);
 await scheduleEdit.form.listeners.submit(event);
-assert.deepEqual(scheduleEdit.requests[0].working_days, [2, 5]);
+assert.deepEqual(Array.from(scheduleEdit.requests[0].working_days), [2, 5]);
 
 const checkIn = Object.assign(new Element('input'), {name: 'check_in', type: 'datetime-local'});
 const checkOut = Object.assign(new Element('input'), {name: 'check_out', type: 'datetime-local'});
@@ -231,7 +231,7 @@ assert.equal(checkIn.value, '2026-11-18T22:00:30');
 assert.equal(checkOut.value, '2026-11-19T06:00:00');
 checkOut.value = '';
 await attendanceEdit.form.listeners.submit(event);
-assert.deepEqual(attendanceEdit.requests[0], {check_out: null});
+assert.deepEqual(JSON.parse(JSON.stringify(attendanceEdit.requests[0])), {check_out: null});
 console.log('Attendance forms passed: numeric weekdays, edit values, overnight timestamps and clearing checkout.');
 
 const detailSource = (await readFile(new URL('../../static/js/record_detail.js', import.meta.url), 'utf8'))

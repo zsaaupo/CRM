@@ -1,5 +1,7 @@
 from calendar import day_name
+from urllib.parse import urlencode
 
+from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
@@ -7,8 +9,11 @@ from django.utils import timezone
 
 from account.page_views import ProtectedAccountPageView
 from .catalog import RESOURCE_MAP
-from .models import Employee, EmployeeAttendanceStatus, LeaveRequest
-from .permissions import REVIEW_LEAVE_PERMISSION, can_apply_for_leave, leave_requests_for_user
+from .models import Employee, EmployeeAttendanceStatus, LeaveRequest, PayrollAdjustment, PayrollRun, SalaryPayment
+from .payroll import RECALCULABLE
+from .payroll_workflow import RUN_ACTIONS
+from .permissions import (PAYROLL_CALCULATE, PAYROLL_DETAIL, PAYROLL_REVIEW_ADJUSTMENT, REVIEW_LEAVE_PERMISSION,
+                          can_apply_for_leave, leave_requests_for_user)
 
 
 class HRMPageView(ProtectedAccountPageView):
@@ -51,14 +56,24 @@ class HRMPageView(ProtectedAccountPageView):
             })
             context['columns'].append({'key': 'actions', 'label': 'Actions', 'type': 'edit'})
             return context
+        if resource.key == 'payroll-run':
+            context.update(can_add=user.has_perms(PAYROLL_CALCULATE), can_delete=False, add_label='Calculate payroll')
+            if user.has_perms(PAYROLL_DETAIL):
+                context['view_url_template'] = reverse('hrm_pages:payroll-run-detail', args=[0])
+                context['columns'].append({'key': 'actions', 'label': 'Actions', 'type': 'edit'})
+            return context
         if resource.key == 'employee':
             context.update({'soft_delete': True,
                             'soft_delete_description': 'The employee record will be retained.'})
         can_change = user.has_perm(resource.permission('change'))
-        if resource.key == 'employee' or can_change or context['can_delete']:
+        if resource.key in ('employee', 'payroll-adjustment') or can_change or context['can_delete']:
             context['columns'].append({'key': 'actions', 'label': 'Actions', 'type': 'edit'})
         if resource.key == 'employee':
             context['view_url_template'] = reverse('hrm_pages:employee-detail', args=[0])
+        if resource.key == 'payroll-adjustment':
+            context['view_url_template'] = reverse('hrm_pages:payroll-adjustment-detail', args=[0])
+            context['edit_disabled_field'] = 'is_locked'
+            context['delete_disabled_field'] = 'is_locked'
         if can_change:
             context['edit_url_template'] = reverse(f'hrm_pages:edit-{resource.key}', args=[0])
         if context['can_delete']:
@@ -68,6 +83,79 @@ class HRMPageView(ProtectedAccountPageView):
 
 class HRMListPageView(HRMPageView):
     template_name = 'inventory/list.html'
+
+
+class PayrollCalculationPageView(HRMPageView):
+    template_name = 'hrm/payroll_calculation.html'
+    resource_key = 'payroll-run'
+    mode = 'add'
+
+    def get_permission_required(self):
+        return PAYROLL_CALCULATE
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context.update({
+            'page_label': 'Calculate payroll', 'preview_api_url': reverse('hrm:payroll-run-preview'),
+            'calculate_api_url': reverse('hrm:payroll-run-calculate'),
+            'options_api_url': reverse('hrm:payroll-run-options'),
+            'detail_url_template': reverse('hrm_pages:payroll-run-detail', args=[0]),
+            'initial_month': self.request.GET.get('month', timezone.localdate().strftime('%Y-%m')),
+            'initial_currency': self.request.GET.get('currency', settings.INVENTORY_BASE_CURRENCY),
+        })
+        return context
+
+
+class PayrollRunDetailPageView(HRMPageView):
+    template_name = 'hrm/payroll_run_detail.html'
+    resource_key = 'payroll-run'
+    mode = 'detail'
+
+    def get_permission_required(self):
+        return PAYROLL_DETAIL
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        run = get_object_or_404(PayrollRun.objects.select_related('period'), pk=self.kwargs['pk'])
+        context.update(page_label='Payroll run', detail_api_url=reverse('hrm:payroll-run-detail', args=[run.pk]), run=run)
+        context.update({
+            'transition_urls': {key: reverse(f'hrm:payroll-run-{key}', args=[run.pk]) for key in RUN_ACTIONS},
+            'create_payment_url': reverse('hrm:salary-payment-create', args=[run.pk]),
+            'resolve_payment_template': reverse('hrm:salary-payment-resolve', args=[run.pk, 0]),
+            'payslip_pdf_template': reverse('report:payslip-pdf', args=[0]),
+            'payment_methods': SalaryPayment.Method.choices, 'today': timezone.localdate().isoformat(),
+        })
+        if context['can_add'] and run.status in RECALCULABLE:
+            parameters = urlencode({'month': run.period.month.strftime('%Y-%m'), 'currency': run.currency_id})
+            context['recalculate_url'] = f"{context['add_url']}?{parameters}"
+        return context
+
+
+class PayrollAdjustmentDetailPageView(HRMPageView):
+    template_name = 'hrm/payroll_adjustment_detail.html'
+    resource_key = 'payroll-adjustment'
+    mode = 'detail'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        adjustment = get_object_or_404(PayrollAdjustment, pk=self.kwargs['pk'])
+        context.update(adjustment=adjustment, page_label='Payroll adjustment',
+            detail_api_url=reverse('hrm:payroll-adjustment-detail', args=[adjustment.pk]),
+            review_api_url=reverse('hrm:payroll-adjustment-review', args=[adjustment.pk])
+            if self.request.user.has_perms(PAYROLL_REVIEW_ADJUSTMENT) else '')
+        return context
+
+
+class PayrollReportPageView(ProtectedAccountPageView):
+    template_name = 'hrm/payroll_report.html'
+    permission_required = PAYROLL_DETAIL
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context.update(page_section='hrm', hrm_group='salary', hrm_key='payroll-report', page_label='Payroll reports',
+            report_api_url=reverse('hrm:payroll-report'), month_default=timezone.localdate().strftime('%Y-%m'),
+            currency_default=settings.INVENTORY_BASE_CURRENCY)
+        return context
 
 
 class EmployeeDetailPageView(HRMPageView):
@@ -97,6 +185,7 @@ class HRMAddPageView(HRMPageView):
         employee = resource.key == 'employee'
         heading = f'Add {resource.singular}'
         today = timezone.localdate().isoformat()
+        lookup_fields = ('lookup', 'work_schedule', 'leave_type', 'salary_component', 'salary_structure')
         context.update({
             'page_label': heading, 'form_heading': heading, 'save_label': heading,
             'create_api_url': reverse(f'hrm:{resource.key}-list'),
@@ -110,10 +199,12 @@ class HRMAddPageView(HRMPageView):
             'attendance_status_default': EmployeeAttendanceStatus.Code.UNRECORDED,
             'attendance_timezone': timezone.get_current_timezone_name(),
             'code_maxlength': resource.model._meta.get_field('code').max_length
-                              if resource.fields in ('lookup', 'work_schedule', 'leave_type') else None,
+                              if resource.fields in lookup_fields else None,
             'name_maxlength': resource.model._meta.get_field('name').max_length
-                              if resource.fields in ('lookup', 'work_schedule', 'holiday', 'leave_type') else None,
+                              if resource.fields in (*lookup_fields, 'holiday') else None,
         })
+        if resource.key in ('salary-structure', 'payroll-adjustment', 'employee-loan'):
+            context['currency_default'] = settings.INVENTORY_BASE_CURRENCY
         return context
 
 
@@ -133,6 +224,9 @@ class HRMEditPageView(HRMAddPageView):
         })
         if self.resource.has_options:
             context['options_api_url'] = reverse(f'hrm:{self.resource.key}-edit-options', args=[target.pk])
+        if isinstance(target, PayrollAdjustment):
+            context['readonly_field'] = 'is_locked'
+            context['readonly_message'] = 'Only draft adjustments can be edited. Open the adjustment to review its status.'
         if isinstance(target, Employee):
             if target.user_id and target.user.is_superuser and not self.request.user.is_superuser:
                 context['can_link_user'] = False

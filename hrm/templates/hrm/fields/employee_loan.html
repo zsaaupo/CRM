@@ -1,0 +1,6 @@
+{% include 'inventory/includes/field.html' with name='employee' label='Employee' field_type='select' required=True only %}
+{% include 'inventory/includes/field.html' with name='currency' label='Currency' field_type='select' required=True value=currency_default only %}
+{% include 'inventory/includes/field.html' with name='reference' label='Loan reference' maxlength=80 required=True only %}
+{% include 'inventory/includes/field.html' with name='principal' label='Principal' field_type='number' minimum='0.0001' required=True only %}
+{% include 'inventory/includes/field.html' with name='disbursed_on' label='Disbursement date' field_type='date' required=True value=today only %}
+{% include 'inventory/includes/field.html' with name='notes' label='Notes' field_type='textarea' only %}

@@ -1,0 +1,42 @@
+{{ transition_urls|json_script:'payroll-transition-urls' }}
+<section data-payroll-operations data-payment-url="{{ create_payment_url }}" data-resolve-template="{{ resolve_payment_template }}" hidden>
+    <p class="form-status mt-4" data-operation-status role="status" aria-live="polite" tabindex="-1" hidden></p>
+    <form class="user-form-card mt-5" data-run-actions hidden>
+        {% csrf_token %}
+        <h2 class="section-title mb-4">Payroll review</h2>
+        <label class="form-label" for="payroll-action-note">Note or reason</label>
+        <textarea class="form-input" id="payroll-action-note" name="note" rows="2" maxlength="1000"></textarea>
+        <p class="mt-2 text-sm text-stone-500">Enter a reason to reject or cancel the run.</p>
+        <div class="user-form-actions" data-run-buttons></div>
+    </form>
+    <section class="users-panel mt-5" data-payments hidden>
+        <div class="users-toolbar"><h2 class="section-title">Salary payments</h2></div>
+        <div class="px-6 pb-4" data-payment-balances></div>
+        <form class="px-6 pb-4" data-payment-create hidden>
+            <fieldset class="user-form-grid">
+                <legend class="section-title mb-3">Record a payment attempt</legend>
+                <div><label class="form-label" for="payment-payslip">Payslip</label><select class="form-input" id="payment-payslip" name="payslip" required></select></div>
+                <div><label class="form-label" for="payment-amount">Amount</label><input class="form-input" type="number" id="payment-amount" name="amount" min="0.0001" step="0.0001" required></div>
+                <div><label class="form-label" for="payment-method">Method</label><select class="form-input" id="payment-method" name="method">{% for key, label in payment_methods %}<option value="{{ key }}">{{ label }}</option>{% endfor %}</select></div>
+                <div class="flex items-end"><button class="primary-button compact-primary" type="submit">Record attempt</button></div>
+            </fieldset>
+        </form>
+        <div class="px-6 pb-5" data-payment-attempts></div>
+    </section>
+    <section class="users-panel mt-5" data-payroll-history hidden>
+        <div class="users-toolbar"><h2 class="section-title">Audit history</h2></div>
+        <ul class="px-6 pb-5 space-y-2" data-payroll-events></ul>
+    </section>
+</section>
+<template data-payment-outcome-template>
+    <form class="mt-3 mb-5" data-payment-outcome>
+        <fieldset class="user-form-grid">
+            <legend class="sr-only">Record payment outcome</legend>
+            <div><label class="form-label">Outcome<select class="form-input" name="status"><option value="succeeded">Succeeded</option><option value="failed">Failed</option></select></label></div>
+            <div data-payment-success><label class="form-label">Payment reference<input class="form-input" name="reference" maxlength="120" required></label></div>
+            <div data-payment-success><label class="form-label">Actual payment date<input class="form-input" type="date" name="paid_on" value="{{ today }}" required></label></div>
+            <div data-payment-failure hidden><label class="form-label">Failure reason<input class="form-input" name="failure_reason" maxlength="255" disabled></label></div>
+            <div class="flex items-end"><button class="secondary-button" type="submit">Save outcome</button></div>
+        </fieldset>
+    </form>
+</template>
