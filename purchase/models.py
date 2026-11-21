@@ -17,6 +17,10 @@ def generate_order_number():
     return f'PO-{uuid.uuid4().hex.upper()}'
 
 
+def generate_return_number():
+    return f'PR-{uuid.uuid4().hex.upper()}'
+
+
 class PurchaseOrder(TimeStampedModel):
     order_number = models.CharField(max_length=50, unique=True, default=generate_order_number, editable=False)
     supplier = models.ForeignKey('people.Party', on_delete=models.PROTECT, null=True, blank=True,
@@ -151,3 +155,54 @@ class PurchaseOrderItem(TimeStampedModel):
 
     def __str__(self):
         return f'{self.purchase_order.order_number} / {self.line_number}'
+
+
+class PurchaseReturn(TimeStampedModel):
+    return_number = models.CharField(max_length=50, unique=True, default=generate_return_number, editable=False)
+    purchase_order = models.ForeignKey(PurchaseOrder, on_delete=models.PROTECT, related_name='returns')
+    return_date = models.DateField(default=timezone.localdate)
+    notes = models.TextField(blank=True)
+    is_completed = models.BooleanField(default=False, editable=False)
+    completed_at = models.DateTimeField(null=True, blank=True, editable=False)
+
+    class Meta:
+        ordering = ['-return_date', '-pk']
+        constraints = [models.CheckConstraint(
+            condition=Q(is_completed=False, completed_at__isnull=True) | Q(is_completed=True, completed_at__isnull=False),
+            name='purchase_return_completion_valid',
+        )]
+
+    def clean(self):
+        super().clean()
+        order = PurchaseOrder.objects.filter(pk=self.purchase_order_id).first()
+        if order is None:
+            return
+        if not order.is_received or order.warehouse_id is None:
+            raise ValidationError({'purchase_order': 'Choose a received purchase with a receiving warehouse.'})
+        if self.return_date and self.return_date < order.order_date:
+            raise ValidationError({'return_date': 'The return date cannot be before the purchase order date.'})
+
+    def __str__(self):
+        return self.return_number
+
+
+class PurchaseReturnItem(TimeStampedModel):
+    purchase_return = models.ForeignKey(PurchaseReturn, on_delete=models.PROTECT, related_name='items')
+    purchase_order_item = models.ForeignKey(PurchaseOrderItem, on_delete=models.PROTECT, related_name='return_items')
+    quantity = models.DecimalField(max_digits=18, decimal_places=6,
+                                   validators=[MinValueValidator(Decimal('0.000001'))])
+
+    class Meta:
+        ordering = ['purchase_order_item__line_number', 'pk']
+        constraints = [
+            models.UniqueConstraint(fields=['purchase_return', 'purchase_order_item'], name='purchase_return_order_item_unique'),
+            models.CheckConstraint(condition=Q(quantity__gt=0), name='purchase_return_item_quantity_positive'),
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.purchase_return_id and self.purchase_order_item_id:
+            item = PurchaseOrderItem.objects.filter(pk=self.purchase_order_item_id).first()
+            record = PurchaseReturn.objects.filter(pk=self.purchase_return_id).first()
+            if item and record and item.purchase_order_id != record.purchase_order_id:
+                raise ValidationError({'purchase_order_item': 'Choose an item from the original purchase order.'})

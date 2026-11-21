@@ -295,3 +295,41 @@ Receipt takes all items at their stored quantities, independently of trade statu
 It does not automatically confirm/close the status, create stock movements or
 allow partial receipts/unreceiving. Product totals across branches can be computed
 by summing their Stock quantities; this endpoint updates the selected warehouse.
+
+## Return a received purchase
+
+Open **Purchase → Purchase returns** or select **Create return** on a received
+purchase. A draft can return all or part of one or more lines from the same
+purchase. Completed returns count against the received quantity for each line.
+
+| Method | Path under `/purchase/api/purchase-returns/` | Result |
+| --- | --- | --- |
+| GET | `/` or `list/` | List and search returns in the user's warehouse scope |
+| GET | `options/` | List received purchases in active warehouses |
+| GET | `options/?purchase_order=42` | Get original lines and received, returned, and remaining quantities |
+| POST | `/` | Create a draft |
+| GET | `<id>/` or `<id>/options/` | Get a return or the options for editing its draft |
+| PATCH, PUT | `<id>/` or `<id>/update/` | Update a draft |
+| DELETE | `<id>/` | Delete a draft |
+| POST | `complete/` | Deduct stock and complete a return |
+
+Draft creation accepts the purchase ID, original line IDs, and decimal quantities.
+
+```json
+{
+  "purchase_order": 42,
+  "items": [{"purchase_order_item": 81, "quantity": "2.500000"}]
+}
+```
+
+Send `{"return_id": 7, "is_completed": true}` to complete a draft. Completion
+deducts stock from the original receiving warehouse once and locks the return.
+If any product has insufficient stock, the entire operation rolls back and the
+draft stays editable. Repeating a completed request returns
+`completed_now: false`.
+
+The endpoints use role permissions and warehouse scope. Draft creation requires
+view permissions for purchases and purchase items plus add permissions for
+purchase returns and return items. Editing or deleting lines requires the
+corresponding line permissions. Completion requires `purchase.change_purchasereturn`.
+Session writes require CSRF.

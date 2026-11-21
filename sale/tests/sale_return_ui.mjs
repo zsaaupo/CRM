@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
 
-const source = (await readFile(new URL('../static/sale/js/sales_return.js', import.meta.url), 'utf8'))
+const source = (await readFile(new URL('../../static/js/order_return.js', import.meta.url), 'utf8'))
     .replace(/^import .*;\r?\n/gm, '').replace(/^export /gm, '');
 
 function element(tag = 'div') {
@@ -27,17 +27,21 @@ const original = {id: 8, sales_order: 42, return_date: '2026-11-02', notes: 'Dra
 const selectorKey = selector => selector.match(/^\[data-return-(.+)\]$/)?.[1];
 const submit = form => form.listeners.submit({preventDefault() {}});
 
-async function setup({editing = false, failOptions = false, stale = false} = {}) {
+async function setup({editing = false, failOptions = false, stale = false, purchase = false} = {}) {
     const form = element('form');
     const parts = Object.fromEntries(['status', 'retry', 'fields', 'rows', 'submit', 'items', 'warehouse'].map(key => [key, element()]));
-    const fields = {sales_order: element('select'), return_date: element('input'), notes: element('textarea'),
+    const orderKey = purchase ? 'purchase_order' : 'sales_order';
+    const orderLines = purchase ? lines.map(({sold_quantity, ...line}) => ({...line, received_quantity: sold_quantity})) : lines;
+    const fields = {[orderKey]: element('select'), return_date: element('input'), notes: element('textarea'),
         csrfmiddlewaretoken: {value: 'csrf'}};
     fields.return_date.value = '2026-11-03';
     form.querySelector = selector => parts[selectorKey(selector)];
     form.elements = {namedItem: name => fields[name]};
-    form.action = editing ? '/sale/api/sales-returns/8/update/' : '/sale/api/sales-returns/';
+    const apiPath = purchase ? '/purchase/api/purchase-returns/' : '/sale/api/sales-returns/';
+    form.action = editing ? `${apiPath}8/update/` : apiPath;
     form.dataset = {method: editing ? 'PATCH' : 'POST', detailUrl: editing ? '/detail/' : '',
-        optionsUrl: '/options/', selectedOrder: '42', successUrl: '/sale/sales-returns/'};
+        optionsUrl: '/options/', selectedOrder: '42', successUrl: purchase ? '/purchase/purchase-returns/' : '/sale/sales-returns/',
+        returnType: purchase ? 'purchase' : 'sale'};
     const redirects = [];
     const requests = [];
     let loadFailed = failOptions;
@@ -48,7 +52,9 @@ async function setup({editing = false, failOptions = false, stale = false} = {})
         getJSON: async url => {
             if (url === '/detail/') return {...original, is_completed: completed};
             if (loadFailed) { loadFailed = false; throw Error('Network error'); }
-            if (editing || new URL(url, 'https://crm.test').searchParams.get('sales_order') === '42') return {order: option, lines};
+            if (editing || new URL(url, 'https://crm.test').searchParams.get(orderKey) === '42') {
+                return {order: option, lines: orderLines};
+            }
             return {orders: [option]};
         },
         postJSON: async (url, data, token) => { requests.push({url, data, token}); },
@@ -92,33 +98,51 @@ assert.equal(editor.parts.submit.disabled, true);
 assert.match(editor.parts.status.textContent, /completed/);
 assert.deepEqual(editor.redirects, []);
 
-const panel = element();
-const complete = element('form');
-const completeButton = element('button');
-const edit = element('a');
-const detailRows = element('tbody');
-const status = element('p');
-const detailCalls = [];
-panel.querySelector = selector => ({edit, complete, lines: detailRows})[selectorKey(selector)];
-complete.querySelector = selector => selector === 'button[type="submit"]' ? completeButton : status;
-complete.elements = {namedItem: () => ({value: 'csrf'})};
-complete.action = '/sale/api/sales-returns/complete/';
-const context = vm.createContext({panel, document: {querySelector: () => null, createElement: element},
-    detailValue: value => String(value), initializeRecordDetail: (_, callback) => callback({...original, items: [{...lines[0], quantity: '1'}]}),
-    postJSON: async (url, payload, token) => {
-        detailCalls.push({url, payload, token});
-        return {sales_return: {id: 8, is_completed: true}};
-    },
-    window: {location: {reload: () => detailCalls.push('reloaded')}},
-});
-vm.runInContext(source, context);
-vm.runInContext('initializeReturnDetail(panel)', context);
-assert.equal(edit.hidden, false);
-assert.equal(detailRows.children[0].children[1].textContent, 'Rice <5kg>');
-await Promise.all([submit(complete), submit(complete)]);
-assert.equal(detailCalls.length, 2);
-assert.equal(detailCalls[0].payload.return_id, 8);
-assert.equal(detailCalls[0].payload.is_completed, true);
-assert.equal(detailCalls[0].token, 'csrf');
-assert.equal(detailCalls[1], 'reloaded');
-console.log('Sales return UI passed: options retry, exact quantities, draft redirect, completed edit lock and once-only submission.');
+const purchaseDraft = await setup({purchase: true});
+assert.equal(purchaseDraft.fields.purchase_order.value, '42');
+assert.equal(purchaseDraft.parts.warehouse.textContent, 'Receiving warehouse: Main');
+assert.equal(purchaseDraft.parts.rows.children[0].children[3].textContent, '3.000000');
+purchaseDraft.quantity(0).value = '0.125001';
+await submit(purchaseDraft.form);
+assert.equal(purchaseDraft.requests[0].data.purchase_order, '42');
+assert.equal(purchaseDraft.requests[0].data.items[0].purchase_order_item, 12);
+assert.equal(purchaseDraft.requests[0].data.items[0].quantity, '0.125001');
+assert.deepEqual(purchaseDraft.redirects, ['/purchase/purchase-returns/']);
+
+for (const [type, resultKey, completeUrl] of [
+    ['sale', 'sales_return', '/sale/api/sales-returns/complete/'],
+    ['purchase', 'purchase_return', '/purchase/api/purchase-returns/complete/'],
+]) {
+    const panel = element();
+    panel.dataset.returnType = type;
+    const complete = element('form');
+    const completeButton = element('button');
+    const edit = element('a');
+    const detailRows = element('tbody');
+    const status = element('p');
+    const detailCalls = [];
+    panel.querySelector = selector => ({edit, complete, lines: detailRows})[selectorKey(selector)];
+    complete.querySelector = selector => selector === 'button[type="submit"]' ? completeButton : status;
+    complete.elements = {namedItem: () => ({value: 'csrf'})};
+    complete.action = completeUrl;
+    const context = vm.createContext({panel, document: {querySelector: () => null, createElement: element},
+        detailValue: value => String(value), initializeRecordDetail: (_, callback) => callback({...original, items: [{...lines[0], quantity: '1'}]}),
+        postJSON: async (url, payload, token) => {
+            detailCalls.push({url, payload, token});
+            return {[resultKey]: {id: 8, is_completed: true}};
+        },
+        window: {location: {reload: () => detailCalls.push('reloaded')}},
+    });
+    vm.runInContext(source, context);
+    vm.runInContext('initializeReturnDetail(panel)', context);
+    assert.equal(edit.hidden, false);
+    assert.equal(detailRows.children[0].children[1].textContent, 'Rice <5kg>');
+    await Promise.all([submit(complete), submit(complete)]);
+    assert.equal(detailCalls.length, 2);
+    assert.equal(detailCalls[0].url, completeUrl);
+    assert.equal(detailCalls[0].payload.return_id, 8);
+    assert.equal(detailCalls[0].payload.is_completed, true);
+    assert.equal(detailCalls[0].token, 'csrf');
+    assert.equal(detailCalls[1], 'reloaded');
+}
+console.log('Sales and purchase return UI passed.');

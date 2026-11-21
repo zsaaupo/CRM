@@ -85,6 +85,8 @@ const panel = document.querySelector("[data-record-detail]");
 if (panel) {
     let items;
     initializeRecordDetail(panel, async (record) => {
+        const returnLink = panel.querySelector("[data-purchase-return]");
+        if (returnLink) returnLink.hidden = record.is_received !== true || !record.warehouse;
         const section = panel.querySelector("[data-purchase-items]");
         if (section && !items) items = initializePurchaseItems(section, record.currency);
         if (items) await items.ready;

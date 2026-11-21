@@ -63,7 +63,7 @@ class ProjectAdminTests(TestCase):
         loan = EmployeeLoan.objects.create(employee=employee, currency_id='BDT', reference='TEST-LOAN',
                                            principal=200, disbursed_on=month)
         add = reverse('admin:hrm_loaninstallment_add')
-        payload = {'loan': loan.pk, 'month': month.isoformat(), 'amount': '50'}
+        payload = {'loan': loan.pk, 'month': month.strftime('%Y-%m'), 'amount': '50'}
         self.client.force_login(self.staff)
         self.assertEqual(self.client.get(add).status_code, 403)
         self.grant(self.staff.user_permissions, 'hrm', 'add_loaninstallment')

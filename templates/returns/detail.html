@@ -1,0 +1,47 @@
+{% extends 'layouts/dashboard.html' %}
+{% load static %}
+{% block title %}{{ return_title|default:'Sales return' }} | eManager{% endblock %}
+{% block content %}
+<div class="workspace-content" data-return-detail data-api-url="{{ detail_api_url }}" data-title-field="return_number"
+     data-login-url="{% url 'account_pages:login' %}" data-return-type="{{ return_type|default:'sale' }}">
+    <div class="page-heading">
+        <div class="min-w-0"><p class="page-eyebrow">{{ return_title|default:'Sales return' }}</p><h1 class="page-title break-all" data-record-title>{{ return_title|default:'Sales return' }}</h1></div>
+        <div class="flex flex-wrap gap-3">
+            <a href="{{ list_url }}" class="secondary-button">Back to {{ return_list_label|default:'sales returns' }}</a>
+            {% if order_url %}<a href="{{ order_url }}" class="secondary-button">{{ return_original_label|default:'Original sale' }}</a>{% endif %}
+            {% if edit_url %}<a href="{{ edit_url }}" data-return-edit class="secondary-button" hidden>Edit draft</a>{% endif %}
+        </div>
+    </div>
+    {% include 'includes/detail_status.html' %}
+    <div data-record-content hidden>
+        <section class="user-form-card mb-6" aria-labelledby="return-information">
+            <h2 id="return-information" class="section-title mb-5">Return information</h2>
+            <dl class="profile-grid">
+                {% include 'includes/detail_field.html' with name=return_order_number_field|default:'sales_order_number' label='Original order' only %}
+                {% include 'includes/detail_field.html' with name=return_party_field|default:'customer_name' label=return_party_label|default:'Customer' only %}
+                {% include 'includes/detail_field.html' with name='warehouse_name' label='Receiving warehouse' only %}
+                {% include 'includes/detail_field.html' with name='return_date' label='Return date' only %}
+                {% include 'includes/detail_field.html' with name='is_completed' label='Completed' kind='boolean' only %}
+                {% include 'includes/detail_field.html' with name='completed_at' label='Completed at' kind='datetime' only %}
+                {% include 'includes/detail_field.html' with name='notes' label='Notes' full=True only %}
+            </dl>
+            {% if complete_api_url %}
+            <form method="post" action="{{ complete_api_url }}" data-return-complete hidden>
+                {% csrf_token %}
+                <p class="form-status mt-4" data-return-complete-status role="status" tabindex="-1" hidden></p>
+                <div class="user-form-actions"><button type="submit" class="primary-button compact-primary">{{ return_complete_label|default:'Complete and restock' }}</button></div>
+            </form>
+            {% endif %}
+        </section>
+        {% if can_view_items %}<section class="users-panel mb-6" aria-labelledby="returned-lines-title">
+            <div class="users-toolbar"><h2 id="returned-lines-title" class="section-title">Return items</h2></div>
+            <div class="users-table-scroll"><table class="users-table"><caption class="sr-only">Returned items</caption>
+                <thead><tr><th scope="col">Original line</th><th scope="col">Product</th><th scope="col">SKU</th><th scope="col">Unit</th><th scope="col">Quantity</th></tr></thead>
+                <tbody data-return-lines></tbody>
+            </table></div>
+        </section>{% endif %}
+        {% include 'includes/detail_audit.html' %}
+    </div>
+</div>
+{% endblock %}
+{% block workspace_js %}<script type="module" src="{% static 'js/order_return.js' %}"></script>{% endblock %}

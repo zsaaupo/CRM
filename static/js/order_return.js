@@ -1,7 +1,17 @@
-import { getJSON, patchJSON, postJSON } from "../../js/api.js";
-import { detailValue, initializeRecordDetail } from "../../js/record_detail.js";
+import { getJSON, patchJSON, postJSON } from "./api.js";
+import { detailValue, initializeRecordDetail } from "./record_detail.js";
 
 const find = (root, attr) => root.querySelector(`[data-return-${attr}]`);
+const returnTypes = {
+    sale: {
+        order: "sales_order", result: "sales_return", originalQuantity: "sold_quantity",
+        source: "sale", plural: "sales", status: "completed", warehouse: "Restocking warehouse",
+    },
+    purchase: {
+        order: "purchase_order", result: "purchase_return", originalQuantity: "received_quantity",
+        source: "purchase", plural: "purchases", status: "received", warehouse: "Receiving warehouse",
+    },
+};
 
 function element(tag, text) {
     const node = document.createElement(tag);
@@ -26,6 +36,8 @@ function returnError(error, fallback) {
 }
 
 export function initializeReturnForm(form) {
+    const type = returnTypes[form.dataset.returnType || "sale"];
+    const itemField = `${type.order}_item`;
     const status = find(form, "status");
     const retry = find(form, "retry");
     const fields = find(form, "fields");
@@ -33,7 +45,7 @@ export function initializeReturnForm(form) {
     const submit = find(form, "submit");
     const items = find(form, "items");
     const warehouse = find(form, "warehouse");
-    const orderField = form.elements.namedItem("sales_order");
+    const orderField = form.elements.namedItem(type.order);
     const dateField = form.elements.namedItem("return_date");
     const notes = form.elements.namedItem("notes");
     const csrf = form.elements.namedItem("csrfmiddlewaretoken").value;
@@ -58,8 +70,8 @@ export function initializeReturnForm(form) {
     }
 
     function showOrder(data, existing = []) {
-        const saved = new Map(existing.map(line => [line.sales_order_item, line.quantity]));
-        warehouse.textContent = `Restocking warehouse: ${data.order.warehouse}`;
+        const saved = new Map(existing.map(line => [line[itemField], line.quantity]));
+        warehouse.textContent = `${type.warehouse}: ${data.order.warehouse}`;
         warehouse.hidden = false;
         dateField.min = data.order.order_date;
         quantities = [];
@@ -67,7 +79,7 @@ export function initializeReturnForm(form) {
         for (const item of data.lines) {
             const row = element("tr");
             for (const value of [item.line_number, `${item.product_name} (${item.product_sku})`, item.unit_code,
-                item.sold_quantity, item.returned_quantity, item.returnable ? item.remaining_quantity : "Unavailable"]) {
+                item[type.originalQuantity], item.returned_quantity, item.returnable ? item.remaining_quantity : "Unavailable"]) {
                 row.append(element("td", value));
             }
             const qty = element("input");
@@ -89,7 +101,7 @@ export function initializeReturnForm(form) {
         items.hidden = !data.lines.length;
         orderLoaded = true;
         const available = quantities.some(input => Number(input.max) > 0);
-        feedback(status, available ? "" : "This sale has no quantity available to return.");
+        feedback(status, available ? "" : `This ${type.source} has no quantity available to return.`);
         updateControls();
     }
 
@@ -104,15 +116,15 @@ export function initializeReturnForm(form) {
             feedback(status, "");
             return;
         }
-        feedback(status, "Loading sales order items…");
+        feedback(status, `Loading ${type.source} order items…`);
         try {
             const url = new URL(form.dataset.optionsUrl, window.location.origin);
-            url.searchParams.set("sales_order", orderField.value);
+            url.searchParams.set(type.order, orderField.value);
             const details = await getJSON(url.href);
             if (requestVersion === version) showOrder(details);
         } catch (error) {
             if (requestVersion !== version) return;
-            feedback(status, returnError(error, "Could not load sale items."), "error");
+            feedback(status, returnError(error, `Could not load ${type.source} items.`), "error");
             retry.hidden = false;
         }
     }
@@ -121,7 +133,7 @@ export function initializeReturnForm(form) {
         busy = true;
         retry.hidden = true;
         updateControls();
-        feedback(status, "Loading sales return…");
+        feedback(status, `Loading ${type.source} return…`);
         try {
             const record = editing ? await getJSON(form.dataset.detailUrl) : null;
             if (record?.is_completed) {
@@ -138,7 +150,7 @@ export function initializeReturnForm(form) {
                 notes.value = record.notes;
                 showOrder(data, record.items);
             } else {
-                const placeholder = element("option", "Select completed sale");
+                const placeholder = element("option", `Select ${type.status} ${type.source}`);
                 placeholder.value = "";
                 orderField.replaceChildren(placeholder);
                 for (const order of data.orders) appendOrder(order);
@@ -147,7 +159,7 @@ export function initializeReturnForm(form) {
                     orderField.value = preselected;
                     await loadOrder();
                 } else {
-                    feedback(status, data.orders.length ? "" : "No completed sales from active warehouses are available.");
+                    feedback(status, data.orders.length ? "" : `No ${type.status} ${type.plural} from active warehouses are available.`);
                 }
             }
         } catch (error) {
@@ -165,14 +177,14 @@ export function initializeReturnForm(form) {
         event.preventDefault();
         if (busy || locked || !orderLoaded || submit.disabled) return;
         const items = quantities.filter(input => !input.disabled && Number(input.value) > 0)
-            .map(input => ({sales_order_item: Number(input.dataset.itemId), quantity: input.value}));
+            .map(input => ({[itemField]: Number(input.dataset.itemId), quantity: input.value}));
         if (!items.length) {
-            feedback(status, "Enter a return quantity for at least one sale line.", "error");
+            feedback(status, `Enter a return quantity for at least one ${type.source} line.`, "error");
             status.focus();
             return;
         }
         const payload = {return_date: dateField.value, notes: notes.value, items};
-        if (!editing) payload.sales_order = orderField.value;
+        if (!editing) payload[type.order] = orderField.value;
         busy = true;
         updateControls();
         feedback(status, "Saving return…");
@@ -196,6 +208,7 @@ export function initializeReturnForm(form) {
 }
 
 export function initializeReturnDetail(panel) {
+    const type = returnTypes[panel.dataset.returnType || "sale"];
     const edit = find(panel, "edit");
     const complete = find(panel, "complete");
     const rows = find(panel, "lines");
@@ -210,7 +223,8 @@ export function initializeReturnDetail(panel) {
             const csrf = complete.elements.namedItem("csrfmiddlewaretoken").value;
             try {
                 const result = await postJSON(complete.action, {return_id: record.id, is_completed: true}, csrf);
-                if (result.sales_return?.id !== record.id || result.sales_return.is_completed !== true) {
+                const completed = result?.[type.result];
+                if (completed?.id !== record.id || completed.is_completed !== true) {
                     throw new Error("Could not confirm completion. Refresh the page before trying again.");
                 }
                 window.location.reload();

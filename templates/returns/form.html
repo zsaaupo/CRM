@@ -1,0 +1,39 @@
+{% extends 'layouts/dashboard.html' %}
+{% load static %}
+{% block title %}{{ form_heading }} | eManager{% endblock %}
+{% block content %}
+<div class="workspace-content">
+    <div class="page-heading">
+        <div><p class="page-eyebrow">{{ section_label }}</p><h1 class="page-title">{{ form_heading }}</h1></div>
+        <a href="{{ list_url }}" class="secondary-button">Back to {{ return_list_label|default:'sales returns' }}</a>
+    </div>
+    <form method="post" action="{{ create_api_url }}" data-return-form data-method="{{ form_method|default:'POST' }}"
+          data-detail-url="{{ detail_api_url }}" data-options-url="{{ options_api_url }}" data-success-url="{{ list_url }}"
+          data-selected-order="{{ selected_order }}" data-return-type="{{ return_type|default:'sale' }}">
+        {% csrf_token %}
+        <p class="form-status mb-4" data-return-status role="status" aria-live="polite" tabindex="-1" hidden></p>
+        <button type="button" class="secondary-button mb-4" data-return-retry hidden>Try loading again</button>
+        <fieldset class="user-form-card mb-6" data-return-fields disabled>
+            <legend class="sr-only">{{ return_title|default:'Sales return' }} details</legend>
+            <div class="user-form-grid">
+                {% include 'inventory/includes/field.html' with name=return_order_field|default:'sales_order' label=return_order_label|default:'Original sales order' field_type='select' required=True only %}
+                {% include 'inventory/includes/field.html' with name='return_date' label='Return date' field_type='date' required=True value=today only %}
+                {% include 'inventory/includes/field.html' with name='notes' label='Notes' field_type='textarea' only %}
+            </div>
+            <p class="mt-4 text-sm text-stone-600" data-return-warehouse hidden></p>
+        </fieldset>
+        <section class="users-panel" data-return-items hidden aria-labelledby="return-items-title">
+            <div class="users-toolbar"><h2 class="section-title" id="return-items-title">Return quantities</h2></div>
+            <div class="users-table-scroll"><table class="users-table">
+                <caption class="sr-only">Original order lines and quantities available for return</caption>
+                <thead><tr><th scope="col">Line</th><th scope="col">Product</th><th scope="col">Unit</th><th scope="col">{{ return_quantity_label|default:'Sold' }}</th><th scope="col">Returned</th><th scope="col">Available</th><th scope="col">Return quantity</th></tr></thead>
+                <tbody data-return-rows></tbody>
+            </table></div>
+        </section>
+        <div class="user-form-actions"><a href="{{ list_url }}" class="secondary-button">Cancel</a>
+            <button type="submit" class="primary-button compact-primary" data-return-submit disabled>Save draft</button></div>
+    </form>
+    <noscript><p class="form-error">Enable JavaScript to prepare and save this return.</p></noscript>
+</div>
+{% endblock %}
+{% block workspace_js %}<script type="module" src="{% static 'js/order_return.js' %}"></script>{% endblock %}

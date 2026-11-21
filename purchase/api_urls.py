@@ -5,6 +5,10 @@ from .api_views import (
     PurchaseOrderItemListCreateAPIView, PurchaseOrderItemUpdateAPIView, PurchaseOrderListAPIView,
     PurchaseOptionsAPIView, PurchaseEditOptionsAPIView, PurchaseOrderListCreateAPIView, PurchaseOrderUpdateAPIView, PurchaseReceiveAPIView,
 )
+from .return_api import (
+    PurchaseReturnCompleteAPIView, PurchaseReturnDetailAPIView, PurchaseReturnListAPIView,
+    PurchaseReturnListCreateAPIView, PurchaseReturnOptionsAPIView, PurchaseReturnUpdateAPIView,
+)
 
 
 app_name = 'purchase'
@@ -21,4 +25,11 @@ urlpatterns = [
     path('purchase-order-items/list/', PurchaseOrderItemListAPIView.as_view(), name='purchase-order-item-list-view'),
     path('purchase-order-items/<int:pk>/', PurchaseOrderItemDetailAPIView.as_view(), name='purchase-order-item-detail'),
     path('purchase-order-items/<int:pk>/update/', PurchaseOrderItemUpdateAPIView.as_view(), name='purchase-order-item-update'),
+    path('purchase-returns/', PurchaseReturnListCreateAPIView.as_view(), name='purchase-return-list'),
+    path('purchase-returns/list/', PurchaseReturnListAPIView.as_view(), name='purchase-return-list-view'),
+    path('purchase-returns/options/', PurchaseReturnOptionsAPIView.as_view(), name='purchase-return-options'),
+    path('purchase-returns/complete/', PurchaseReturnCompleteAPIView.as_view(), name='purchase-return-complete'),
+    path('purchase-returns/<int:pk>/', PurchaseReturnDetailAPIView.as_view(), name='purchase-return-detail'),
+    path('purchase-returns/<int:pk>/update/', PurchaseReturnUpdateAPIView.as_view(), name='purchase-return-update'),
+    path('purchase-returns/<int:pk>/options/', PurchaseReturnOptionsAPIView.as_view(), name='purchase-return-edit-options'),
 ]
