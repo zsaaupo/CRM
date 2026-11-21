@@ -8,7 +8,7 @@ from django.db.models import Prefetch, prefetch_related_objects
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.utils.text import slugify
-from rest_framework.exceptions import PermissionDenied
+from rest_framework.exceptions import NotFound, PermissionDenied
 
 from account.permissions import has_role_permissions
 from warehouse.scope import scoped_queryset, warehouse_scope
@@ -46,6 +46,10 @@ def snapshot(kind, pk, actor):
         records = transfer_queryset(records, scope) if kind == 'transfer' else scoped_queryset(records, scope)
         # Lock the header without nullable related joins (required for PostgreSQL).
         record = get_object_or_404(records.select_for_update(), pk=pk)
+        if kind == 'quotation':
+            if not record.issued_document:
+                raise NotFound('Issued quotation PDF not found.')
+            return record.issued_document
         relations = ['source_warehouse', 'destination_warehouse'] if kind == 'transfer' else [spec.party_field, 'warehouse', 'currency', 'status']
         item_model = spec.model._meta.get_field('items').related_model
         prefetch_related_objects([record], *relations,
@@ -53,11 +57,14 @@ def snapshot(kind, pk, actor):
         return document_context(kind, record)
 
 
-def document_context(kind, record):
+def document_context(kind, record, *, items=None):
     spec = REPORTS[kind]
-    items = list(record.items.all())
-    completed = getattr(record, spec.completed_field)
-    number = record.transfer_number if kind == 'transfer' else record.order_number
+    if items is None:
+        items = list(record.items.all())
+    completed = bool(getattr(record, spec.completed_field))
+    number = record.transfer_number if kind == 'transfer' else (
+        record.quotation_number if kind == 'quotation' else record.order_number)
+    notes = record.terms if kind == 'quotation' else record.notes
     company = {'name': 'eManager', 'address': '', 'phone': '', 'email': '', 'logo_path': ''}
     company.update(getattr(settings, 'REPORT_COMPANY', {}))
     document = {
@@ -66,8 +73,8 @@ def document_context(kind, record):
         'state': spec.completed_label if completed else spec.pending_label,
         'date': date_label(record.transfer_date if kind == 'transfer' else record.order_date),
         'generated_at': timezone.localtime().strftime('%d %b %Y, %H:%M %Z'),
-        'prepared_by': record.create_by or 'Not recorded', 'notes': record.notes,
-        'notes_compact': len(record.notes) <= 600,
+        'prepared_by': record.create_by or 'Not recorded', 'notes': notes,
+        'notes_label': 'Terms' if kind == 'quotation' else 'Notes', 'notes_compact': len(notes) <= 600,
         'line_count': len(items), 'financial': kind != 'transfer', 'rows': [],
         'metadata': [], 'cards': [], 'totals': [],
     }
@@ -80,7 +87,8 @@ def document_context(kind, record):
         document['currency'] = record.currency_id
         document['metadata'] = [
             ('Expected date', date_label(getattr(record, spec.expected_field))),
-            ('Order status', record.status.name), ('Currency', record.currency_id),
+            ('Valid until', date_label(record.valid_until)) if kind == 'quotation' else ('Order status', record.status.name),
+            ('Currency', record.currency_id),
             ('Exchange rate', f'{record.exchange_rate:.8f} {settings.INVENTORY_BASE_CURRENCY} per {record.currency_id}'),
         ]
         document['cards'].append({'label': spec.party_field.capitalize(),
@@ -92,7 +100,9 @@ def document_context(kind, record):
         reference = record.supplier_reference if kind == 'purchase' else record.customer_reference
         if reference:
             document['metadata'].append(('Supplier reference' if kind == 'purchase' else 'Customer reference', reference))
-        if kind == 'sale':
+        if kind == 'quotation':
+            document['metadata'].append(('Prepared by', document['prepared_by']))
+        if kind in ('sale', 'quotation'):
             document['addresses'] = [('Billing address', record.billing_address), ('Shipping address', record.shipping_address)]
         subtotal, tax, grand_total = record.calculate_totals()
         document['totals'] = [('Subtotal after discounts', money(subtotal)), ('Tax', money(tax)),

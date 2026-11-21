@@ -1,0 +1,70 @@
+{% extends 'layouts/dashboard.html' %}
+{% load static %}
+{% block title %}Sales quotation | eManager{% endblock %}
+{% block content %}
+<div class="workspace-content" data-quotation-detail data-api-url="{{ detail_api_url }}" data-title-field="quotation_number"
+     data-login-url="{% url 'account_pages:login' %}">
+    <div class="page-heading">
+        <div class="min-w-0"><p class="page-eyebrow">Sales quotation</p><h1 class="page-title break-all" data-record-title>Sales quotation</h1></div>
+        <div class="flex flex-wrap gap-3">
+            <a href="{{ list_url }}" class="secondary-button">Back to quotations</a>
+            {% if edit_url %}<a href="{{ edit_url }}" class="secondary-button" data-quotation-edit hidden>Edit draft</a>{% endif %}
+            {% if pdf_url %}<a href="{{ pdf_url }}" class="secondary-button">Download PDF</a>{% endif %}
+            <a class="secondary-button" data-quotation-order hidden>View sales order</a>
+            <a class="secondary-button" data-quotation-source hidden>Previous quotation</a>
+        </div>
+    </div>
+    {% include 'includes/detail_status.html' %}
+    <div data-record-content hidden>
+        <section class="user-form-card mb-6" aria-labelledby="quotation-information">
+            <h2 id="quotation-information" class="section-title mb-5">Quotation details</h2>
+            <dl class="profile-grid">
+                {% include 'includes/detail_field.html' with name='customer_name' label='Customer' only %}
+                {% include 'includes/detail_field.html' with name='warehouse_name' label='Warehouse' only %}
+                {% include 'includes/detail_field.html' with name='status_name' label='Status' only %}
+                {% include 'includes/detail_field.html' with name='order_date' label='Quotation date' only %}
+                {% include 'includes/detail_field.html' with name='valid_until' label='Valid until' only %}
+                {% include 'includes/detail_field.html' with name='expected_delivery_date' label='Expected delivery' only %}
+                {% include 'includes/detail_field.html' with name='customer_reference' label='Customer reference' only %}
+                {% include 'includes/detail_field.html' with name='currency' label='Currency' only %}
+                {% include 'includes/detail_field.html' with name='exchange_rate' label='Exchange rate' only %}
+                {% include 'includes/detail_field.html' with name='billing_address' label='Billing address' full=True only %}
+                {% include 'includes/detail_field.html' with name='shipping_address' label='Shipping address' full=True only %}
+                {% include 'includes/detail_field.html' with name='terms' label='Customer terms' full=True only %}
+                {% include 'includes/detail_field.html' with name='notes' label='Internal notes' full=True only %}
+                {% include 'includes/detail_field.html' with name='issued_at' label='Issued at' kind='datetime' only %}
+                {% include 'includes/detail_field.html' with name='responded_at' label='Response recorded at' kind='datetime' only %}
+            </dl>
+            {% if actions %}
+            <form method="post" data-quotation-actions hidden>
+                {% csrf_token %}
+                <p class="form-status mt-4" data-quotation-feedback role="status" tabindex="-1" hidden></p>
+                <div class="user-form-actions flex-wrap">
+                    {% for action in actions %}<button type="button" class="secondary-button" data-quotation-action="{{ action.key }}" data-url="{{ action.url }}" hidden>{{ action.label }}</button>{% endfor %}
+                </div>
+            </form>
+            {% endif %}
+        </section>
+        {% if can_view_items %}
+        <section class="users-panel mb-6" aria-labelledby="quotation-items">
+            <div class="users-toolbar"><h2 id="quotation-items" class="section-title">Products</h2></div>
+            <div class="users-table-scroll"><table class="users-table"><caption class="sr-only">Quoted products</caption>
+                <thead><tr><th scope="col">Line</th><th scope="col">Product</th><th scope="col">Unit</th><th scope="col">Quantity</th><th scope="col">Unit price</th><th scope="col">Discount</th><th scope="col">Tax (%)</th><th scope="col">Total</th></tr></thead>
+                <tbody data-quotation-lines></tbody>
+            </table></div>
+        </section>
+        {% endif %}
+        <section class="user-form-card mb-6" aria-labelledby="quotation-totals">
+            <h2 id="quotation-totals" class="section-title mb-5">Totals</h2>
+            <dl class="profile-grid">
+                {% include 'includes/detail_field.html' with name='subtotal' label='Subtotal' kind='money' only %}
+                {% include 'includes/detail_field.html' with name='tax_total' label='Tax' kind='money' only %}
+                {% include 'includes/detail_field.html' with name='shipping_cost' label='Shipping' kind='money' only %}
+                {% include 'includes/detail_field.html' with name='grand_total' label='Grand total' kind='money' only %}
+            </dl>
+        </section>
+        {% include 'includes/detail_audit.html' %}
+    </div>
+</div>
+{% endblock %}
+{% block workspace_js %}<script type="module" src="{% static 'sale/js/quotation_detail.js' %}"></script>{% endblock %}

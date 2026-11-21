@@ -45,16 +45,23 @@ function line() {
     return row;
 }
 
-async function setup({ completed = false, failPage = false, conflict = false, edit = true, restricted = false, minimumPrice = '8.0000' } = {}) {
+async function setup({ completed = false, failPage = false, conflict = false, edit = true, restricted = false,
+    minimumPrice = '8.0000', quotation = false } = {}) {
     const form = new Element('form');
     const fields = Object.fromEntries(['customer', 'warehouse', 'customer_reference', 'order_date', 'expected_delivery_date', 'currency',
         'billing_address', 'shipping_address', 'exchange_rate', 'status', 'shipping_cost', 'notes', 'csrfmiddlewaretoken'].map(name => [name, new Element('input')]));
+    if (quotation) {
+        delete fields.status;
+        fields.valid_until = new Element('input');
+        fields.terms = new Element('textarea');
+    }
     fields.csrfmiddlewaretoken.value = 'csrf';
     const parts = Object.fromEntries(['status', 'header', 'submit', 'add-line', 'retry', 'lines'].map(name => [name, new Element()]));
     const spinner = new Element(); const label = new Element(); label.textContent = edit ? 'Save changes' : 'Create sale';
     form.action = edit ? '/update/7/' : '/create/';
     form.dataset = { method: edit ? 'PATCH' : 'POST', optionsUrl: '/options/', detailUrl: '/detail/7/',
-        itemsUrl: '/items/?sales_order=7', successUrl: '/sales/' };
+        itemsUrl: '/items/?sales_order=7', successUrl: quotation ? '/quotations/' : '/sales/',
+        documentType: quotation ? 'quotation' : 'sale' };
     form.elements = { namedItem: name => fields[name] };
     form.querySelector = selector => selector === '[data-submit-spinner]' ? spinner : selector === '[data-submit-label]' ? label
         : parts[selector.match(/^\[data-sale-(.*)\]$/)?.[1]];
@@ -68,6 +75,7 @@ async function setup({ completed = false, failPage = false, conflict = false, ed
         currency: 'USD', exchange_rate: '121.50000000', status: 'review', shipping_cost: '3.0000', notes: 'Agreed terms' };
     const items = Array.from({ length: 26 }, (_, index) => ({ id: index + 101, line_number: index + 1, product: 5, unit: 9,
         unit_code: 'PCS', quantity: '2.500000', unit_price: '11.2500', discount_amount: '0.0000', tax_rate: '5.0000', description: 'Agreed item' }));
+    if (quotation) Object.assign(record, {is_locked: completed, valid_until: '2026-12-15', terms: 'Quoted terms', items});
     const calls = []; const saved = []; const redirects = [];
     const context = vm.createContext({
         document: { querySelector: () => null, getElementById: () => ({ content: { firstElementChild: line() } }),
@@ -158,3 +166,18 @@ assert.equal(noMinimum.parts.lines.children[0].querySelector('[data-line-minimum
 const zeroMinimum = await setup({minimumPrice: '0.0000'});
 assert.equal(zeroMinimum.parts.lines.children[0].querySelector('[data-line-minimum-sale-price]').value, '0.0000 BDT');
 console.log('Minimum sale price displays on existing lines and product changes, with currency and zero/null handling.');
+
+const quotationEditor = await setup({quotation: true});
+assert.equal(quotationEditor.parts.submit.disabled, false, quotationEditor.parts.status.textContent);
+assert.deepEqual(quotationEditor.calls, ['/options/', '/detail/7/']);
+assert.equal(quotationEditor.fields.valid_until.value, '2026-12-15');
+assert.equal(quotationEditor.fields.valid_until.min, '2026-11-15');
+await quotationEditor.form.listeners.submit(event);
+assert.equal(quotationEditor.saved[0].data.terms, 'Quoted terms');
+assert.equal(quotationEditor.saved[0].data.status, undefined);
+assert.equal(quotationEditor.saved[0].data.items[0].id, 101);
+assert.deepEqual(quotationEditor.redirects, ['/quotations/']);
+const issuedQuotation = await setup({quotation: true, completed: true});
+assert.equal(issuedQuotation.parts.submit.disabled, true);
+assert.match(issuedQuotation.parts.status.textContent, /issued and is read-only/);
+console.log('Quotation editing restores the validity and terms, preserves item IDs, and locks issued quotes.');

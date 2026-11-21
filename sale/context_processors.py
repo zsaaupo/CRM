@@ -2,6 +2,7 @@ from account.permissions import has_role_permissions
 from warehouse.scope import has_warehouse_scope
 from .page_views import SALES_CREATE_PERMISSIONS
 from .returns import RETURN_VIEW
+from .services import QUOTE_VIEW
 
 
 def sale_navigation(request):
@@ -12,4 +13,5 @@ def sale_navigation(request):
         'view': can_view,
         'add': can_view and has_role_permissions(user, SALES_CREATE_PERMISSIONS),
         'returns': scoped and has_role_permissions(user, RETURN_VIEW),
+        'quotations': scoped and has_role_permissions(user, QUOTE_VIEW),
     }}

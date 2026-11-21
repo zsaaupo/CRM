@@ -2,11 +2,13 @@
 from datetime import date
 from decimal import Decimal
 
+from django.utils import timezone
+
 from common.models import TradeStatus
 from inventory.models import Currency, Product, UnitOfMeasure
 from people.models import Party
 from purchase.models import PurchaseOrder, PurchaseOrderItem
-from sale.models import SalesOrder, SalesOrderItem
+from sale.models import SalesOrder, SalesOrderItem, SalesQuotation, SalesQuotationItem
 from warehouse.models import WareHouse, WarehouseTransfer, WarehouseTransferItem
 from .services import document_context
 
@@ -22,6 +24,14 @@ def demo_document(kind, line_count=None):
     if kind == 'transfer':
         record = WarehouseTransfer(pk=1, transfer_number='WT-2026-0001', source_warehouse=source,
             destination_warehouse=destination, transfer_date=date(2026, 11, 17), is_completed=True, **audit)
+    elif kind == 'quotation':
+        record = SalesQuotation(
+            pk=1, quotation_number='SQ-2026-0001', warehouse=source, customer=party, currency=currency,
+            exchange_rate=Decimal('1'), shipping_cost=Decimal('25'), status=SalesQuotation.Status.ISSUED,
+            issued_at=timezone.now(), order_date=date(2026, 11, 17), valid_until=date(2026, 12, 17),
+            customer_reference='CUST-EXAMPLE-008', billing_address='Example billing address, Dhaka',
+            shipping_address='Example delivery address, Uttara, Dhaka',
+            terms='Please confirm acceptance before the validity date. Delivery is scheduled after order confirmation.', **audit)
     else:
         kwargs = {'pk': 1, 'currency': currency, 'exchange_rate': Decimal('1'), 'warehouse': source, 'status': status,
                   'order_date': date(2026, 11, 17), 'shipping_cost': Decimal('25'), **audit}
@@ -33,7 +43,7 @@ def demo_document(kind, line_count=None):
     record.notes = 'Sample document for layout review. Product quantities, prices and parties are illustrative.'
     names = ['Premium rice - চাল', 'Archive storage box', 'Office stationery set', 'Industrial packing material', 'Reusable delivery container']
     items = []
-    count = line_count if line_count is not None else {'purchase': 3, 'sale': 34, 'transfer': 5}[kind]
+    count = line_count if line_count is not None else {'purchase': 3, 'sale': 34, 'transfer': 5, 'quotation': 3}[kind]
     for index in range(count):
         unit = UnitOfMeasure(pk=1 if index % 2 == 0 else 2, name='Kilograms' if index % 2 == 0 else 'Pieces', code='KG' if index % 2 == 0 else 'PCS')
         product = Product(pk=index + 1, sku=f'ITEM-{index + 1:03}', name=names[index % len(names)], unit=unit, currency=currency)
@@ -44,7 +54,12 @@ def demo_document(kind, line_count=None):
         else:
             kwargs.update({'unit_price': Decimal('120.5000') + index, 'discount_amount': Decimal('3'),
                 'tax_rate': Decimal('15'), 'description': 'Quality checked and packaged for delivery.' if index % 3 == 0 else ''})
-            item = PurchaseOrderItem(purchase_order=record, **kwargs) if kind == 'purchase' else SalesOrderItem(sales_order=record, **kwargs)
+            if kind == 'quotation':
+                item = SalesQuotationItem(quotation=record, **kwargs)
+            elif kind == 'purchase':
+                item = PurchaseOrderItem(purchase_order=record, **kwargs)
+            else:
+                item = SalesOrderItem(sales_order=record, **kwargs)
         items.append(item)
     record._prefetched_objects_cache = {'items': items}
     document = document_context(kind, record)

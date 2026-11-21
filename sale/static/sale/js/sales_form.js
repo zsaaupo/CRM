@@ -1,10 +1,12 @@
 import { getJSON, postJSON, patchJSON } from "../../js/api.js";
 
 const headerFields = ["customer", "customer_reference", "warehouse", "billing_address", "shipping_address", "order_date", "expected_delivery_date", "currency", "exchange_rate", "status", "shipping_cost", "notes"];
+const quotationFields = [...headerFields.filter(name => name !== "status"), "valid_until", "terms"];
 const lineFields = ["product", "unit", "quantity", "unit_price", "discount_amount", "tax_rate", "description"];
 
 export function salesPayload(form) {
-    const payload = Object.fromEntries(headerFields.map((name) => [name, form.elements.namedItem(name).value]));
+    const names = form.dataset?.documentType === "quotation" ? quotationFields : headerFields;
+    const payload = Object.fromEntries(names.map((name) => [name, form.elements.namedItem(name).value]));
     payload.expected_delivery_date ||= null;
     payload.customer ||= null;
     payload.warehouse ||= null;
@@ -23,6 +25,11 @@ function errorText(value) {
 }
 
 export function initializeSalesForm(form) {
+    const quotation = form.dataset.documentType === "quotation";
+    const documentName = quotation ? "quotation" : "sale";
+    const lockedMessage = quotation ? "This quotation has been issued and is read-only." :
+        "This sale has been completed and is read-only. Return to the sales list.";
+    const isLocked = (record) => quotation ? record?.is_locked === true : record?.is_completed === true;
     const find = (name) => form.querySelector(`[data-sale-${name}]`);
     const status = find("status");
     const header = find("header");
@@ -136,7 +143,7 @@ export function initializeSalesForm(form) {
 
     async function loadItems() {
         const items = [];
-        if (!isEdit) return items;
+        if (!isEdit || quotation) return items;
         const url = new URL(form.dataset.itemsUrl, window.location.origin);
         let page = 1;
         while (true) {
@@ -155,25 +162,25 @@ export function initializeSalesForm(form) {
         header.disabled = submit.disabled = addButton.disabled = true;
         retry.hidden = true;
         form.setAttribute("aria-busy", "true");
-        message("Loading sale choices...", "info");
+        message(`Loading ${documentName} choices...`, "info");
         try {
             const [data, record, items] = await Promise.all([
                 getJSON(form.dataset.optionsUrl),
                 isEdit ? getJSON(form.dataset.detailUrl) : null,
                 loadItems(),
             ]);
-            if (isEdit && !record?.id) throw new Error('Could not load the sales order. Return to the sales list.');
-            readOnly = record?.is_completed === true;
-            if (readOnly) throw new Error('This sale has been completed and is read-only. Return to the sales list.');
-            for (const name of ["currency", "status", "product"]) {
-                if (!Array.isArray(data[name])) throw new Error("Could not load sale choices. Please try again.");
+            if (isEdit && !record?.id) throw new Error(`Could not load the ${documentName}. Return to the list.`);
+            readOnly = isLocked(record);
+            if (readOnly) throw new Error(lockedMessage);
+            for (const name of quotation ? ["currency", "product"] : ["currency", "status", "product"]) {
+                if (!Array.isArray(data[name])) throw new Error(`Could not load ${documentName} choices. Please try again.`);
                 if (!data[name].length) throw new Error(`No ${name} records are available. Add the missing records or contact your administrator, then try again.`);
             }
             options = data;
             if (!Array.isArray(options.customer)) throw new Error('Could not load customers. Please try again.');
-            choices(field("customer"), options.customer, "No customer");
+            choices(field("customer"), options.customer, quotation ? "Select customer" : "No customer");
             if (!Array.isArray(options.warehouse)) throw new Error('Could not load warehouses. Please try again.');
-            choices(field('warehouse'), options.warehouse, 'No warehouse');
+            choices(field('warehouse'), options.warehouse, quotation ? 'Select warehouse' : 'No warehouse');
             field('warehouse').disabled = options.warehouse_scope?.all_warehouses === false;
             if (field('warehouse').disabled) {
                 field('warehouse').value = String(options.warehouse_scope.warehouse);
@@ -182,9 +189,11 @@ export function initializeSalesForm(form) {
                 }
             }
             choices(field("currency"), options.currency, "Select currency");
-            choices(field("status"), options.status, "Select status");
             field("currency").value = options.currency.some((row) => row.value === options.base_currency) ? options.base_currency : "";
-            field("status").value = options.status.some((row) => row.value === "draft") ? "draft" : "";
+            if (!quotation) {
+                choices(field("status"), options.status, "Select status");
+                field("status").value = options.status.some((row) => row.value === "draft") ? "draft" : "";
+            }
             updateCurrency();
             if (record) {
                 originalCustomer = record.customer;
@@ -200,19 +209,19 @@ export function initializeSalesForm(form) {
                     historical.textContent = `${record.warehouse_name} (existing warehouse)`;
                     field('warehouse').append(historical);
                 }
-                for (const name of headerFields) field(name).value = record[name] ?? '';
+                for (const name of quotation ? quotationFields : headerFields) field(name).value = record[name] ?? '';
                 field('exchange_rate').readOnly = record.currency === options.base_currency;
             }
-            field('expected_delivery_date').min = field('order_date').value;
+            updateDateLimits();
             ready = true;
             lines.replaceChildren();
-            for (const item of items) addLine(false, item);
+            for (const item of quotation ? record?.items || [] : items) addLine(false, item);
             if (!lines.children.length) addLine();
             header.disabled = submit.disabled = addButton.disabled = false;
             status.hidden = true;
         } catch (error) {
             message(error.status === 403 ? "Your session or permissions have changed. Refresh this page and try again."
-                : error.message || "Could not load sale choices. Please try again.");
+                : error.message || `Could not load ${documentName} choices. Please try again.`);
             retry.hidden = false;
         } finally {
             loading = false;
@@ -245,6 +254,12 @@ export function initializeSalesForm(form) {
         }
     }
 
+    function updateDateLimits() {
+        const date = field("order_date").value;
+        field("expected_delivery_date").min = date;
+        if (quotation) field("valid_until").min = date;
+    }
+
     retry.addEventListener("click", load);
     addButton.addEventListener("click", () => addLine(true));
     field("currency").addEventListener("change", updateCurrency);
@@ -255,8 +270,8 @@ export function initializeSalesForm(form) {
         }
         autoAddress = customer?.address || '';
     });
-    field("order_date").addEventListener("change", () => { field("expected_delivery_date").min = field("order_date").value; });
-    field("expected_delivery_date").min = field("order_date").value;
+    field("order_date").addEventListener("change", updateDateLimits);
+    updateDateLimits();
     form.addEventListener("input", (event) => { event.target.removeAttribute("aria-invalid"); });
     form.addEventListener("submit", async (event) => {
         event.preventDefault();
@@ -275,7 +290,7 @@ export function initializeSalesForm(form) {
         header.disabled = submit.disabled = addButton.disabled = true;
         for (const row of lines.children) row.disabled = true;
         form.setAttribute("aria-busy", "true");
-        label.textContent = isEdit ? "Saving changes..." : "Creating sale...";
+        label.textContent = isEdit ? "Saving changes..." : `Creating ${documentName}...`;
         spinner.hidden = false;
         try {
             if (isEdit) await patchJSON(form.action, payload, field('csrfmiddlewaretoken').value);
@@ -283,15 +298,15 @@ export function initializeSalesForm(form) {
             window.location.assign(form.dataset.successUrl);
         } catch (error) {
             if (isEdit && error.status === 409) {
-                try { readOnly = (await getJSON(form.dataset.detailUrl)).is_completed === true; }
+                try { readOnly = isLocked(await getJSON(form.dataset.detailUrl)); }
                 catch { /* Preserve the API error if the session changed. */ }
                 if (readOnly) ready = false;
             }
             showErrors(error.errors);
-            message(readOnly ? "This sale has been completed and is read-only. Return to the sales list."
+            message(readOnly ? lockedMessage
                 : error.status === 403 ? "Your session or permissions have changed. Refresh this page and try again."
-                : error.status === 400 ? `Please check the sale details. ${errorText(error.errors)}`
-                : error.message || "Could not save the sale. Please try again.");
+                : error.status === 400 ? `Please check the ${documentName} details. ${errorText(error.errors)}`
+                : error.message || `Could not save the ${documentName}. Please try again.`);
             status.focus();
         } finally {
             busy = false;

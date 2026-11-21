@@ -109,6 +109,7 @@ class SaleCompleteSerializer(serializers.Serializer):
 class SalesOrderLineSerializer(serializers.ModelSerializer):
     """Validate an unsaved line before its order exists."""
 
+    parent_field = 'sales_order'
     id = serializers.IntegerField(required=False, min_value=1)
 
     class Meta:
@@ -120,9 +121,9 @@ class SalesOrderLineSerializer(serializers.ModelSerializer):
         for field in ('discount_amount', 'tax_rate'):
             attrs.setdefault(field, 0)
         attrs.setdefault('description', '')
-        candidate = SalesOrderItem(**attrs)
+        candidate = self.Meta.model(**{name: value for name, value in attrs.items() if name != 'id'})
         try:
-            candidate.full_clean(exclude=['sales_order', *AUDIT_FIELDS])
+            candidate.full_clean(exclude=[self.parent_field, *AUDIT_FIELDS])
         except DjangoValidationError as exc:
             errors = exc.message_dict if hasattr(exc, 'message_dict') else {'__all__': exc.messages}
             raise serializers.ValidationError({
@@ -178,42 +179,51 @@ class SalesOrderCreateSerializer(SalesOrderSerializer):
         items = validated_data.pop('items', None)
         self.instance = order
         if items is not None:
-            existing = {item.pk: item for item in order.items.all()}
-            ids = [item['id'] for item in items if 'id' in item]
-            if len(set(ids)) != len(ids) or any(pk not in existing for pk in ids):
-                raise serializers.ValidationError({'items': ['Item IDs must be unique and belong to this sales order.']})
             request = self.context.get('request')
-            removed = set(existing) - set(ids)
-            if removed:
-                require_item_permission(request, 'delete')
-            if any('id' not in item for item in items):
-                require_item_permission(request, 'add')
-            changed = []
-            for item in items:
-                if 'id' not in item:
-                    continue
-                original = existing[item['id']]
-                if any(getattr(original, key + '_id' if key in ('product', 'unit') else key) !=
-                       (value.pk if key in ('product', 'unit') else value)
-                       for key, value in item.items() if key != 'id'):
-                    changed.append(item['id'])
-            if changed:
-                require_item_permission(request, 'change')
-            order.items.filter(pk__in=removed).delete()
-            # Free final line numbers first so swaps/renumbering retain IDs and creation history.
-            occupied = {existing[pk].line_number for pk in ids} | {item['line_number'] for item in items}
-            temporary = 1
-            for pk in changed:
-                while temporary in occupied:
-                    temporary += 1
-                order.items.filter(pk=pk).update(line_number=temporary)
-                occupied.add(temporary)
             actor = validated_data.get('modified_by', order.modified_by)
-            for item in items:
-                values = {key: value for key, value in item.items() if key != 'id'}
-                if 'id' in item:
-                    if item['id'] in changed:
-                        order.items.filter(pk=item['id']).update(**values, modified_by=actor, updated_at=timezone.now())
-                else:
-                    SalesOrderItem.objects.create(sales_order=order, create_by=actor, modified_by=actor, **values)
+            replace_sales_lines(order, items, actor, lambda action: require_item_permission(request, action))
         return super().update(order, validated_data)
+
+
+def replace_sales_lines(document, items, actor, require_permission):
+    """Replace nested lines while retaining IDs and audit history for existing lines."""
+    relation = document._meta.get_field('items')
+    existing = {item.pk: item for item in document.items.all()}
+    ids = [item['id'] for item in items if 'id' in item]
+    if len(set(ids)) != len(ids) or any(pk not in existing for pk in ids):
+        raise serializers.ValidationError({
+            'items': [f'Item IDs must be unique and belong to this {document._meta.verbose_name}.'],
+        })
+    removed = set(existing) - set(ids)
+    if removed:
+        require_permission('delete')
+    if any('id' not in item for item in items):
+        require_permission('add')
+    changed = set()
+    for item in items:
+        if 'id' not in item:
+            continue
+        original = existing[item['id']]
+        if any(getattr(original, key + '_id' if key in ('product', 'unit') else key) !=
+               (value.pk if key in ('product', 'unit') else value)
+               for key, value in item.items() if key != 'id'):
+            changed.add(item['id'])
+    if changed:
+        require_permission('change')
+    document.items.filter(pk__in=removed).delete()
+    # Free final line numbers first so swaps retain IDs and creation history.
+    occupied = {existing[pk].line_number for pk in ids} | {item['line_number'] for item in items}
+    temporary = 1
+    for pk in sorted(changed):
+        while temporary in occupied:
+            temporary += 1
+        document.items.filter(pk=pk).update(line_number=temporary)
+        occupied.add(temporary)
+    now = timezone.now()
+    for item in items:
+        values = {key: value for key, value in item.items() if key != 'id'}
+        if 'id' not in item:
+            relation.related_model.objects.create(
+                **{relation.field.name: document}, create_by=actor, modified_by=actor, **values)
+        elif item['id'] in changed:
+            document.items.filter(pk=item['id']).update(**values, modified_by=actor, updated_at=now)

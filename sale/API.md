@@ -173,3 +173,33 @@ draft requires `add_salesreturn`, `add_salesreturnitem`, `view_salesorder`, and
 `view_salesorderitem`. View line details with `view_salesreturnitem`. Completing
 a draft requires `change_salesreturn`. A completion retry returns
 `completed_now: false` after the first successful completion.
+
+## Sales quotations
+
+Open **Sales → Quotations** to create a draft for a customer and warehouse.
+The default validity date is 30 days after the quotation date. It is editable
+on drafts. Quotation prices, discounts, tax, and shipping use the sales order
+calculations. Terms appear on the customer PDF. Internal notes stay on the
+quotation.
+
+| Method and path under `/sale/api/` | Purpose |
+| --- | --- |
+| `GET/POST quotations/` | List or create drafts. Creation takes nested `items` |
+| `GET/PATCH/PUT/DELETE quotations/<id>/` | Read any visible quotation or modify a draft |
+| `GET quotations/options/` or `quotations/edit-options/` | Get customer, warehouse, currency, and product choices |
+| `POST quotations/<id>/issue/` | Lock the draft and save the PDF snapshot |
+| `POST quotations/<id>/accept/` or `decline/` | Record a response through the validity date |
+| `POST quotations/<id>/revise/` | Copy the terms and lines into a fresh draft and supersede an issued quote |
+| `POST quotations/<id>/convert/` | Create one linked draft sales order from an accepted quote |
+
+Send `{}` to the workflow endpoints. The response includes `sales_quotation`
+and `quotation_url`. Retrying conversion returns the already linked order.
+Quotes accepted by their validity date can be converted later. Stock changes
+only when the linked sales order is completed through the sales workflow.
+
+The API follows sales role permissions and warehouse scope. Issuing, recording
+responses, and converting require `issue_salesquotation`, `respond_salesquotation`,
+and `convert_salesquotation` respectively, along with quotation and line view
+permissions. Conversion also requires order and order-line add permissions.
+The `report:quotation-pdf` route requires both quotation and quotation-line
+view permissions.

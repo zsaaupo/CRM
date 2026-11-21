@@ -2,7 +2,7 @@
 from dataclasses import dataclass
 
 from purchase.models import PurchaseOrder
-from sale.models import SalesOrder
+from sale.models import SalesOrder, SalesQuotation
 from warehouse.models import WarehouseTransfer
 
 
@@ -26,6 +26,9 @@ REPORTS = {
     'sale': ReportSpec('sale', 'Sales order', SalesOrder,
         ('sale.view_salesorder', 'sale.view_salesorderitem'),
         'is_completed', 'Completed', 'Not completed', 'customer', 'expected_delivery_date'),
+    'quotation': ReportSpec('quotation', 'Sales quotation', SalesQuotation,
+        ('sale.view_salesquotation', 'sale.view_salesquotationitem'),
+        'issued_at', 'Issued', 'Draft', 'customer', 'expected_delivery_date'),
     'transfer': ReportSpec('transfer', 'Warehouse transfer', WarehouseTransfer,
         ('warehouse.view_warehousetransfer',), 'is_completed', 'Completed', 'Pending'),
 }

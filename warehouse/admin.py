@@ -17,6 +17,7 @@ class WarehouseScopedAdmin(AuditedAdmin):
     scoped_foreign_keys = {'warehouse': 'pk'}
     all_warehouses_to_write = False
     posted_lookup = None
+    unposted_value = False
 
     def get_queryset(self, request):
         queryset = super().get_queryset(request)
@@ -56,7 +57,7 @@ class WarehouseScopedAdmin(AuditedAdmin):
         value = obj
         for name in self.posted_lookup.split('__'):
             value = getattr(value, name)
-        return not value
+        return value == self.unposted_value
 
     def related_records(self, db_field, scope):
         queryset = db_field.related_model._default_manager.all()
@@ -66,7 +67,7 @@ class WarehouseScopedAdmin(AuditedAdmin):
         if self.posted_lookup:
             parent, _, state_field = self.posted_lookup.partition('__')
             if state_field and parent == db_field.name:
-                queryset = queryset.filter(**{state_field: False})
+                queryset = queryset.filter(**{state_field: self.unposted_value})
         return queryset
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
@@ -92,7 +93,7 @@ class WarehouseScopedAdmin(AuditedAdmin):
     def check_existing_records(self, scope, ids):
         records = self.scope_queryset(self.model._default_manager.filter(pk__in=ids), scope)
         if self.posted_lookup:
-            records = records.filter(**{self.posted_lookup: False})
+            records = records.filter(**{self.posted_lookup: self.unposted_value})
         if set(records.select_for_update().values_list('pk', flat=True)) != set(ids):
             raise PermissionDenied('A selected record is completed or outside your warehouse access.')
 

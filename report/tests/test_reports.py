@@ -8,19 +8,20 @@ from django.template.loader import render_to_string
 from django.test import TestCase, override_settings
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
+from django.utils import timezone
 from pypdf import PdfReader
 from rest_framework.test import APIClient
 
 from inventory.models import Product, UnitOfMeasure
 from people.models import Party
 from purchase.models import PurchaseOrder, PurchaseOrderItem
-from sale.models import SalesOrder, SalesOrderItem
+from sale.models import SalesOrder, SalesOrderItem, SalesQuotation, SalesQuotationItem
 from warehouse.models import Stock, WareHouse, WarehouseTransfer, WarehouseTransferItem
 from warehouse.tests.helpers import assign_warehouse_role
 from report.catalog import REPORTS
 from report.demo import demo_document
 from report.rendering import asset_fetcher, render_pdf
-from report.services import money, snapshot
+from report.services import document_context, money, snapshot
 
 
 class ReportTests(TestCase):
@@ -37,16 +38,23 @@ class ReportTests(TestCase):
         self.purchase = PurchaseOrder.objects.create(supplier=self.party, warehouse=self.source, currency_id='BDT', exchange_rate=1, shipping_cost=2)
         self.sale = SalesOrder.objects.create(customer=self.party, warehouse=self.source, currency_id='BDT', exchange_rate=1,
             shipping_cost=2, billing_address='Saved billing address', shipping_address='Saved shipping address')
+        self.quotation = SalesQuotation.objects.create(
+            customer=self.party, warehouse=self.source, currency_id='BDT', exchange_rate=1,
+            status=SalesQuotation.Status.ISSUED, issued_at=timezone.now(), shipping_cost=2)
         self.transfer = WarehouseTransfer.objects.create(source_warehouse=self.source, destination_warehouse=self.destination)
-        for model, parent in [(PurchaseOrderItem, {'purchase_order': self.purchase}), (SalesOrderItem, {'sales_order': self.sale})]:
+        for model, parent in [(PurchaseOrderItem, {'purchase_order': self.purchase}), (SalesOrderItem, {'sales_order': self.sale}),
+                              (SalesQuotationItem, {'quotation': self.quotation})]:
             model.objects.create(**parent, line_number=1, product=self.product, unit=unit, quantity='1.5', unit_price=10,
                 discount_amount='0.5', tax_rate=15, description='Order description snapshot')
         WarehouseTransferItem.objects.create(transfer=self.transfer, line_number=1, product=self.product, unit=unit, quantity='1.500001')
+        self.quotation.refresh_from_db()
+        self.quotation.issued_document = document_context('quotation', self.quotation)
+        self.quotation.save(update_fields=['issued_document'])
         Stock.objects.create(warehouse=self.source, product=self.product, quantity=20)
         self.client = APIClient(enforce_csrf_checks=True); self.client.force_login(self.user)
         token = self.client.get(reverse('account:login')).data['csrfToken']
         self.client.credentials(HTTP_X_CSRFTOKEN=token)
-        self.records = {'purchase': self.purchase, 'sale': self.sale, 'transfer': self.transfer}
+        self.records = {'purchase': self.purchase, 'sale': self.sale, 'transfer': self.transfer, 'quotation': self.quotation}
 
     def grant(self, *names):
         self.access.role.permissions.set([Permission.objects.get(content_type__app_label=name.split('.')[0], codename=name.split('.')[1]) for name in set(names)])
@@ -60,8 +68,8 @@ class ReportTests(TestCase):
         data = b''.join(response.streaming_content); response.close()
         return response, PdfReader(BytesIO(data)), data
 
-    def test_real_pdf_endpoints_download_all_three_document_types_without_mutations(self):
-        before = {kind: (record.is_received if kind == 'purchase' else record.is_completed, record.updated_at)
+    def test_real_pdf_endpoints_download_all_document_types_without_mutations(self):
+        before = {kind: (getattr(record, REPORTS[kind].completed_field), record.updated_at)
                   for kind, record in self.records.items()}
         stock_before = list(Stock.objects.values())
         for kind in self.records:
@@ -80,7 +88,7 @@ class ReportTests(TestCase):
                     self.assertIn('10.0000', text); self.assertNotIn('9,999.0000', text)
                 self.records[kind].refresh_from_db()
                 record = self.records[kind]
-                self.assertEqual(before[kind], (record.is_received if kind == 'purchase' else record.is_completed, record.updated_at))
+                self.assertEqual(before[kind], (getattr(record, REPORTS[kind].completed_field), record.updated_at))
         self.assertEqual(stock_before, list(Stock.objects.values()))
 
     def test_missing_role_permissions_and_direct_user_grants_cannot_download(self):

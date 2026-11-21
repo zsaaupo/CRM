@@ -1,4 +1,5 @@
 import uuid
+from datetime import timedelta
 from decimal import Decimal, ROUND_HALF_UP, localcontext
 
 from django.core.exceptions import ValidationError
@@ -17,7 +18,64 @@ def generate_order_number():
     return f'SO-{uuid.uuid4().hex.upper()}'
 
 
-class SalesOrder(TimeStampedModel):
+class SalesTotals:
+    @property
+    def subtotal(self):
+        return self.calculate_totals()[0]
+
+    @property
+    def tax_total(self):
+        return self.calculate_totals()[1]
+
+    @property
+    def grand_total(self):
+        return self.calculate_totals()[2]
+
+    def calculate_totals(self):
+        with localcontext() as context:
+            context.prec = 50
+            subtotal = tax = Decimal('0.0000')
+            if self.pk:
+                for item in self.items.all():
+                    net, item_tax, _ = item.calculate_amounts()
+                    subtotal += net
+                    tax += item_tax
+            return subtotal, tax, subtotal + tax + Decimal(self.shipping_cost)
+
+
+class SalesLineAmounts:
+    @property
+    def net_amount(self):
+        return self.calculate_amounts()[0]
+
+    @property
+    def tax_amount(self):
+        return self.calculate_amounts()[1]
+
+    @property
+    def line_total(self):
+        return self.calculate_amounts()[2]
+
+    def calculate_amounts(self):
+        with localcontext() as context:
+            context.prec = 50
+            net = (Decimal(self.quantity) * Decimal(self.unit_price) - Decimal(self.discount_amount)).quantize(
+                MONEY_PRECISION, rounding=ROUND_HALF_UP)
+            tax = (net * Decimal(self.tax_rate) / Decimal('100')).quantize(MONEY_PRECISION, rounding=ROUND_HALF_UP)
+            return net, tax, net + tax
+
+    def clean(self):
+        super().clean()
+        if self.product_id and self.unit_id:
+            try:
+                product = self.product
+            except self._meta.get_field('product').related_model.DoesNotExist:
+                return
+            if self.unit_id != product.unit_id:
+                raise ValidationError({'unit': 'Use the product unit. Unit conversion is not supported yet.'})
+
+
+class SalesOrder(SalesTotals, TimeStampedModel):
     order_number = models.CharField(max_length=50, unique=True, default=generate_order_number, editable=False)
     customer = models.ForeignKey('people.Party', on_delete=models.PROTECT, null=True, blank=True,
                                  related_name='sales_orders')
@@ -71,34 +129,11 @@ class SalesOrder(TimeStampedModel):
         if errors:
             raise ValidationError(errors)
 
-    @property
-    def subtotal(self):
-        return self.calculate_totals()[0]
-
-    @property
-    def tax_total(self):
-        return self.calculate_totals()[1]
-
-    @property
-    def grand_total(self):
-        return self.calculate_totals()[2]
-
-    def calculate_totals(self):
-        with localcontext() as context:
-            context.prec = 50
-            subtotal = tax = Decimal('0.0000')
-            if self.pk:
-                for item in self.items.all():
-                    net, item_tax, _ = item.calculate_amounts()
-                    subtotal += net
-                    tax += item_tax
-            return subtotal, tax, subtotal + tax + Decimal(self.shipping_cost)
-
     def __str__(self):
         return self.order_number
 
 
-class SalesOrderItem(TimeStampedModel):
+class SalesOrderItem(SalesLineAmounts, TimeStampedModel):
     sales_order = models.ForeignKey(SalesOrder, on_delete=models.PROTECT, related_name='items')
     line_number = models.PositiveIntegerField(validators=[MinValueValidator(1)])
     product = models.ForeignKey('inventory.Product', on_delete=models.PROTECT, related_name='sales_order_items')
@@ -123,36 +158,6 @@ class SalesOrderItem(TimeStampedModel):
                                    name='sale_item_discount_bounds'),
             models.CheckConstraint(condition=Q(tax_rate__gte=0, tax_rate__lte=100), name='sale_item_tax_bounds'),
         ]
-
-    def clean(self):
-        super().clean()
-        if self.product_id and self.unit_id:
-            try:
-                product = self.product
-            except self._meta.get_field('product').related_model.DoesNotExist:
-                return  # Foreign-key validation reports a missing product.
-            if self.unit_id != product.unit_id:
-                raise ValidationError({'unit': 'Use the product unit. Unit conversion is not supported yet.'})
-
-    @property
-    def net_amount(self):
-        return self.calculate_amounts()[0]
-
-    @property
-    def tax_amount(self):
-        return self.calculate_amounts()[1]
-
-    @property
-    def line_total(self):
-        return self.calculate_amounts()[2]
-
-    def calculate_amounts(self):
-        with localcontext() as context:
-            context.prec = 50
-            net = (Decimal(self.quantity) * Decimal(self.unit_price) - Decimal(self.discount_amount)).quantize(
-                MONEY_PRECISION, rounding=ROUND_HALF_UP)
-            tax = (net * Decimal(self.tax_rate) / Decimal('100')).quantize(MONEY_PRECISION, rounding=ROUND_HALF_UP)
-            return net, tax, net + tax
 
     def __str__(self):
         return f'{self.sales_order.order_number} / {self.line_number}'
@@ -211,3 +216,122 @@ class SalesReturnItem(TimeStampedModel):
             record = SalesReturn.objects.filter(pk=self.sales_return_id).first()
             if item and record and item.sales_order_id != record.sales_order_id:
                 raise ValidationError({'sales_order_item': 'Choose an item from the original sales order.'})
+
+
+def generate_quotation_number():
+    return f'SQ-{uuid.uuid4().hex.upper()}'
+
+
+def quotation_valid_until(order_date=None):
+    return (order_date or timezone.localdate()) + timedelta(days=30)
+
+
+class SalesQuotation(SalesTotals, TimeStampedModel):
+    class Status(models.TextChoices):
+        DRAFT = 'draft', 'Draft'
+        ISSUED = 'issued', 'Issued'
+        ACCEPTED = 'accepted', 'Accepted'
+        DECLINED = 'declined', 'Declined'
+        SUPERSEDED = 'superseded', 'Superseded'
+        CONVERTED = 'converted', 'Converted'
+
+    quotation_number = models.CharField(max_length=50, unique=True, default=generate_quotation_number, editable=False)
+    customer = models.ForeignKey('people.Party', on_delete=models.PROTECT, related_name='sales_quotations')
+    warehouse = models.ForeignKey('warehouse.WareHouse', on_delete=models.PROTECT, related_name='sales_quotations')
+    order_date = models.DateField(default=timezone.localdate, verbose_name='quotation date')
+    valid_until = models.DateField(default=quotation_valid_until)
+    expected_delivery_date = models.DateField(null=True, blank=True)
+    currency = models.ForeignKey('inventory.Currency', to_field='code', on_delete=models.PROTECT,
+                                 related_name='sales_quotations')
+    exchange_rate = models.DecimalField(max_digits=20, decimal_places=8,
+                                        validators=[MinValueValidator(Decimal('0.00000001'))])
+    customer_reference = models.CharField(max_length=100, blank=True)
+    billing_address = models.TextField(blank=True)
+    shipping_address = models.TextField(blank=True)
+    shipping_cost = models.DecimalField(max_digits=18, decimal_places=4, default=Decimal('0'),
+                                        validators=[MinValueValidator(0)])
+    notes = models.TextField(blank=True, help_text='Internal notes.')
+    terms = models.TextField(blank=True, help_text='Terms printed on the customer quotation.')
+    status = models.CharField(max_length=12, choices=Status.choices, default=Status.DRAFT, editable=False)
+    issued_at = models.DateTimeField(null=True, blank=True, editable=False)
+    issued_by = models.CharField(max_length=255, blank=True, editable=False)
+    responded_at = models.DateTimeField(null=True, blank=True, editable=False)
+    responded_by = models.CharField(max_length=255, blank=True, editable=False)
+    issued_document = models.JSONField(default=dict, editable=False)
+    revised_from = models.OneToOneField('self', null=True, blank=True, on_delete=models.PROTECT,
+                                        related_name='revision', editable=False)
+    sales_order = models.OneToOneField(SalesOrder, null=True, blank=True, on_delete=models.PROTECT,
+                                       related_name='source_quotation', editable=False)
+
+    class Meta:
+        ordering = ['-order_date', '-pk']
+        permissions = [
+            ('issue_salesquotation', 'Can issue sales quotations'),
+            ('respond_salesquotation', 'Can record responses to sales quotations'),
+            ('convert_salesquotation', 'Can convert sales quotations to orders'),
+        ]
+        constraints = [
+            models.CheckConstraint(condition=Q(exchange_rate__gt=0, shipping_cost__gte=0), name='sale_quote_amounts_valid'),
+            models.CheckConstraint(condition=Q(valid_until__gte=F('order_date')), name='sale_quote_validity_dates'),
+            models.CheckConstraint(condition=Q(expected_delivery_date__isnull=True) | Q(expected_delivery_date__gte=F('order_date')),
+                                   name='sale_quote_delivery_dates'),
+            models.CheckConstraint(condition=Q(status__in=['draft', 'issued', 'accepted', 'declined', 'superseded', 'converted']),
+                                   name='sale_quote_status_valid'),
+            models.CheckConstraint(condition=Q(status='draft', issued_at__isnull=True) |
+                                   (~Q(status='draft') & Q(issued_at__isnull=False)), name='sale_quote_issue_state'),
+            models.CheckConstraint(condition=Q(status='converted', sales_order__isnull=False) |
+                                   (~Q(status='converted') & Q(sales_order__isnull=True)), name='sale_quote_order_state'),
+        ]
+
+    @property
+    def is_expired(self):
+        return self.status == self.Status.ISSUED and self.valid_until < timezone.localdate()
+
+    def clean(self):
+        super().clean()
+        from django.conf import settings
+
+        errors = {}
+        if self.customer_id:
+            parties = self._meta.get_field('customer').related_model.objects
+            if not parties.filter(pk=self.customer_id, is_customer=True, is_active=True).exists():
+                errors['customer'] = 'Choose an active customer.'
+        if self.warehouse_id:
+            warehouses = self._meta.get_field('warehouse').related_model.objects
+            if not warehouses.filter(pk=self.warehouse_id, is_active=True).exists():
+                errors['warehouse'] = 'Choose an active warehouse.'
+        if self.currency_id == settings.INVENTORY_BASE_CURRENCY and self.exchange_rate != Decimal('1'):
+            errors['exchange_rate'] = 'The base currency exchange rate must be 1.'
+        if errors:
+            raise ValidationError(errors)
+
+    def __str__(self):
+        return self.quotation_number
+
+
+class SalesQuotationItem(SalesLineAmounts, TimeStampedModel):
+    quotation = models.ForeignKey(SalesQuotation, on_delete=models.PROTECT, related_name='items')
+    line_number = models.PositiveIntegerField(validators=[MinValueValidator(1)])
+    product = models.ForeignKey('inventory.Product', on_delete=models.PROTECT, related_name='sales_quotation_items')
+    description = models.TextField(blank=True)
+    unit = models.ForeignKey('inventory.UnitOfMeasure', on_delete=models.PROTECT, related_name='sales_quotation_items')
+    quantity = models.DecimalField(max_digits=18, decimal_places=6, validators=[MinValueValidator(Decimal('0.000001'))])
+    unit_price = models.DecimalField(max_digits=18, decimal_places=4, validators=[MinValueValidator(0)])
+    discount_amount = models.DecimalField(max_digits=18, decimal_places=4, default=Decimal('0'),
+                                          validators=[MinValueValidator(0)], help_text='Discount for the entire line.')
+    tax_rate = models.DecimalField(max_digits=7, decimal_places=4, default=Decimal('0'),
+                                   validators=[MinValueValidator(0), MaxValueValidator(100)])
+
+    class Meta:
+        ordering = ['line_number', 'pk']
+        constraints = [
+            models.UniqueConstraint(fields=['quotation', 'line_number'], name='sale_quote_line_unique'),
+            models.CheckConstraint(condition=Q(line_number__gt=0, quantity__gt=0), name='sale_quote_line_quantity_valid'),
+            models.CheckConstraint(condition=Q(unit_price__gte=0, discount_amount__gte=0,
+                                               discount_amount__lte=F('quantity') * F('unit_price')),
+                                   name='sale_quote_line_prices_valid'),
+            models.CheckConstraint(condition=Q(tax_rate__gte=0, tax_rate__lte=100), name='sale_quote_line_tax_valid'),
+        ]
+
+    def __str__(self):
+        return f'{self.quotation} / {self.line_number}'

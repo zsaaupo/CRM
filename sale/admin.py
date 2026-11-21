@@ -2,7 +2,7 @@ from django.contrib import admin
 
 from warehouse.admin import WarehouseScopedAdmin
 
-from .models import SalesOrder, SalesOrderItem, SalesReturn, SalesReturnItem
+from .models import SalesOrder, SalesOrderItem, SalesQuotation, SalesQuotationItem, SalesReturn, SalesReturnItem
 
 
 @admin.register(SalesOrder)
@@ -43,3 +43,25 @@ class SalesReturnItemAdmin(WarehouseScopedAdmin):
     list_display = ['sales_return', 'sales_order_item', 'quantity']
     search_fields = ['sales_return__return_number', 'sales_order_item__product__name', 'sales_order_item__product__sku']
     list_select_related = ['sales_return', 'sales_order_item__sales_order']
+
+
+@admin.register(SalesQuotation)
+class SalesQuotationAdmin(WarehouseScopedAdmin):
+    exclude = ['issued_document']
+    posted_lookup = 'status'
+    unposted_value = SalesQuotation.Status.DRAFT
+    list_display = ['quotation_number', 'customer', 'warehouse', 'order_date', 'valid_until', 'status']
+    list_filter = ['status', 'order_date']
+    search_fields = ['quotation_number', 'customer__name', 'customer_reference']
+    list_select_related = ['customer', 'warehouse']
+
+
+@admin.register(SalesQuotationItem)
+class SalesQuotationItemAdmin(WarehouseScopedAdmin):
+    warehouse_lookup = 'quotation__warehouse_id'
+    scoped_foreign_keys = {'quotation': 'warehouse_id'}
+    posted_lookup = 'quotation__status'
+    unposted_value = SalesQuotation.Status.DRAFT
+    list_display = ['quotation', 'line_number', 'product', 'unit', 'quantity', 'unit_price']
+    search_fields = ['quotation__quotation_number', 'product__name', 'product__sku']
+    list_select_related = ['quotation', 'product', 'unit']

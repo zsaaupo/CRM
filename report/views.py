@@ -51,5 +51,9 @@ class SalePDFAPIView(DocumentPDFAPIView):
     kind = 'sale'
 
 
+class QuotationPDFAPIView(DocumentPDFAPIView):
+    kind = 'quotation'
+
+
 class TransferPDFAPIView(DocumentPDFAPIView):
     kind = 'transfer'

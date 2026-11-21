@@ -5,10 +5,13 @@ from django.urls import reverse
 from django.utils import timezone
 
 from account.page_views import ProtectedAccountPageView
-from warehouse.scope import WarehouseScopePageMixin, warehouse_scope
+from warehouse.scope import WarehouseScopePageMixin, scoped_queryset, warehouse_scope
 
-from .models import SalesReturn
+from .models import SalesQuotation, SalesReturn, quotation_valid_until
 from .returns import RETURN_CREATE, RETURN_EDIT, RETURN_VIEW, scoped_returns
+from .services import (
+    ACTION_PERMISSIONS, ITEM_VIEW, QUOTE_ADD, QUOTE_DELETE, QUOTE_DETAIL, QUOTE_EDIT, QUOTE_VIEW, Status,
+)
 
 
 SALES_CREATE_PERMISSIONS = (
@@ -80,6 +83,13 @@ class SalesDetailPageView(WarehouseScopePageMixin, ProtectedAccountPageView):
             context['edit_url'] = reverse('sale_pages:edit-sale', args=[self.kwargs['pk']])
         if has_role_permissions(self.request.user, RETURN_CREATE):
             context['return_url'] = f"{reverse('sale_pages:create-return')}?sales_order={self.kwargs['pk']}"
+        if has_role_permissions(self.request.user, QUOTE_VIEW):
+            scope = warehouse_scope(self.request.user)
+            quotes = SalesQuotation.objects.filter(sales_order_id=self.kwargs['pk'])
+            quotes = scoped_queryset(scoped_queryset(quotes, scope), scope, 'sales_order__warehouse_id')
+            quotation_id = quotes.values_list('pk', flat=True).first()
+            if quotation_id:
+                context['quotation_url'] = reverse('sale_pages:quotation-detail', args=[quotation_id])
         return context
 
 
@@ -200,4 +210,92 @@ class SalesReturnDetailPageView(SalesReturnPageView):
             context['edit_url'] = reverse('sale_pages:edit-return', args=[record.pk])
         if has_role_permissions(user, ('sale.change_salesreturn',)):
             context['complete_api_url'] = reverse('sale:sales-return-complete')
+        return context
+
+# Sales quotations
+
+class QuotationPageView(WarehouseScopePageMixin, ProtectedAccountPageView):
+    permission_required = QUOTE_VIEW
+
+    def get_record(self):
+        records = scoped_queryset(SalesQuotation.objects.all(), warehouse_scope(self.request.user))
+        return get_object_or_404(records, pk=self.kwargs['pk'])
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context.update(page_section='sale', sale_area='quotations', section_label='Sales', quotation=True,
+                       list_url=reverse('sale_pages:quotation-list'))
+        return context
+
+
+class QuotationListPageView(QuotationPageView):
+    template_name = 'inventory/list.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        user = self.request.user
+        context.update(
+            page_mode='list', page_label='Sales quotations', resource={'singular': 'quotation', 'plural': 'quotations'},
+            list_description='Customer quotes, validity dates, and responses.',
+            list_api_url=reverse('sale:quotation-list'), add_url=reverse('sale_pages:quotation-create'),
+            view_url_template=reverse('sale_pages:quotation-detail', args=[0]),
+            can_add=has_role_permissions(user, QUOTE_ADD), can_delete=has_role_permissions(user, QUOTE_DELETE),
+            columns=[{'key': key, 'label': label, 'type': kind} for key, label, kind in (
+                ('quotation_number', 'Quotation number', 'text'), ('customer_name', 'Customer', 'text'),
+                ('order_date', 'Quotation date', 'text'), ('valid_until', 'Valid until', 'text'),
+                ('status_name', 'Status', 'text'), ('grand_total', 'Total', 'price'), ('actions', 'Actions', 'edit'),
+            )],
+        )
+        if has_role_permissions(user, QUOTE_EDIT):
+            context.update(edit_url_template=reverse('sale_pages:quotation-edit', args=[0]), edit_disabled_field='is_locked')
+        if context['can_delete']:
+            context.update(delete_url_template=reverse('sale:quotation-detail', args=[0]), delete_disabled_field='is_locked')
+        return context
+
+
+class QuotationCreatePageView(QuotationPageView):
+    template_name = 'sale/create.html'
+    permission_required = (*QUOTE_VIEW, *QUOTE_ADD)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context.update(page_mode='add', form_heading='Create quotation', save_label='Save draft',
+                       create_api_url=reverse('sale:quotation-list'), options_api_url=reverse('sale:quotation-options'),
+                       today=timezone.localdate(), valid_until=quotation_valid_until(),
+                       base_currency=settings.INVENTORY_BASE_CURRENCY)
+        return context
+
+
+class QuotationEditPageView(QuotationCreatePageView):
+    permission_required = QUOTE_EDIT
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        record = self.get_record()
+        endpoint = reverse('sale:quotation-detail', args=[record.pk])
+        context.update(page_mode='edit', form_heading='Edit quotation', save_label='Save changes', form_method='PATCH',
+                       create_api_url=endpoint, detail_api_url=endpoint,
+                       options_api_url=reverse('sale:quotation-edit-options'))
+        return context
+
+
+class QuotationDetailPageView(QuotationPageView):
+    template_name = 'sale/quotation_detail.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        record = self.get_record()
+        user = self.request.user
+        context.update(
+            page_mode='detail', detail_api_url=reverse('sale:quotation-detail', args=[record.pk]),
+            can_view_items=has_role_permissions(user, ITEM_VIEW),
+            actions=[{'key': key, 'label': label, 'url': reverse('sale:quotation-action', args=[record.pk, key])}
+                     for key, label in (('issue', 'Issue quotation'), ('accept', 'Record acceptance'),
+                         ('decline', 'Record decline'), ('revise', 'Revise quotation'), ('convert', 'Create sales order'))
+                     if has_role_permissions(user, ACTION_PERMISSIONS[key])],
+        )
+        if record.status == Status.DRAFT and has_role_permissions(user, QUOTE_EDIT):
+            context['edit_url'] = reverse('sale_pages:quotation-edit', args=[record.pk])
+        if record.issued_at and has_role_permissions(user, QUOTE_DETAIL):
+            context['pdf_url'] = reverse('report:quotation-pdf', args=[record.pk])
         return context

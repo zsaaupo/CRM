@@ -1,6 +1,7 @@
 from django.urls import path
 
 from .api_views import (
+    QuotationActionAPIView, QuotationDetailAPIView, QuotationListCreateAPIView, QuotationOptionsAPIView,
     SalesOrderDetailAPIView, SalesOrderItemDetailAPIView, SalesOrderItemListAPIView,
     SalesOrderItemListCreateAPIView, SalesOrderItemUpdateAPIView, SalesOrderListAPIView,
     SalesEditOptionsAPIView, SalesOptionsAPIView, SalesOrderListCreateAPIView, SalesOrderUpdateAPIView, SaleCompleteAPIView,
@@ -30,4 +31,9 @@ urlpatterns = [
     path('sales-returns/<int:pk>/', SalesReturnDetailAPIView.as_view(), name='sales-return-detail'),
     path('sales-returns/<int:pk>/update/', SalesReturnUpdateAPIView.as_view(), name='sales-return-update'),
     path('sales-returns/<int:pk>/options/', SalesReturnOptionsAPIView.as_view(), name='sales-return-edit-options'),
+    path('quotations/', QuotationListCreateAPIView.as_view(), name='quotation-list'),
+    path('quotations/options/', QuotationOptionsAPIView.as_view(), name='quotation-options'),
+    path('quotations/edit-options/', QuotationOptionsAPIView.as_view(edit=True), name='quotation-edit-options'),
+    path('quotations/<int:pk>/', QuotationDetailAPIView.as_view(), name='quotation-detail'),
+    path('quotations/<int:pk>/<str:action>/', QuotationActionAPIView.as_view(), name='quotation-action'),
 ]
