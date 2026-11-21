@@ -4,6 +4,23 @@ from django.core.exceptions import PermissionDenied
 from .models import ProductStatus, TradeStatus
 
 
+class AuditedAdmin(admin.ModelAdmin):
+    audit_fields = ('create_by', 'modified_by')
+
+    def get_readonly_fields(self, request, obj=None):
+        excluded = self.get_exclude(request, obj) or ()
+        return [
+            field.name for field in self.opts.concrete_fields
+            if field.name not in excluded and (not field.editable or field.name in self.audit_fields)
+        ]
+
+    def save_model(self, request, obj, form, change):
+        if not change:
+            obj.create_by = request.user.get_username()
+        obj.modified_by = request.user.get_username()
+        super().save_model(request, obj, form, change)
+
+
 @admin.register(ProductStatus, TradeStatus)
 class ProductStatusAdmin(admin.ModelAdmin):
     list_display = ['name', 'code', 'is_active']

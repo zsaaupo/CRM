@@ -74,6 +74,8 @@ class HRMPageView(ProtectedAccountPageView):
             context['view_url_template'] = reverse('hrm_pages:payroll-adjustment-detail', args=[0])
             context['edit_disabled_field'] = 'is_locked'
             context['delete_disabled_field'] = 'is_locked'
+        if resource.key == 'loan-installment':
+            context.update(edit_disabled_field='recovered', delete_disabled_field='recovered')
         if can_change:
             context['edit_url_template'] = reverse(f'hrm_pages:edit-{resource.key}', args=[0])
         if context['can_delete']:

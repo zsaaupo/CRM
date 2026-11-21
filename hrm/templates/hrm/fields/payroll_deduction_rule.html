@@ -2,6 +2,6 @@
 {% include 'inventory/includes/field.html' with name='component' label='Deduction component' field_type='select' required=True only %}
 {% include 'inventory/includes/field.html' with name='method' label='Calculation' field_type='select' required=True only %}
 {% include 'inventory/includes/field.html' with name='value' label='Fixed amount or percentage' field_type='number' minimum='0.0001' required=True only %}
-{% include 'inventory/includes/field.html' with name='effective_from' label='Effective from' field_type='date' required=True hint='Enter the first day of a payroll month.' only %}
-{% include 'inventory/includes/field.html' with name='effective_to' label='Effective to' field_type='date' nullable_field=True hint='Enter the first day of the last applicable month or leave blank.' only %}
+{% include 'inventory/includes/field.html' with name='effective_from' label='Effective from' field_type='month' pattern='[0-9]{4}-(0[1-9]|1[0-2])' required=True hint='Select the first applicable payroll month (YYYY-MM).' only %}
+{% include 'inventory/includes/field.html' with name='effective_to' label='Effective to' field_type='month' pattern='[0-9]{4}-(0[1-9]|1[0-2])' nullable_field=True hint='Select the last applicable payroll month (YYYY-MM) or leave blank.' only %}
 {% include 'inventory/includes/field.html' with name='reference' label='Verified policy reference' required=True maxlength=255 only %}

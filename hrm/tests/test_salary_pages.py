@@ -42,6 +42,20 @@ class SalaryPageTests(TestCase):
         self.grant('salary-component', 'add')
         self.assertContains(self.client.get(component_list), f'href="{add_component}" class="primary-button compact-primary"')
 
+    def test_loan_navigation_is_separate_and_uses_existing_api_routes(self):
+        self.assertNotContains(self.client.get(reverse('dashboard')), 'data-loan-toggle')
+        for key in ('employee-loan', 'loan-installment'):
+            with self.subTest(resource=key):
+                self.grant(key, 'view', 'add')
+                response = self.client.get(reverse(f'hrm_pages:{key}-list'))
+                self.assertContains(response, 'data-hrm-toggle')
+                self.assertContains(response, 'data-loan-toggle aria-controls="hrm-loan-submenu" aria-expanded="true"')
+                self.assertNotContains(response, 'data-salary-toggle')
+                self.assertContains(response, f'data-api-url="{reverse(f"hrm:{key}-list-view")}"')
+                form = self.client.get(reverse(f'hrm_pages:add-{key}'))
+                self.assertContains(form, f'action="{reverse(f"hrm:{key}-list")}"')
+                self.assertContains(form, f'data-options-url="{reverse(f"hrm:{key}-options")}"')
+
     def test_each_salary_form_creates_through_its_api_and_points_back_to_its_list(self):
         payloads = {
             'salary-component': {'code': 'basic', 'name': 'Basic Salary', 'type': 'earning'},

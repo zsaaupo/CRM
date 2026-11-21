@@ -218,9 +218,11 @@ as required by each role. Viewing payment attempts also requires
 | `GET /hrm/api/payroll-reports/` | `month` and/or `employee_code`, optional `currency`, optional `export=csv` |
 | `GET /report/api/payslips/<id>/pdf/` | Approved payslip PDF |
 
-The Salary menu has CRUD pages for payroll adjustments, deduction rules,
-employee loans, and loan installments. Open an adjustment to approve or cancel
-it. Overtime uses the entered minutes, hourly rate, and multiplier. Deduction
+The Loan submenu under HRM has pages for employee loans and loan installments.
+The lists show outstanding balances and installment recovery status.
+
+The Salary menu has CRUD pages for payroll adjustments and deduction rules.
+Open an adjustment to approve or cancel it. Overtime uses the entered minutes, hourly rate, and multiplier. Deduction
 rules are effective by payroll month and apply a fixed amount or a percentage
 of recurring gross earnings. Use the policy reference field for the verified
 rule. Approved one-off adjustments are added to the applicable payroll month.

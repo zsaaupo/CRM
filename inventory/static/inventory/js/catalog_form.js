@@ -86,6 +86,7 @@ if (form) {
                         input.value = value.slice(0, input.type === "datetime-local" ? 19 : 8);
                         loadedTimes.set(input, input.value);
                     }
+                    else if (input.getAttribute("type") === "month") input.value = (record[input.name] ?? "").slice(0, 7);
                     else input.value = input.dataset.jsonField ? JSON.stringify(record[input.name] ?? {}) : record[input.name] ?? "";
                 }
                 for (const group of checkboxGroups) {
@@ -161,6 +162,8 @@ if (form) {
                     fieldError(input.name, 'Enter specifications as an object, e.g. {"color":"blue"}.');
                     invalid ??= input;
                 }
+            } else if (input.getAttribute("type") === "month") {
+                payload[input.name] = input.value ? `${input.value}-01` : null;
             } else {
                 payload[input.name] = input.type === "checkbox" ? input.checked
                     : input.value === "" && (input.dataset.nullableField || input.type === "number") ? null

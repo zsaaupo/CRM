@@ -102,6 +102,11 @@ class LoanInstallmentSerializer(CatalogSerializer):
     currency = serializers.CharField(source='loan.currency_id', read_only=True)
     recovered = serializers.SerializerMethodField()
 
+    def validate_month(self, value):
+        if value.day != 1:
+            raise serializers.ValidationError('Use the first day of the payroll month.')
+        return value
+
     def get_recovered(self, row):
         return row.recovered_line_id is not None
 

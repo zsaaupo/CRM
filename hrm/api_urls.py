@@ -1,5 +1,5 @@
 from django.urls import path
-from .catalog import PAYROLL_INPUT_RESOURCES
+from .catalog import LOAN_RESOURCES, PAYROLL_INPUT_RESOURCES
 
 from .api_views import (
     AttendanceDetailAPIView, AttendanceFormOptionsAPIView, AttendanceListAPIView, AttendanceListCreateAPIView,
@@ -152,4 +152,4 @@ urlpatterns = [
 ]
 urlpatterns += [path(f'payroll-runs/<int:pk>/{action}/', PayrollRunTransitionAPIView.as_view(action=action),
                      name=f'payroll-run-{action}') for action in RUN_ACTIONS]
-urlpatterns += input_urls(PAYROLL_INPUT_RESOURCES)
+urlpatterns += input_urls((*PAYROLL_INPUT_RESOURCES, *LOAN_RESOURCES))

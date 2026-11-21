@@ -1,3 +1,3 @@
 {% include 'inventory/includes/field.html' with name='loan' label='Employee loan' field_type='select' required=True only %}
-{% include 'inventory/includes/field.html' with name='month' label='Due month' field_type='date' required=True hint='Enter the first day of the payroll month.' only %}
+{% include 'inventory/includes/field.html' with name='month' label='Due month' field_type='month' pattern='[0-9]{4}-(0[1-9]|1[0-2])' required=True hint='Select a payroll month or enter it as YYYY-MM.' only %}
 {% include 'inventory/includes/field.html' with name='amount' label='Installment amount' field_type='number' minimum='0.0001' required=True only %}

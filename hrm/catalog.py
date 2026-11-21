@@ -110,16 +110,19 @@ PAYROLL_INPUT_RESOURCES = (
          ('method_name', 'Calculation', 'text'), ('value', 'Rate or amount', 'text'), ('effective_from', 'Starts', 'text'),
          ('effective_to', 'Ends', 'text'), ('reference', 'Policy reference', 'text')),
         group='salary', fields='payroll_deduction_rule', has_options=True),
+)
+LOAN_RESOURCES = (
     HRMResource('employee-loan', 'employee-loans', 'employee loan', 'employee loans', EmployeeLoan,
         (('employee_name', 'Employee', 'text'), ('reference', 'Reference', 'text'), ('principal', 'Principal', 'price'),
          ('balance', 'Outstanding balance', 'price'), ('disbursed_on', 'Disbursed', 'text')),
-        group='salary', fields='employee_loan', has_options=True),
+        group='loan', fields='employee_loan', has_options=True),
     HRMResource('loan-installment', 'loan-installments', 'loan installment', 'loan installments', LoanInstallment,
         (('loan_reference', 'Loan', 'text'), ('month', 'Due month', 'text'), ('amount', 'Amount', 'price'),
          ('recovered', 'Recovered', 'boolean')),
-        group='salary', fields='loan_installment', has_options=True),
+        group='loan', fields='loan_installment', has_options=True),
 )
-RESOURCES = (*EMPLOYEE_RESOURCES, *ATTENDANCE_RESOURCES, LEAVE_TYPE_RESOURCE, *SALARY_RESOURCES, *PAYROLL_INPUT_RESOURCES)
+RESOURCES = (*EMPLOYEE_RESOURCES, *ATTENDANCE_RESOURCES, LEAVE_TYPE_RESOURCE, *SALARY_RESOURCES,
+             *PAYROLL_INPUT_RESOURCES, *LOAN_RESOURCES)
 PAYROLL_RUN_RESOURCE = HRMResource(
     'payroll-run', 'payroll-runs', 'payroll run', 'payroll runs', PayrollRun,
     (('month', 'Month', 'text'), ('currency', 'Currency', 'text'), ('status_name', 'Status', 'text'),
