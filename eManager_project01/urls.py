@@ -17,6 +17,7 @@ urlpatterns = [
     path('sale/api/', include('sale.api_urls')),
     path('people/api/', include('people.api_urls')),
     path('hrm/api/', include('hrm.api_urls')),
+    path('accounting/api/', include('accounting.api_urls')),
     path('common/api/', include('common.api_urls')),
     path('report/api/', include('report.urls')),
     path('inventory/', include('inventory.page_urls')),
@@ -25,6 +26,7 @@ urlpatterns = [
     path('sale/', include('sale.page_urls')),
     path('people/', include('people.page_urls')),
     path('hrm/', include('hrm.page_urls')),
+    path('accounting/', include('accounting.page_urls')),
     path('settings/', include('common.page_urls')),
     path('account/', include('account.page_urls')),
 ]

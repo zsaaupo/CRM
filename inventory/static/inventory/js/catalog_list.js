@@ -146,6 +146,7 @@ if (panel) {
     const columns = JSON.parse(document.getElementById("catalog-columns").textContent);
     let page = 1;
     let query = "";
+    let filterValues = [];
     let version = 0;
     let hasPrevious = false;
     let hasNext = false;
@@ -155,6 +156,8 @@ if (panel) {
     const receiveForm = find("receive-form");
     const receiving = new Set();
     const completeForm = find("complete-form");
+    const filters = find("filters");
+    const total = find("total");
     const completing = new Set();
     let pendingDelete = null;
 
@@ -266,11 +269,13 @@ if (panel) {
         const url = new URL(panel.dataset.apiUrl, window.location.origin);
         url.searchParams.set("page", String(page));
         if (query) url.searchParams.set("q", query);
+        for (const [name, value] of filterValues) url.searchParams.set(name, value);
         panel.setAttribute("aria-busy", "true");
         find("status").textContent = "Loading records...";
         find("status").classList.remove("sr-only");
         find("status").hidden = false;
         for (const name of ["table", "empty", "error", "pagination", "count"]) find(name).hidden = true;
+        if (total) total.hidden = true;
         find("previous").disabled = true;
         find("next").disabled = true;
         try {
@@ -281,6 +286,10 @@ if (panel) {
             find("rows").replaceChildren(...data.results.map(renderRecord));
             find("count").textContent = String(data.count);
             find("count").hidden = false;
+            if (total && data.total_amount !== undefined) {
+                total.textContent = `${total.dataset.catalogTotal} ${data.currency} ${data.total_amount}`;
+                total.hidden = false;
+            }
             find("table").hidden = data.results.length === 0;
             find("empty").hidden = data.results.length !== 0;
             find("status").textContent = `${data.count} records found.`;
@@ -303,9 +312,10 @@ if (panel) {
                 return;
             }
             find("status").hidden = true;
+            const filterError = filters && error.status === 400 ? Object.values(error.errors || {}).flat().join(" ") : "";
             find("error-message").textContent = error.status === 403
                 ? "You do not have permission to view this list. Contact your administrator."
-                : error.message || "Could not load records. Please try again.";
+                : filterError || error.message || "Could not load records. Please try again.";
             find("error").hidden = false;
         } finally {
             if (current === version) panel.setAttribute("aria-busy", "false");
@@ -315,6 +325,16 @@ if (panel) {
     find("search").addEventListener("submit", (event) => {
         event.preventDefault();
         query = event.currentTarget.elements.namedItem("q").value.trim();
+        load(1);
+    });
+    filters?.addEventListener("submit", (event) => {
+        event.preventDefault();
+        filterValues = [...filters.elements].filter((input) => input.name && input.value)
+            .map((input) => [input.name, input.value]);
+        load(1);
+    });
+    filters?.addEventListener("reset", () => {
+        filterValues = [];
         load(1);
     });
     find("previous").addEventListener("click", () => { if (hasPrevious) load(page - 1); });

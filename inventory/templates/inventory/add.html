@@ -4,7 +4,7 @@
 {% block content %}
 <div class="workspace-content">
     <div class="page-heading">
-        <div><p class="page-eyebrow">{{ section_label|default:'Inventory' }}</p><h1 class="page-title">{{ form_heading }}<span class="text-emerald-600">.</span></h1><p class="page-description">{% if form_description %}{{ form_description }}{% elif page_mode == 'edit' %}Update your catalog details.{% else %}A new entry for a more organized catalog.{% endif %}</p></div>
+        <div><p class="page-eyebrow">{{ section_label|default:'Inventory' }}</p><h1 class="page-title">{{ form_heading }}<span class="text-emerald-600">.</span></h1>{% if form_description or not hide_catalog_hint %}<p class="page-description">{% if form_description %}{{ form_description }}{% elif page_mode == 'edit' %}Update your catalog details.{% else %}A new entry for a more organized catalog.{% endif %}</p>{% endif %}</div>
         <a href="{{ list_url }}" class="secondary-button">Back to {{ resource.plural }} <span aria-hidden="true">&rarr;</span></a>
     </div>
     <div{% if is_product %} class="user-form-layout"{% endif %}>
@@ -17,7 +17,7 @@
             {% else %}
             <fieldset>
                 <legend class="section-title">{{ resource.singular|capfirst }} details</legend>
-                {% if hrm_group != 'attendance' and hrm_group != 'leave' and hrm_group != 'salary' %}<p class="section-description">Enter a clear name and the details below.</p>{% endif %}
+                {% if not hide_catalog_hint and hrm_group != 'attendance' and hrm_group != 'leave' and hrm_group != 'salary' %}<p class="section-description">Enter a clear name and the details below.</p>{% endif %}
                 <div class="user-form-grid">{% include fields_template %}</div>
             </fieldset>
             {% endif %}

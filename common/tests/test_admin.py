@@ -28,7 +28,7 @@ class ProjectAdminTests(TestCase):
 
     def test_all_project_models_have_admin_lists(self):
         self.client.force_login(self.root)
-        for app_label in ('account', 'common', 'hrm', 'inventory', 'people', 'purchase', 'report', 'sale', 'warehouse'):
+        for app_label in ('account', 'accounting', 'common', 'hrm', 'inventory', 'people', 'purchase', 'report', 'sale', 'warehouse'):
             for model in apps.get_app_config(app_label).get_models():
                 with self.subTest(model=model._meta.label):
                     self.assertTrue(admin.site.is_registered(model))

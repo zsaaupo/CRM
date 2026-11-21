@@ -1,0 +1,4 @@
+{% include 'inventory/includes/field.html' with name='date' label='Date' field_type='date' required=True value=today|date:'Y-m-d' only %}
+{% include 'inventory/includes/field.html' with name='category' label='Category' field_type='select' required=True only %}
+{% include 'inventory/includes/field.html' with name='warehouse' label='Warehouse' field_type='select' required=True value=assigned_warehouse locked=warehouse_locked only %}
+{% include 'inventory/includes/field.html' with name='amount' label=amount_label field_type='number' required=True minimum='0.0001' step='0.0001' only %}

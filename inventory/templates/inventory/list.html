@@ -18,6 +18,7 @@
             <div><h2 class="section-title">All {{ resource.plural }} <span class="user-count" data-catalog-count hidden></span></h2><p class="mt-1 text-xs text-stone-400">{{ list_description|default:'Your catalog, in one place.' }}</p></div>
             <form role="search" class="users-search" data-catalog-search><label for="catalog-search" class="sr-only">Search {{ resource.plural }}</label><input id="catalog-search" name="q" type="search" class="form-input" placeholder="Search {{ resource.plural }}..." autocomplete="off"><button type="submit" class="secondary-button">Search</button></form>
         </div>
+        {% block catalog_filters %}{% endblock %}
         <p class="users-list-status" data-catalog-status role="status" aria-live="polite">Loading {{ resource.plural }}...</p>
         <div class="users-list-error" data-catalog-error role="alert" hidden><p data-catalog-error-message></p><button type="button" class="text-button mt-3" data-catalog-retry>Try again <span aria-hidden="true">&rarr;</span></button></div>
         <div class="users-empty" data-catalog-empty hidden><h3 class="font-semibold text-stone-800">No {{ resource.plural }} found</h3><p class="mt-2 text-sm text-stone-500">Try another search{% if can_add %} or add a new {{ resource.singular }}{% endif %}.</p>{% if can_add %}<a href="{{ add_url }}" class="text-button mt-5">{% if add_label %}{{ add_label }}{% else %}Add {{ resource.singular }}{% endif %} <span aria-hidden="true">&rarr;</span></a>{% endif %}</div>

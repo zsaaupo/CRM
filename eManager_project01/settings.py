@@ -45,6 +45,7 @@ INSTALLED_APPS = [
     'people',
     'report',
     'hrm',
+    'accounting',
 ]
 
 MIDDLEWARE = [
@@ -75,6 +76,7 @@ TEMPLATES = [
                 'sale.context_processors.sale_navigation',
                 'people.context_processors.people_navigation',
                 'hrm.context_processors.hrm_navigation',
+                'accounting.context_processors.expense_navigation',
                 'common.context_processors.settings_navigation',
                 'report.context_processors.report_actions',
             ],

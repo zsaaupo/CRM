@@ -215,6 +215,19 @@ button:focus-visible { outline: 2px solid #059669; outline-offset: 3px; }
 .user-count { display: inline-block; margin-left: 7px; border: 1px solid #e7e5e4; border-radius: 6px; background: #fafaf9; padding: 2px 7px; color: #78716c; font-size: 10px; vertical-align: middle; }
 .users-search { display: flex; width: min(100%, 360px); gap: 8px; }
 .users-search input { min-width: 0; min-height: 40px; padding-top: 9px; padding-bottom: 9px; font-size: 12px; }
+.expense-filter-row {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: flex-end;
+    gap: 10px;
+    overflow-x: auto;
+    margin: -5px;
+    padding: 5px;
+}
+.expense-filter-field { flex: 1 0 112px; min-width: 0; }
+.expense-filter-field .form-input { min-height: 40px; padding: 9px 10px; font-size: 12px; }
+.expense-filter-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 8px; white-space: nowrap; }
+.expense-filter-actions .secondary-button { padding-inline: 12px; }
 .users-table-scroll { overflow-x: auto; }
 .users-table { width: 100%; border-collapse: collapse; text-align: left; }
 .users-table th { background: #fafaf9; padding: 13px 22px; color: #a8a29e; font-size: 10px; font-weight: 600; letter-spacing: 0.2px; white-space: nowrap; }
