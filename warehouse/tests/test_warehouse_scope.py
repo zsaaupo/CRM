@@ -11,6 +11,7 @@ from django.urls import reverse
 from rest_framework.exceptions import NotFound, PermissionDenied
 from rest_framework.test import APIClient
 
+from accounting.models import FinancialAccount
 from inventory.models import Product, UnitOfMeasure
 from purchase.models import PurchaseOrder, PurchaseOrderItem
 from purchase.services import receive_purchase
@@ -28,6 +29,7 @@ class WarehouseScopeTests(TestCase):
         self.role.permissions.set(Permission.objects.filter(content_type__app_label__in=['warehouse', 'purchase', 'sale']))
         self.utt = WareHouse.objects.create(name='UTT', code='UTT', address='Dhaka', phone='1')
         self.other = WareHouse.objects.create(name='Other', code='OTHER', address='Dhaka', phone='2')
+        self.payment_account = FinancialAccount.objects.create(name='Sales bank', type='bank', warehouse=self.utt)
         self.scope = RoleWarehouseAccess.objects.create(role=self.role, warehouse=self.utt)
         self.unit = UnitOfMeasure.objects.create(name='Pieces', code='SCOPE-PCS')
         self.product = Product.objects.create(name='Rice', sku='SCOPE-RICE', unit=self.unit, currency_id='BDT')
@@ -37,6 +39,8 @@ class WarehouseScopeTests(TestCase):
                           for warehouse in [self.utt, self.other, None]]
         self.sales = [self.order(SalesOrder, SalesOrderItem, 'sales_order', warehouse)
                       for warehouse in [self.utt, self.other, None]]
+        self.sales[0].payment_account = self.payment_account
+        self.sales[0].save(update_fields=['payment_account'])
         self.client = APIClient(enforce_csrf_checks=True)
         self.client.force_login(self.user)
         token = self.client.get(reverse('account:login')).data['csrfToken']
@@ -83,6 +87,8 @@ class WarehouseScopeTests(TestCase):
         for app, route, orders in self.resources():
             url = reverse(f'{app}:{route}-list')
             payload = {'currency': 'BDT', 'exchange_rate': '1', 'items': [self.line()]}
+            if app == 'sale':
+                payload['payment_account'] = self.payment_account.pk
             response = self.client.post(url, payload, format='json')
             self.assertEqual(response.status_code, 201, response.data)
             record = response.data[route.replace('-', '_')]
@@ -173,8 +179,12 @@ class WarehouseScopeTests(TestCase):
         self.scope.save()
         for app, route, orders in self.resources():
             self.assertEqual(self.client.get(reverse(f'{app}:{route}-list-view')).data['count'], 3)
+            payload = {'warehouse': self.other.pk}
+            if app == 'sale':
+                other_account = FinancialAccount.objects.create(name='Other bank', type='bank', warehouse=self.other)
+                payload['payment_account'] = other_account.pk
             response = self.client.patch(reverse(f'{app}:{route}-update', args=[orders[0].pk]),
-                {'warehouse': self.other.pk}, format='json')
+                payload, format='json')
             self.assertEqual(response.status_code, 200, response.data)
         self.role.permissions.set(Permission.objects.filter(content_type__app_label__in=['warehouse', 'purchase', 'sale'],
             codename__startswith='view_'))

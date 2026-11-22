@@ -39,6 +39,11 @@
             <form method="post" data-quotation-actions hidden>
                 {% csrf_token %}
                 <p class="form-status mt-4" data-quotation-feedback role="status" tabindex="-1" hidden></p>
+                {% if show_payment_account %}
+                <div class="mt-4" data-quotation-payment-account hidden>
+                    {% include 'accounting/fields/accounts_select.html' with name='payment_account' label='Receive into account' accounts=payment_accounts only %}
+                </div>
+                {% endif %}
                 <div class="user-form-actions flex-wrap">
                     {% for action in actions %}<button type="button" class="secondary-button" data-quotation-action="{{ action.key }}" data-url="{{ action.url }}" hidden>{{ action.label }}</button>{% endfor %}
                 </div>

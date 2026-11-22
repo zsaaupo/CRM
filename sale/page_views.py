@@ -1,10 +1,12 @@
 from account.permissions import has_role_permissions
 from django.conf import settings
+from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
 from django.utils import timezone
 
 from account.page_views import ProtectedAccountPageView
+from accounting.services import SALES_PAYMENT_VIEW, available_payment_accounts
 from warehouse.scope import WarehouseScopePageMixin, scoped_queryset, warehouse_scope
 
 from .models import SalesQuotation, SalesReturn, quotation_valid_until
@@ -83,6 +85,8 @@ class SalesDetailPageView(WarehouseScopePageMixin, ProtectedAccountPageView):
             context['edit_url'] = reverse('sale_pages:edit-sale', args=[self.kwargs['pk']])
         if has_role_permissions(self.request.user, RETURN_CREATE):
             context['return_url'] = f"{reverse('sale_pages:create-return')}?sales_order={self.kwargs['pk']}"
+        if has_role_permissions(self.request.user, SALES_PAYMENT_VIEW):
+            context['payments_url'] = reverse('sale_pages:sales-payment-list', args=[self.kwargs['pk']])
         if has_role_permissions(self.request.user, QUOTE_VIEW):
             scope = warehouse_scope(self.request.user)
             quotes = SalesQuotation.objects.filter(sales_order_id=self.kwargs['pk'])
@@ -296,6 +300,11 @@ class QuotationDetailPageView(QuotationPageView):
         )
         if record.status == Status.DRAFT and has_role_permissions(user, QUOTE_EDIT):
             context['edit_url'] = reverse('sale_pages:quotation-edit', args=[record.pk])
+        if has_role_permissions(user, ACTION_PERMISSIONS['convert']):
+            context['show_payment_account'] = True
+            context['payment_accounts'] = available_payment_accounts(warehouse_scope(user)).filter(
+                Q(warehouse_id=record.warehouse_id) | Q(warehouse_id__isnull=True),
+            )
         if record.issued_at and has_role_permissions(user, QUOTE_DETAIL):
             context['pdf_url'] = reverse('report:quotation-pdf', args=[record.pk])
         return context

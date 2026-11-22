@@ -1,12 +1,13 @@
 from django.contrib import admin
 
+from accounting.admin import PaymentAccountAdminMixin
 from warehouse.admin import WarehouseScopedAdmin
 
 from .models import SalesOrder, SalesOrderItem, SalesQuotation, SalesQuotationItem, SalesReturn, SalesReturnItem
 
 
 @admin.register(SalesOrder)
-class SalesOrderAdmin(WarehouseScopedAdmin):
+class SalesOrderAdmin(PaymentAccountAdminMixin, WarehouseScopedAdmin):
     posted_lookup = 'is_completed'
     list_display = ['order_number', 'order_date', 'customer', 'warehouse', 'is_completed']
     list_filter = ['is_completed', 'order_date']

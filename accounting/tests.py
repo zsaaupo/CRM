@@ -12,7 +12,7 @@ from rest_framework.test import APIClient
 from warehouse.models import WareHouse
 from warehouse.tests.helpers import assign_warehouse_role
 
-from .models import Expense, ExpenseCategory
+from .models import Expense, ExpenseCategory, FinancialAccount
 
 
 class ExpenseTests(TestCase):
@@ -22,6 +22,7 @@ class ExpenseTests(TestCase):
         cls.root = get_user_model().objects.create_superuser(username='expense-admin')
         cls.warehouse = WareHouse.objects.create(name='Main warehouse', address='Main', phone='1')
         cls.other_warehouse = WareHouse.objects.create(name='Separate warehouse', address='Elsewhere', phone='2')
+        cls.payment_account = FinancialAccount.objects.create(name='Expense bank', type='bank', warehouse=cls.warehouse)
         cls.role = assign_warehouse_role(cls.staff, warehouse=cls.warehouse).role
         cls.category = ExpenseCategory.objects.create(name='Transport')
         cls.other_category = ExpenseCategory.objects.create(name='Utilities')
@@ -39,7 +40,8 @@ class ExpenseTests(TestCase):
         manager.add(*Permission.objects.filter(content_type__app_label='accounting', codename__in=codenames))
 
     def payload(self, **changes):
-        return {'category': self.category.pk, 'warehouse': self.warehouse.pk, 'amount': '127.3456', **changes}
+        return {'category': self.category.pk, 'warehouse': self.warehouse.pk, 'amount': '127.3456',
+                'payment_account': self.payment_account.pk, **changes}
 
     def create(self, **changes):
         response = self.client.post(self.list_url, self.payload(**changes), format='json')

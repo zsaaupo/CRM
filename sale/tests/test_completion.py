@@ -9,6 +9,7 @@ from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
 
+from accounting.models import FinancialAccount
 from common.models import TradeStatus
 from inventory.models import Product, UnitOfMeasure
 from sale.models import SalesOrder, SalesOrderItem
@@ -21,6 +22,7 @@ class SaleCompletionTests(TestCase):
         self.role = assign_warehouse_role(self.user, all_warehouses=True).role
         self.grant('change_salesorder')
         self.warehouse = WareHouse.objects.create(name='Main', address='Dhaka', phone='1')
+        self.payment_account = FinancialAccount.objects.create(name='Sales bank', type='bank')
         self.branch = WareHouse.objects.create(name='Branch', address='Dhaka', phone='2')
         self.unit = UnitOfMeasure.objects.create(name='Pieces', code='COMPLETE-PCS')
         self.product = Product.objects.create(name='Rice', sku='COMPLETE-RICE', unit=self.unit, currency_id='BDT')
@@ -39,7 +41,7 @@ class SaleCompletionTests(TestCase):
 
     def new_order(self, quantity='2', warehouse=None):
         order = SalesOrder.objects.create(currency_id='BDT', exchange_rate=1, warehouse=warehouse or self.warehouse,
-                                          create_by='original', modified_by='original')
+                                          payment_account=self.payment_account, create_by='original', modified_by='original')
         SalesOrderItem.objects.create(sales_order=order, line_number=1, product=self.product, unit=self.unit,
                                        quantity=quantity, unit_price=10)
         return order
@@ -189,7 +191,8 @@ class SaleCompletionTests(TestCase):
         self.assertFalse(response.data['is_completed'])
         self.assertIsNone(response.data['fulfilled_at'])
         response = self.client.post(reverse('sale:sales-order-list'),
-            {'currency': 'BDT', 'exchange_rate': 1, 'is_completed': True}, format='json')
+            {'currency': 'BDT', 'exchange_rate': 1, 'is_completed': True, 'payment_account': self.payment_account.pk},
+            format='json')
         self.assertEqual(response.status_code, 201, response.data)
         self.assertFalse(response.data['sales_order']['is_completed'])
 

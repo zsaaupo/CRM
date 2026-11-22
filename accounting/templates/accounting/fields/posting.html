@@ -1,0 +1,6 @@
+<input type="hidden" name="request_key" value="{{ request_key }}">
+{% with label='Amount ('|add:currency|add:')' %}
+{% include 'inventory/includes/field.html' with name='amount' label=label field_type='number' value=default_amount minimum='0.0001' maximum=maximum_amount required=True only %}
+{% endwith %}
+{% include 'inventory/includes/field.html' with name='date' label='Date' field_type='date' value=today|date:'Y-m-d' required=True only %}
+{% include 'inventory/includes/field.html' with name='reference' label='Reference' maxlength=150 only %}

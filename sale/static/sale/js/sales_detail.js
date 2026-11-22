@@ -89,6 +89,8 @@ if (panel) {
         if (edit) edit.hidden = record.is_completed !== false;
         const returnLink = panel.querySelector('[data-sale-return]');
         if (returnLink) returnLink.hidden = record.is_completed !== true;
+        const paymentsLink = panel.querySelector('[data-sale-payments]');
+        if (paymentsLink) paymentsLink.hidden = record.is_completed !== true || !record.warehouse;
         const section = panel.querySelector("[data-sale-items]");
         if (section && !items) items = initializeSalesItems(section, record.currency);
         if (items) await items.ready;

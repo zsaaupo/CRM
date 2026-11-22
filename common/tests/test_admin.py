@@ -8,6 +8,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
+from accounting.models import AccountTransaction, AccountTransfer, ExpensePayment, SalesPayment
 from hrm.models import (
     Employee, EmployeeLoan, LeaveRequest, LeaveType, PayrollPeriod, PayrollRun, Payslip, PayslipLine,
     SalaryPayment,
@@ -35,7 +36,8 @@ class ProjectAdminTests(TestCase):
                     url = reverse(f'admin:{app_label}_{model._meta.model_name}_changelist')
                     self.assertEqual(self.client.get(url).status_code, 200)
                     add = reverse(f'admin:{app_label}_{model._meta.model_name}_add')
-                    self.assertEqual(self.client.get(add).status_code, 200)
+                    expected = 403 if model in (AccountTransaction, AccountTransfer, ExpensePayment, SalesPayment) else 200
+                    self.assertEqual(self.client.get(add).status_code, expected)
 
     def test_leave_request_visibility_follows_reviewer_permissions(self):
         leave_type = LeaveType.objects.create(code='personal-test', name='Personal', is_paid=True)

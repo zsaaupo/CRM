@@ -10,6 +10,7 @@ from rest_framework.generics import GenericAPIView
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from accounting.services import available_payment_accounts, payment_account_options
 from common.models import TradeStatus
 from common.serializers import AUDIT_FIELDS, CatalogSerializer
 from common.view import BaseAPIMixin, BaseDetailAPIView, BaseListAPIView, BaseListCreateAPIView, BaseUpdateAPIView, RecordInUse
@@ -43,7 +44,9 @@ class SalesConcurrencyMixin:
 
 class SalesOrderListCreateAPIView(SalesConcurrencyMixin, WarehouseScopeAPIMixin, BaseListCreateAPIView):
     serializer_class = SalesOrderSerializer
-    queryset = SalesOrder.objects.select_related('currency', 'status', 'customer', 'warehouse').prefetch_related('items')
+    queryset = SalesOrder.objects.select_related(
+        'currency', 'status', 'customer', 'warehouse', 'payment_account',
+    ).prefetch_related('items')
     response_key = 'sales_order'
     search_fields = ['order_number', 'customer__name', 'customer__code', 'customer_reference', 'notes']
     ordering = ['-order_date', '-pk']
@@ -136,7 +139,7 @@ class SaleCompleteAPIView(SalesConcurrencyMixin, WarehouseScopeAPIMixin, BaseAPI
         serializer.is_valid(raise_exception=True)
         order, completed_now = complete_sale(request.user, serializer.validated_data['sale_id'])
         return Response({
-            'message': 'Sale completed and stock updated.' if completed_now else 'Sale was already completed. Stock was not deducted again.',
+            'message': 'Sale completed and stock updated.' if completed_now else 'Sale was already completed.',
             'completed_now': completed_now,
             'sales_order': SalesOrderDetailSerializer(order, context=self.get_serializer_context()).data,
         })
@@ -149,9 +152,10 @@ class SalesOptionsAPIView(SalesConcurrencyMixin, WarehouseScopeAPIMixin, BaseAPI
     required_permissions = ('sale.add_salesorder', 'sale.add_salesorderitem')
     http_method_names = ['get', 'head', 'options']
     customer_queryset = Party.objects.filter(is_customer=True)
+    include_payment_accounts = True
 
     def get(self, request):
-        return Response({
+        options = {
             'base_currency': settings.INVENTORY_BASE_CURRENCY,
             'warehouse_scope': warehouse_scope_options(request.user),
             'customer': [
@@ -179,7 +183,10 @@ class SalesOptionsAPIView(SalesConcurrencyMixin, WarehouseScopeAPIMixin, BaseAPI
                  'tax_rate': str(row.product_tax)}
                 for row in Product.objects.select_related('unit').order_by('name', 'pk')
             ],
-        })
+        }
+        if self.include_payment_accounts:
+            options['payment_account'] = payment_account_options(available_payment_accounts(request.warehouse_scope))
+        return Response(options)
 
 
 class SalesEditOptionsAPIView(SalesOptionsAPIView):
@@ -381,6 +388,7 @@ class QuotationDetailAPIView(QuotationResource, BaseDetailAPIView):
 class QuotationOptionsAPIView(QuotationConcurrencyMixin, SalesOptionsAPIView):
     edit = False
     customer_queryset = Party.objects.filter(is_active=True, is_customer=True)
+    include_payment_accounts = False
 
     @property
     def required_permissions(self):
@@ -397,6 +405,11 @@ class QuotationActionAPIView(QuotationConcurrencyMixin, BaseAPIMixin, APIView):
         return ACTION_PERMISSIONS.get(self.kwargs['action'], ())
 
     def post(self, request, pk, action):
-        quotation = apply_quotation_action(request.user, pk, action)
+        payment_account = None
+        if action == 'convert' and 'payment_account' in request.data:
+            payment_account = serializers.IntegerField(min_value=1, max_value=2**63 - 1).run_validation(
+                request.data['payment_account'],
+            )
+        quotation = apply_quotation_action(request.user, pk, action, payment_account=payment_account)
         data = QuotationDetailSerializer(quotation, context={'request': request}).data
         return Response({'sales_quotation': data, 'quotation_url': reverse('sale_pages:quotation-detail', args=[quotation.pk])})

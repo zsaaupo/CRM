@@ -1,0 +1,29 @@
+{% include 'inventory/includes/field.html' with name='name' label='Account name' required=True maxlength=150 only %}
+{% if financial_account %}
+<div class="user-form-full text-sm text-stone-600">
+    {{ financial_account.get_type_display }} · {{ financial_account.warehouse.name|default:'Shared' }}
+    <p class="mt-1">Opening balance {{ financial_account.currency }} {{ financial_account.opening_balance }}</p>
+</div>
+{% else %}
+<div>
+    <label for="id_type" class="form-label">Account type</label>
+    <select id="id_type" name="type" class="form-input" aria-describedby="id_type_error" required>
+        <option value="">Select a type</option>
+        {% for value, label in account_types %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+    </select>
+    <p id="id_type_error" data-error-for="type" class="form-error" hidden></p>
+</div>
+<div>
+    <label for="id_warehouse" class="form-label">Warehouse</label>
+    <select id="id_warehouse" name="warehouse" class="form-input" aria-describedby="id_warehouse_error"
+            {% if shared_accounts %}data-nullable-field="true"{% else %}required{% endif %}>
+        {% if shared_accounts %}<option value="">Shared account</option>{% endif %}
+        {% for warehouse in warehouses %}<option value="{{ warehouse.pk }}">{{ warehouse.name }}</option>{% endfor %}
+    </select>
+    <p id="id_warehouse_error" data-error-for="warehouse" class="form-error" hidden></p>
+</div>
+{% with label='Opening balance ('|add:currency|add:')' %}
+{% include 'inventory/includes/field.html' with name='opening_balance' label=label field_type='number' value='0.0000' minimum='0' maximum='99999999999.9999' required=True only %}
+{% endwith %}
+{% endif %}
+{% include 'inventory/includes/field.html' with name='is_active' label='Active' field_type='checkbox' checked=True only %}

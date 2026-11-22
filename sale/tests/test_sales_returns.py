@@ -11,6 +11,7 @@ from django.urls import reverse
 from rest_framework.exceptions import ValidationError
 from rest_framework.test import APIClient
 
+from accounting.models import FinancialAccount
 from common.models import ProductStatus, TradeStatus
 from inventory.models import Currency, Product, ProductType, UnitOfMeasure
 from sale.models import SalesOrder, SalesOrderItem, SalesReturn, SalesReturnItem
@@ -31,7 +32,9 @@ class SalesReturnTests(TestCase):
         cls.unit = UnitOfMeasure.objects.create(code='RETURN-PCS', name='Pieces')
         cls.product = Product.objects.create(sku='RETURN-PRODUCT', name='Product', currency_id='BDT', unit=cls.unit)
         cls.stock = Stock.objects.create(warehouse=cls.warehouse, product=cls.product, quantity=10, create_by='initial')
-        cls.order = SalesOrder.objects.create(currency_id='BDT', exchange_rate=1, warehouse=cls.warehouse)
+        account = FinancialAccount.objects.create(name='Sales bank', type='bank', warehouse=cls.warehouse)
+        cls.order = SalesOrder.objects.create(currency_id='BDT', exchange_rate=1, warehouse=cls.warehouse,
+                                             payment_account=account)
         cls.sold = SalesOrderItem.objects.create(sales_order=cls.order, product=cls.product, unit=cls.unit, line_number=1,
                                                 quantity=Decimal('5.123456'), unit_price=10)
         complete_sale(cls.admin, cls.order.pk)

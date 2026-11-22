@@ -9,6 +9,7 @@ from django.test import TransactionTestCase
 from rest_framework.exceptions import ValidationError
 from rest_framework.test import APIRequestFactory, force_authenticate
 
+from accounting.models import FinancialAccount, SalesPayment
 from common.models import ProductStatus, TradeStatus
 from inventory.models import Currency, Product, ProductType, UnitOfMeasure
 from sale.api_views import SalesOrderItemUpdateAPIView, SalesOrderUpdateAPIView
@@ -27,11 +28,13 @@ class SaleCompletionConcurrencyTests(TransactionTestCase):
         self.unit = UnitOfMeasure.objects.create(name='Pieces', code='RACE-PCS')
         self.product = Product.objects.create(name='Rice', sku='RACE-RICE', unit=self.unit, currency_id='BDT')
         self.warehouse = WareHouse.objects.create(name='Main', address='Dhaka', phone='1')
+        self.payment_account = FinancialAccount.objects.create(name='Sales bank', type='bank', warehouse=self.warehouse)
         self.stock = Stock.objects.create(warehouse=self.warehouse, product=self.product, quantity=5)
         self.order = self.new_order(2)
 
     def new_order(self, quantity):
-        order = SalesOrder.objects.create(currency_id='BDT', exchange_rate=1, warehouse=self.warehouse)
+        order = SalesOrder.objects.create(currency_id='BDT', exchange_rate=1, warehouse=self.warehouse,
+                                          payment_account=self.payment_account)
         SalesOrderItem.objects.create(sales_order=order, line_number=1, product=self.product, unit=self.unit,
                                        quantity=quantity, unit_price=1)
         return order
@@ -59,6 +62,7 @@ class SaleCompletionConcurrencyTests(TransactionTestCase):
         action = lambda actor: complete_sale(actor, self.order.pk)[1]
         self.assertEqual(sorted(self.race([action, action])), [False, True])
         self.assertEqual(Stock.objects.get().quantity, Decimal('3'))
+        self.assertEqual(SalesPayment.objects.filter(sales_order=self.order).count(), 1)
 
     def test_two_sales_cannot_oversell_shared_stock(self):
         other = self.new_order(4)

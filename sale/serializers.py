@@ -4,6 +4,7 @@ from django.utils import timezone
 from rest_framework import serializers
 from rest_framework.exceptions import NotFound
 
+from accounting.serializers import PaymentAccountField
 from common.models import TradeStatus
 from common.serializers import AUDIT_FIELDS, CatalogSerializer
 from inventory.models import Currency
@@ -20,6 +21,8 @@ class SalesOrderSerializer(WarehouseScopedSerializerMixin, CatalogSerializer):
     )
     customer_name = serializers.CharField(source='customer.name', read_only=True, default=None)
     customer_code = serializers.CharField(source='customer.code', read_only=True, default=None)
+    payment_account = PaymentAccountField()
+    payment_account_name = serializers.CharField(source='payment_account.name', read_only=True, default=None)
     currency = serializers.SlugRelatedField(slug_field='code', queryset=Currency.objects.all())
     status = serializers.SlugRelatedField(slug_field='code', queryset=TradeStatus.objects.all(), required=False)
     subtotal = serializers.DecimalField(max_digits=40, decimal_places=4, read_only=True)
@@ -30,7 +33,8 @@ class SalesOrderSerializer(WarehouseScopedSerializerMixin, CatalogSerializer):
         model = SalesOrder
         fields = [
             'id', 'order_number', 'customer', 'customer_name', 'customer_code', 'order_date', 'expected_delivery_date', 'currency',
-            'exchange_rate', 'status', 'warehouse', 'warehouse_name', 'customer_reference',
+            'exchange_rate', 'status', 'warehouse', 'warehouse_name', 'payment_account', 'payment_account_name',
+            'customer_reference',
             'billing_address', 'shipping_address', 'shipping_cost', 'notes', 'confirmed_at', 'fulfilled_at', 'is_completed',
             'subtotal', 'tax_total', 'grand_total', *AUDIT_FIELDS[1:],
         ]
@@ -178,6 +182,7 @@ class SalesOrderCreateSerializer(SalesOrderSerializer):
         order = lock_order(instance.pk, self.context['request'].user)
         items = validated_data.pop('items', None)
         self.instance = order
+        validated_data = self.validate(validated_data)
         if items is not None:
             request = self.context.get('request')
             actor = validated_data.get('modified_by', order.modified_by)

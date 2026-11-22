@@ -5,7 +5,14 @@
 <div class="workspace-content" data-record-detail data-api-url="{{ detail_api_url }}" data-title-field="order_number" data-login-url="{% url 'account_pages:login' %}">
     <div class="page-heading">
         <div class="min-w-0 max-w-full"><p class="page-eyebrow">Sales</p><h1 class="page-title break-all"><span data-record-title>Sales details</span><span class="text-emerald-600">.</span></h1><p class="page-description">Order information, products and totals.</p></div>
-        <div class="flex flex-wrap gap-3">{% include 'report/includes/download_button.html' %}<a href="{{ list_url }}" class="secondary-button">Back to sales <span aria-hidden="true">&rarr;</span></a>{% if quotation_url %}<a href="{{ quotation_url }}" class="secondary-button">Source quotation</a>{% endif %}{% if edit_url %}<a href="{{ edit_url }}" class="primary-button compact-primary" data-sale-edit hidden>Edit sale</a>{% endif %}{% if return_url %}<a href="{{ return_url }}" class="primary-button compact-primary" data-sale-return hidden>Create return</a>{% endif %}</div>
+        <div class="flex flex-wrap gap-3">
+            {% include 'report/includes/download_button.html' %}
+            <a href="{{ list_url }}" class="secondary-button">Back to sales <span aria-hidden="true">&rarr;</span></a>
+            {% if payments_url %}<a href="{{ payments_url }}" class="secondary-button" data-sale-payments hidden>Payments</a>{% endif %}
+            {% if quotation_url %}<a href="{{ quotation_url }}" class="secondary-button">Source quotation</a>{% endif %}
+            {% if edit_url %}<a href="{{ edit_url }}" class="primary-button compact-primary" data-sale-edit hidden>Edit sale</a>{% endif %}
+            {% if return_url %}<a href="{{ return_url }}" class="primary-button compact-primary" data-sale-return hidden>Create return</a>{% endif %}
+        </div>
     </div>
     {% include 'includes/detail_status.html' %}
     <div data-record-content hidden>
@@ -19,6 +26,7 @@
                 {% include 'includes/detail_field.html' with name='customer_name' label='Customer' only %}
                 {% include 'includes/detail_field.html' with name='customer_code' label='Customer code' only %}
                 {% include 'includes/detail_field.html' with name='warehouse_name' label='Warehouse' only %}
+                {% include 'includes/detail_field.html' with name='payment_account_name' label='Payment account' only %}
                 {% include 'includes/detail_field.html' with name='billing_address' label='Billing address' full=True only %}
                 {% include 'includes/detail_field.html' with name='shipping_address' label='Shipping address' full=True only %}
                 {% include 'includes/detail_field.html' with name='customer_reference' label='Customer reference' only %}

@@ -49,9 +49,11 @@ async function setup({ completed = false, failPage = false, conflict = false, ed
     minimumPrice = '8.0000', quotation = false } = {}) {
     const form = new Element('form');
     const fields = Object.fromEntries(['customer', 'warehouse', 'customer_reference', 'order_date', 'expected_delivery_date', 'currency',
-        'billing_address', 'shipping_address', 'exchange_rate', 'status', 'shipping_cost', 'notes', 'csrfmiddlewaretoken'].map(name => [name, new Element('input')]));
+        'billing_address', 'shipping_address', 'exchange_rate', 'status', 'shipping_cost', 'notes', 'payment_account',
+        'csrfmiddlewaretoken'].map(name => [name, new Element('input')]));
     if (quotation) {
         delete fields.status;
+        delete fields.payment_account;
         fields.valid_until = new Element('input');
         fields.terms = new Element('textarea');
     }
@@ -68,9 +70,11 @@ async function setup({ completed = false, failPage = false, conflict = false, ed
     form.querySelectorAll = selector => selector === '[data-sale-line]' ? parts.lines.children : [];
     parts.lines.querySelectorAll = () => parts.lines.children;
     const options = { warehouse_scope: {all_warehouses: !restricted, warehouse: restricted ? 1 : null}, base_currency: 'BDT', customer: [], warehouse: [{ value: 1, label: 'Main' }],
+        payment_account: [{ value: 30, label: 'Main bank', warehouse: 1 }, { value: 31, label: 'Shared', warehouse: null }],
         currency: [{ value: 'BDT', label: 'Taka', exchange_rate: '1' }, { value: 'USD', label: 'Dollar', exchange_rate: '120' }],
         status: [{ value: 'draft', label: 'Draft' }, { value: 'review', label: 'Review' }], product: [{ value: 5, label: 'Rice', unit: 9, unit_label: 'Pieces (PCS)', currency: 'BDT', minimum_sale_price: minimumPrice }] };
     const record = { id: 7, is_completed: completed, customer: 44, customer_name: 'Historical customer', warehouse: restricted ? 1 : 2,
+        payment_account: restricted ? 30 : 31,
         warehouse_name: 'Inactive branch', customer_reference: 'REF', order_date: '2026-11-15', expected_delivery_date: null,
         currency: 'USD', exchange_rate: '121.50000000', status: 'review', shipping_cost: '3.0000', notes: 'Agreed terms' };
     const items = Array.from({ length: 26 }, (_, index) => ({ id: index + 101, line_number: index + 1, product: 5, unit: 9,
@@ -110,6 +114,7 @@ assert.equal(editor.fields.status.value, 'review');
 assert.equal(editor.parts.lines.children.length, 26);
 assert.equal(editor.parts.lines.children[0].querySelector('[data-line-minimum-sale-price]').value, '8.0000 BDT');
 assert.equal(editor.fields.exchange_rate.value, '121.50000000');
+assert.equal(editor.fields.payment_account.value, '31');
 assert.equal(editor.fields.warehouse.children.at(-1).textContent, 'Inactive branch (existing warehouse)');
 editor.fields.status.value = 'draft';
 await editor.form.listeners.submit(event);
@@ -136,14 +141,18 @@ await failed.form.listeners.submit(event);
 assert.equal(failed.saved.length, 0);
 const creator = await setup({edit: false});
 assert.equal(creator.fields.status.value, 'draft');
+assert.deepEqual(creator.fields.payment_account.children.map(option => option.value), ['', '31']);
+creator.fields.payment_account.value = '31';
 creator.fields.status.value = 'review';
 await creator.form.listeners.submit(event);
 assert.equal(creator.saved[0].data.status, 'review');
+assert.equal(creator.saved[0].data.payment_account, '31');
 console.log('Sales edit UI passed: custom status, all item pages, saved prices and IDs, completion read-only guard, concurrent completion, creation and success redirect.');
 
 const restrictedCreator = await setup({edit: false, restricted: true});
 assert.equal(restrictedCreator.fields.warehouse.disabled, true);
 assert.equal(String(restrictedCreator.fields.warehouse.value), '1');
+restrictedCreator.fields.payment_account.value = '30';
 await restrictedCreator.form.listeners.submit(event);
 assert.equal(String(restrictedCreator.saved[0].data.warehouse), '1');
 const restrictedEditor = await setup({restricted: true});
@@ -175,6 +184,7 @@ assert.equal(quotationEditor.fields.valid_until.min, '2026-11-15');
 await quotationEditor.form.listeners.submit(event);
 assert.equal(quotationEditor.saved[0].data.terms, 'Quoted terms');
 assert.equal(quotationEditor.saved[0].data.status, undefined);
+assert.equal(quotationEditor.saved[0].data.payment_account, undefined);
 assert.equal(quotationEditor.saved[0].data.items[0].id, 101);
 assert.deepEqual(quotationEditor.redirects, ['/quotations/']);
 const issuedQuotation = await setup({quotation: true, completed: true});

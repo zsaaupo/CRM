@@ -9,6 +9,7 @@ from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APIClient
 
+from accounting.models import FinancialAccount
 from inventory.models import Product, UnitOfMeasure
 from people.models import Party
 from report.services import snapshot
@@ -24,6 +25,7 @@ class QuotationTests(TestCase):
         cls.user = get_user_model().objects.create_user(username='quotation-user')
         cls.root = get_user_model().objects.create_superuser(username='quotation-admin')
         cls.warehouse = WareHouse.objects.create(name='Main', address='Main address', phone='1')
+        cls.payment_account = FinancialAccount.objects.create(name='Sales bank', type='bank', warehouse=cls.warehouse)
         cls.other_warehouse = WareHouse.objects.create(name='Branch', address='Branch address', phone='2')
         cls.role = assign_warehouse_role(cls.user, warehouse=cls.warehouse).role
         cls.party = Party.objects.create(code='QUOTE-CLIENT', name='Original Customer', address='Original address',
@@ -57,7 +59,8 @@ class QuotationTests(TestCase):
         return response.data.get('sales_quotation', response.data)
 
     def action(self, pk, action, expected=200):
-        response = self.client.post(reverse('sale:quotation-action', args=[pk, action]), {}, format='json',
+        data = {'payment_account': self.payment_account.pk} if action == 'convert' else {}
+        response = self.client.post(reverse('sale:quotation-action', args=[pk, action]), data, format='json',
                                     HTTP_X_CSRFTOKEN=self.token)
         self.assertEqual(response.status_code, expected, response.data)
         return response.data.get('sales_quotation', response.data)
@@ -120,6 +123,7 @@ class QuotationTests(TestCase):
         order = record.sales_order
         self.assertEqual(SalesOrder.objects.count(), 1)
         self.assertEqual(order.status_id, 'draft')
+        self.assertEqual(order.payment_account, self.payment_account)
         self.assertFalse(order.is_completed)
         self.assertEqual(order.grand_total, Decimal('255.0000'))
         self.assertEqual(order.items.get().quantity, Decimal('2.500000'))

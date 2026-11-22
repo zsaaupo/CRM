@@ -9,6 +9,7 @@ from django.test import Client, TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
 
+from accounting.models import FinancialAccount
 from common.models import ProductStatus, TradeStatus
 from inventory.models import Product, UnitOfMeasure
 from people.models import Party
@@ -25,6 +26,7 @@ class SalesIntegrationTests(TestCase):
         self.product = Product.objects.create(name='Keyboard', sku='KEY', unit=self.unit, currency_id='BDT',
                                                sale_price='10', product_tax='15')
         self.warehouse = WareHouse.objects.create(name='Main', address='Dhaka', phone='01')
+        self.payment_account = FinancialAccount.objects.create(name='Sales bank', type='bank', warehouse=self.warehouse)
         self.stock = Stock.objects.create(product=self.product, warehouse=self.warehouse, quantity='20')
         self.order = SalesOrder.objects.create(customer=self.customer, warehouse=self.warehouse,
             currency_id='BDT', exchange_rate='1', shipping_cost='5', billing_address='Saved billing',
@@ -55,7 +57,8 @@ class SalesIntegrationTests(TestCase):
 
     def payload(self, **changes):
         return {'customer': self.customer.pk, 'warehouse': self.warehouse.pk, 'currency': 'BDT',
-                'exchange_rate': '1', 'billing_address': 'Billing snapshot', 'shipping_address': 'Shipping snapshot',
+                'exchange_rate': '1', 'payment_account': self.payment_account.pk,
+                'billing_address': 'Billing snapshot', 'shipping_address': 'Shipping snapshot',
                 'shipping_cost': '5', 'items': [self.line()], **changes}
 
     def test_create_order_and_items_is_atomic_and_never_changes_stock(self):

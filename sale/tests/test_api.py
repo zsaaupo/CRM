@@ -10,6 +10,7 @@ from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
 
+from accounting.models import FinancialAccount
 from common.models import ProductStatus, TradeStatus
 from inventory.models import Currency, Product, UnitOfMeasure
 from people.models import Party
@@ -22,6 +23,7 @@ class SalesAPITests(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_user(username='sale-operator')
         self.role = assign_warehouse_role(self.user, all_warehouses=True).role
+        self.payment_account = FinancialAccount.objects.create(name='Sales bank', type='bank')
         self.unit = UnitOfMeasure.objects.create(name='Pieces', code='PCS')
         self.product = Product.objects.create(sku='KEYBOARD', name='Keyboard', currency_id='BDT', unit=self.unit)
         self.customer = Party.objects.create(code='SUP-1', name='Example customer', is_customer=True)
@@ -40,7 +42,8 @@ class SalesAPITests(TestCase):
             codename__in=[f'{action}_{model._meta.model_name}' for action in actions]))
 
     def order_payload(self, **changes):
-        return {'currency': 'BDT', 'exchange_rate': '1.00000000', 'customer': self.customer.pk, **changes}
+        return {'currency': 'BDT', 'exchange_rate': '1.00000000', 'customer': self.customer.pk,
+                'payment_account': self.payment_account.pk, **changes}
 
     def item_payload(self, **changes):
         return {'sales_order': self.order.pk, 'line_number': 2, 'product': self.product.pk, 'unit': self.unit.pk,

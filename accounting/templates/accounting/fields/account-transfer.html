@@ -1,0 +1,3 @@
+{% include 'accounting/fields/accounts_select.html' with name='source_account' label='From account' accounts=fields_accounts only %}
+{% include 'accounting/fields/accounts_select.html' with name='destination_account' label='To account' accounts=fields_accounts only %}
+{% include 'accounting/fields/posting.html' with maximum_amount='99999999999.9999' %}

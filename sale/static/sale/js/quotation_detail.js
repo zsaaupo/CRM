@@ -4,6 +4,7 @@ import { detailValue, initializeRecordDetail } from "../../js/record_detail.js";
 export function initializeQuotationDetail(panel) {
     const form = panel.querySelector("[data-quotation-actions]");
     const buttons = form ? [...form.querySelectorAll("[data-quotation-action]")] : [];
+    const accountSection = form?.querySelector("[data-quotation-payment-account]");
     const rows = panel.querySelector("[data-quotation-lines]");
     let busy = false;
 
@@ -17,14 +18,17 @@ export function initializeQuotationDetail(panel) {
     for (const button of buttons) {
         button.addEventListener("click", async () => {
             if (busy || button.hidden) return;
+            const converting = button.dataset.quotationAction === "convert";
+            const account = form.elements.namedItem("payment_account");
+            if (converting && !account?.reportValidity()) return;
             busy = true;
             for (const action of buttons) action.disabled = true;
             const feedback = form.querySelector("[data-quotation-feedback]");
             feedback.hidden = true;
             try {
                 const csrf = form.elements.namedItem("csrfmiddlewaretoken").value;
-                const data = await postJSON(button.dataset.url, {}, csrf);
-                const orderUrl = button.dataset.quotationAction === "convert" ? data.sales_quotation.sales_order_url : null;
+                const data = await postJSON(button.dataset.url, converting ? { payment_account: account.value } : {}, csrf);
+                const orderUrl = converting ? data.sales_quotation.sales_order_url : null;
                 window.location.assign(orderUrl || data.quotation_url);
             } catch (error) {
                 const details = Object.values(error.errors || {}).flat().join(" ");
@@ -44,6 +48,7 @@ export function initializeQuotationDetail(panel) {
         showLink("[data-quotation-order]", record.sales_order_url);
         showLink("[data-quotation-source]", record.revised_from_url);
         for (const button of buttons) button.hidden = !record.actions.includes(button.dataset.quotationAction);
+        if (accountSection) accountSection.hidden = !record.actions.includes("convert");
         if (form) form.hidden = buttons.every(button => button.hidden);
         if (!rows) return;
         rows.replaceChildren();

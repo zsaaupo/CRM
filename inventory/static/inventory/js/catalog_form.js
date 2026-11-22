@@ -17,6 +17,18 @@ if (form) {
     let ready = !form.dataset.optionsUrl && !form.dataset.detailUrl;
     let loading = false;
     let readOnly = false;
+    const paymentAccount = form.elements.namedItem("payment_account");
+    const warehouse = form.elements.namedItem("warehouse");
+
+    function filterPaymentAccounts() {
+        if (!paymentAccount || !warehouse) return;
+        for (const option of paymentAccount.options) {
+            option.disabled = option.hidden = Boolean(option.dataset.warehouse && option.dataset.warehouse !== warehouse.value);
+            if (option.disabled && option.selected) paymentAccount.value = "";
+        }
+    }
+
+    if (paymentAccount && warehouse) warehouse.addEventListener("change", filterPaymentAccounts);
 
     function setDisabled(disabled) {
         for (const input of [...controls, ...checkboxGroups, submit]) {
@@ -58,6 +70,7 @@ if (form) {
                         const option = document.createElement("option");
                         option.value = String(record.value);
                         option.textContent = record.label;
+                        if (select === paymentAccount && record.warehouse != null) option.dataset.warehouse = String(record.warehouse);
                         select.append(option);
                     }
                     const value = select.dataset.default;
@@ -101,6 +114,7 @@ if (form) {
                     form.querySelector("[data-current-image]").hidden = false;
                 }
             }
+            filterPaymentAccounts();
             ready = true;
             status.hidden = true;
             setDisabled(false);

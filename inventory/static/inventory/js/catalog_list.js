@@ -23,10 +23,15 @@ export function catalogRow(record, columns, editUrlTemplate = "", onDelete = nul
             if (viewUrlTemplate) {
                 const view = document.createElement("a");
                 view.href = viewUrlTemplate.replace("/0/", `/${encodeURIComponent(record.id)}/`);
-                view.className = "icon-button";
+                view.className = column.view_label ? "text-button" : "icon-button";
                 view.title = `View ${record.name || record.full_name || record.order_number || record.transfer_number || record.return_number || record.code || record.id}`;
                 view.setAttribute("aria-label", view.title);
-                view.append(actionIcon("M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12ZM15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"));
+                if (column.view_label) {
+                    view.textContent = column.view_label;
+                    view.removeAttribute("aria-label");
+                } else {
+                    view.append(actionIcon("M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12ZM15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"));
+                }
                 actions.append(view);
             }
             if (editUrlTemplate) {

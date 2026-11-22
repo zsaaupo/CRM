@@ -1,7 +1,7 @@
 import { getJSON, postJSON, patchJSON } from "../../js/api.js";
 
-const headerFields = ["customer", "customer_reference", "warehouse", "billing_address", "shipping_address", "order_date", "expected_delivery_date", "currency", "exchange_rate", "status", "shipping_cost", "notes"];
-const quotationFields = [...headerFields.filter(name => name !== "status"), "valid_until", "terms"];
+const headerFields = ["customer", "customer_reference", "warehouse", "billing_address", "shipping_address", "order_date", "expected_delivery_date", "currency", "exchange_rate", "status", "shipping_cost", "notes", "payment_account"];
+const quotationFields = [...headerFields.filter(name => name !== "status" && name !== "payment_account"), "valid_until", "terms"];
 const lineFields = ["product", "unit", "quantity", "unit_price", "discount_amount", "tax_rate", "description"];
 
 export function salesPayload(form) {
@@ -68,6 +68,14 @@ export function initializeSalesForm(form) {
             option.textContent = record.label;
             select.append(option);
         }
+    }
+
+    function updatePaymentAccounts(preferred = field("payment_account").value) {
+        const select = field("payment_account");
+        const warehouse = String(field("warehouse").value);
+        const eligible = options.payment_account.filter(account => account.warehouse == null || String(account.warehouse) === warehouse);
+        choices(select, eligible, eligible.length ? "Select payment account" : "No payment account for this warehouse");
+        select.value = eligible.some(account => String(account.value) === String(preferred)) ? String(preferred) : "";
     }
 
     function updateLineNumbers() {
@@ -172,6 +180,7 @@ export function initializeSalesForm(form) {
             if (isEdit && !record?.id) throw new Error(`Could not load the ${documentName}. Return to the list.`);
             readOnly = isLocked(record);
             if (readOnly) throw new Error(lockedMessage);
+            if (!quotation && !Array.isArray(data.payment_account)) throw new Error("Could not load payment accounts. Try again.");
             for (const name of quotation ? ["currency", "product"] : ["currency", "status", "product"]) {
                 if (!Array.isArray(data[name])) throw new Error(`Could not load ${documentName} choices. Please try again.`);
                 if (!data[name].length) throw new Error(`No ${name} records are available. Add the missing records or contact your administrator, then try again.`);
@@ -212,6 +221,7 @@ export function initializeSalesForm(form) {
                 for (const name of quotation ? quotationFields : headerFields) field(name).value = record[name] ?? '';
                 field('exchange_rate').readOnly = record.currency === options.base_currency;
             }
+            if (!quotation) updatePaymentAccounts(record?.payment_account ?? "");
             updateDateLimits();
             ready = true;
             lines.replaceChildren();
@@ -263,6 +273,7 @@ export function initializeSalesForm(form) {
     retry.addEventListener("click", load);
     addButton.addEventListener("click", () => addLine(true));
     field("currency").addEventListener("change", updateCurrency);
+    if (!quotation) field("warehouse").addEventListener("change", () => updatePaymentAccounts());
     field('customer').addEventListener('change', () => {
         const customer = options.customer.find((item) => String(item.value) === field('customer').value);
         for (const name of ['billing_address', 'shipping_address']) {

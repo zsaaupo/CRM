@@ -1,0 +1,10 @@
+<div>
+    <label for="id_{{ name }}" class="form-label">{{ label }}</label>
+    <select id="id_{{ name }}" name="{{ name }}" class="form-input" aria-describedby="id_{{ name }}_error" required>
+        <option value="">Select an account</option>
+        {% for account in accounts %}
+        <option value="{{ account.pk }}">{{ account.name }} · {{ account.get_type_display }}</option>
+        {% endfor %}
+    </select>
+    <p id="id_{{ name }}_error" data-error-for="{{ name }}" class="form-error" hidden></p>
+</div>

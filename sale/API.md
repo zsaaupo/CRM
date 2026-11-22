@@ -25,6 +25,7 @@ POST `/sale/api/sales-orders/`:
 {
   "customer": 1,
   "warehouse": 1,
+  "payment_account": 2,
   "currency": "BDT",
   "exchange_rate": "1.00000000",
   "customer_reference": "CUSTOMER-PO-100",
@@ -47,7 +48,9 @@ POST `/sale/api/sales-orders/`:
 ```
 
 Replace IDs with real records. Customer and warehouse are optional and accept
-null. Customer must have is_customer=True and must not be soft-deleted. Currency
+null. `payment_account` is required and must refer to an active base-currency
+account for the sale warehouse or a shared account within the user's scope.
+Customer must have is_customer=True and must not be soft-deleted. Currency
 uses an existing code. Exchange rate is positive and must be 1 for the base
 currency. Order date defaults to today; optional expected_delivery_date cannot
 precede it. The unit must match the product. Quantity and line numbers must be
@@ -85,7 +88,7 @@ Uncompleted orders and items remain editable/deletable at any trade status with
 the required permissions. PATCH `{"status": "confirmed"}` changes the status
 label only. Completed orders and their items reject updates/deletion with 409.
 
-## Complete a sale and deduct stock
+## Complete a sale and post payment
 
 Warehouse scope and model permissions come from the user's single role for all order/item APIs,
 including this completion action. Specific-warehouse users cannot read, change,
@@ -106,10 +109,16 @@ warehouse and at least one item are required. Quantities are combined by product
 ID and deducted from that warehouse's existing Stock balances. Missing or
 insufficient stock returns 400 and rolls back all changes. Stock cannot go negative.
 
+Completion credits the outstanding total to the order's `payment_account` as a
+sales payment. Foreign-currency totals are converted with the saved exchange
+rate. Stock deduction, payment posting and completion are committed together.
+Assign a payment account to an older open sale before completing it.
+
 Success returns 200 with `message`, `completed_now` and `sales_order`.
 The sale becomes `is_completed=true`, `fulfilled_at` records the completion time,
 and its header/items become read-only, including deletion and new lines.
-Repeating the request returns `completed_now=false` without deducting again.
+Repeating the request returns `completed_now=false` and keeps the original stock
+deduction and payment.
 Concurrent stock updates may return a retryable 409; retrying is safe.
 TradeStatus is preserved. Completion is independent of the status label.
 The completion flag and timestamps cannot be written through ordinary CRUD APIs.
@@ -122,7 +131,8 @@ name/code, order number, reference and notes. Item search includes product
 name/SKU, order number and description. Filter items with `?sales_order=<id>`.
 
 GET `/sales-orders/options/` requires both order/item add permissions. It returns
-customer, warehouse, currency, status and product choices. Status choices contain
+customer, warehouse, currency, status, product and `payment_account` choices.
+Payment-account choices include their warehouse IDs. Status choices contain
 all TradeStatus records. Products include unit, currency, sale price, minimum_sale_price (decimal string or null) and tax defaults; the UI
 prefills prices only when currencies match and requires manual prices otherwise.
 Create/edit lines show the minimum sale price read-only in the product currency,
@@ -190,7 +200,7 @@ quotation.
 | `POST quotations/<id>/issue/` | Lock the draft and save the PDF snapshot |
 | `POST quotations/<id>/accept/` or `decline/` | Record a response through the validity date |
 | `POST quotations/<id>/revise/` | Copy the terms and lines into a fresh draft and supersede an issued quote |
-| `POST quotations/<id>/convert/` | Create one linked draft sales order from an accepted quote |
+| `POST quotations/<id>/convert/` | Create one linked draft sales order from an accepted quote using the supplied `payment_account` |
 
 Send `{}` to the workflow endpoints. The response includes `sales_quotation`
 and `quotation_url`. Retrying conversion returns the already linked order.

@@ -81,6 +81,8 @@ class SalesOrder(SalesTotals, TimeStampedModel):
                                  related_name='sales_orders')
     warehouse = models.ForeignKey('warehouse.WareHouse', on_delete=models.PROTECT, null=True, blank=True,
                                   related_name='sales_orders')
+    payment_account = models.ForeignKey('accounting.FinancialAccount', on_delete=models.PROTECT, null=True, blank=True,
+                                        related_name='sales_to_receive')
     order_date = models.DateField(default=timezone.localdate)
     expected_delivery_date = models.DateField(null=True, blank=True)
     currency = models.ForeignKey('inventory.Currency', to_field='code', on_delete=models.PROTECT,
@@ -126,6 +128,12 @@ class SalesOrder(SalesTotals, TimeStampedModel):
                 errors['customer'] = 'Choose a non-deleted party marked as a customer.'
         if self.currency_id == settings.INVENTORY_BASE_CURRENCY and self.exchange_rate != Decimal('1'):
             errors['exchange_rate'] = 'The base currency exchange rate must be 1.'
+        if self.payment_account_id:
+            from accounting.services import payment_account_error
+
+            error = payment_account_error(self.payment_account, self.warehouse_id)
+            if error:
+                errors['payment_account'] = error
         if errors:
             raise ValidationError(errors)
 
