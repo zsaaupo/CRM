@@ -1,1 +1,5 @@
 {% extends 'returns/detail.html' %}
+
+{% block return_payment_fields %}
+{% include 'includes/detail_field.html' with name='refund_amount' label='Refunded amount' kind='money' only %}
+{% endblock %}

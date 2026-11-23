@@ -37,6 +37,7 @@ Creating an order with nested `items` also requires
 ```json
 {
   "supplier": 1,
+  "payment_account": 2,
   "order_date": "2026-11-14",
   "expected_date": "2026-11-20",
   "currency": "BDT",
@@ -57,6 +58,9 @@ read-only `supplier_name` and `supplier_code`; lists and details display those
 labels. Status defaults to `draft`; the order date
 defaults to today. Exchange rate is required and must be positive; base-currency
 orders require rate 1. Expected date cannot precede order date.
+
+`payment_account` is required. Use an active base-currency account assigned to
+the receiving warehouse or a shared account within the user's scope.
 
 A successful creation returns 201 with `message` and `purchase_order` keys.
 `order_number`, IDs, audit fields, `subtotal`, `tax_total` and `grand_total` are
@@ -123,7 +127,8 @@ creation redirects to the purchase list. Both pages require order view
 permission; creation additionally requires order and item add permissions.
 
 The options API requires both add permissions and returns `supplier`, `currency`,
-`status`, `product` and `base_currency`. Supplier choices include only non-deleted
+`status`, `product`, `base_currency` and `payment_account`. Payment-account
+choices include their warehouse IDs. Supplier choices include only non-deleted
 parties with `is_supplier=true`, as `{"value": 1, "label": "Name (CODE)"}`.
 The create page uses these choices in an optional dropdown. Party view permission
 is not required just to choose a supplier for a purchase. Products include their unit ID, label,
@@ -226,7 +231,7 @@ or receipt occurs while the editor is open. The form then remains disabled with
 a read-only message. JavaScript interaction tests are available with
 `node purchase/tests/purchase_edit_ui.mjs`.
 
-## Receive a purchase and increase stock
+## Receive a purchase and post payment
 
 Purchase responses expose `is_received` (read-only, default false), `warehouse`
 (optional warehouse ID before receipt), and `warehouse_name` (read-only). Ordinary
@@ -237,11 +242,12 @@ when creating the order or PATCH it onto an existing unreceived purchase:
 PATCH /purchase/api/purchase-orders/12/update/
 Content-Type: application/json
 
-{"warehouse": 3}
+{"warehouse": 3, "payment_account": 2}
 ```
 
 The purchase creation page also loads active warehouses through the existing
 purchase options API. A draft can omit a warehouse, but receipt requires one.
+Assign a payment account to any older draft before receiving it.
 
 ```http
 POST /purchase/api/purchase-orders/receive/
@@ -274,21 +280,25 @@ Receiving performs one atomic operation:
 3. Create the warehouse/product Stock balance if absent, otherwise increment its
    quantity. Different purchases/suppliers share that same balance; different
    warehouses have separate balances.
-4. Set is_received=true and server audit fields. The header and all its items
+4. Post the purchase total as an outflow on the selected account's statement.
+   For foreign-currency orders, the API uses the saved exchange rate to convert
+   the total into the base currency. A zero total produces no ledger entry.
+5. Set is_received=true and server audit fields. The header and all its items
    become read-only through the APIs. PUT/PATCH/DELETE, adding new items and moving
    items into/out of the received order are blocked. GET/list access is unchanged.
 
 The API returns 200 with `message`, `received_now` and `purchase_order`. First
 success returns received_now=true. Repeating the request returns false and does
-not add stock again or change the receipt audit timestamp. This also prevents
-duplicate stock from concurrent receipt requests. A concurrent item edit either
+not add stock again, post another payment or change the receipt audit timestamp.
+This also prevents duplicates from concurrent receipt requests. A concurrent item edit either
 finishes before receipt or is blocked; it cannot rewrite received quantities.
 
-False/missing is_received, invalid IDs, no receiving warehouse, invalid quantities
-or unsupported resulting stock precision return 400; missing purchases return
+False/missing is_received, invalid IDs, missing or ineligible payment accounts,
+insufficient funds, invalid quantities or unsupported stock precision return 400. A
+missing receiving warehouse also returns 400. Missing purchases return
 404; permission/CSRF failures return 403. Locked writes and retryable database
-contention return 409. Any failure rolls back the receipt flag and every stock
-update, leaving the purchase unreceived/editable. Retry a busy request with the
+contention return 409. A failure rolls back the receipt, stock, and payment
+writes. Retry a busy request with the
 same purchase ID and true flag.
 
 Receipt takes all items at their stored quantities, independently of trade status.
@@ -311,7 +321,7 @@ purchase. Completed returns count against the received quantity for each line.
 | GET | `<id>/` or `<id>/options/` | Get a return or the options for editing its draft |
 | PATCH, PUT | `<id>/` or `<id>/update/` | Update a draft |
 | DELETE | `<id>/` | Delete a draft |
-| POST | `complete/` | Deduct stock and complete a return |
+| POST | `complete/` | Deduct stock, record the supplier refund, and complete the return |
 
 Draft creation accepts the purchase ID, original line IDs, and decimal quantities.
 
@@ -323,10 +333,18 @@ Draft creation accepts the purchase ID, original line IDs, and decimal quantitie
 ```
 
 Send `{"return_id": 7, "is_completed": true}` to complete a draft. Completion
-deducts stock from the original receiving warehouse once and locks the return.
-If any product has insufficient stock, the entire operation rolls back and the
-draft stays editable. Repeating a completed request returns
-`completed_now: false`.
+deducts stock from the original receiving warehouse and posts the supplier
+refund to the account that paid for the purchase. The refund covers returned
+merchandise at its original discounted and taxed value using the exchange rate
+saved on the purchase. Partial return values are rounded cumulatively to four
+decimals. Earlier refunds reduce the amount available from the original payment.
+
+The account statement shows the refund as an inflow with the return number as
+its reference. The return detail includes the posted `refund_amount` and
+`currency`. Older purchases with no recorded payment complete with a zero
+refund. Stock deduction, refund posting, and completion commit together. If a
+step fails, the draft remains editable. A repeated request returns
+`completed_now: false` and reuses the original result.
 
 The endpoints use role permissions and warehouse scope. Draft creation requires
 view permissions for purchases and purchase items plus add permissions for

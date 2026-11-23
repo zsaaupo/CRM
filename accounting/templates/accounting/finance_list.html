@@ -12,6 +12,7 @@
     <div><dt class="form-label">Sales order</dt><dd>{{ sales_order.order_number }} · {{ sales_order.warehouse.name }}</dd></div>
     <div><dt class="form-label">Amount</dt><dd>{{ currency }} {{ payment_total }}</dd></div>
     <div><dt class="form-label">Paid</dt><dd>{{ currency }} {{ paid }}</dd></div>
+    <div><dt class="form-label">Refunded</dt><dd>{{ currency }} {{ refunded }}</dd></div>
     <div><dt class="form-label">Outstanding</dt><dd>{{ currency }} {{ due }}</dd></div>
 </dl>
 {% endif %}

@@ -50,7 +50,7 @@ function line() {
 async function setup({ received = false, failPage = false, conflict = false, edit = true, restricted = false } = {}) {
     const form = new Element('form');
     const fields = Object.fromEntries(['supplier', 'warehouse', 'supplier_reference', 'order_date', 'expected_date', 'currency',
-        'exchange_rate', 'status', 'shipping_cost', 'notes', 'csrfmiddlewaretoken'].map(name => [name, new Element('input')]));
+        'exchange_rate', 'status', 'shipping_cost', 'notes', 'payment_account', 'csrfmiddlewaretoken'].map(name => [name, new Element('input')]));
     fields.csrfmiddlewaretoken.value = 'csrf';
     const parts = Object.fromEntries(['status', 'header', 'submit', 'add-line', 'retry', 'lines'].map(name => [name, new Element()]));
     const spinner = new Element(); const label = new Element(); label.textContent = edit ? 'Save changes' : 'Create purchase';
@@ -63,12 +63,15 @@ async function setup({ received = false, failPage = false, conflict = false, edi
     form.querySelectorAll = selector => selector === '[data-purchase-line]' ? parts.lines.children : [];
     parts.lines.querySelectorAll = () => parts.lines.children;
     const options = { warehouse_scope: {all_warehouses: !restricted, warehouse: restricted ? 1 : null}, base_currency: 'BDT', supplier: [], warehouse: [{ value: 1, label: 'Main' }],
+        payment_account: [{ value: 30, label: 'Main bank', warehouse: 1 },
+            ...(restricted ? [] : [{ value: 31, label: 'Shared bank', warehouse: null }])],
         currency: [{ value: 'BDT', label: 'Taka', exchange_rate: '1' }, { value: 'USD', label: 'Dollar', exchange_rate: '120' }],
         status: [{ value: 'draft', label: 'Draft' }], product: [
             { value: 5, label: 'Rice', unit: 9, unit_label: 'Pieces (PCS)', cost_price: '12.3456' },
             { value: 6, label: 'Free sample', unit: 9, unit_label: 'Pieces (PCS)', cost_price: '0.0000' },
         ] };
     const record = { id: 7, is_received: received, supplier: 44, supplier_name: 'Historical supplier', warehouse: restricted ? 1 : 2,
+        payment_account: restricted ? 30 : 31,
         warehouse_name: 'Inactive branch', supplier_reference: 'REF', order_date: '2026-11-15', expected_date: null,
         currency: 'USD', exchange_rate: '121.50000000', status: 'draft', shipping_cost: '3.0000', notes: 'Agreed terms' };
     const items = Array.from({ length: 26 }, (_, index) => ({ id: index + 101, line_number: index + 1, product: 5, unit: 9,
@@ -105,6 +108,7 @@ assert.equal(editor.parts.lines.children.length, 26);
 assert.equal(editor.parts.submit.disabled, false);
 assert.equal(editor.fields.exchange_rate.value, '121.50000000');
 assert.equal(editor.fields.warehouse.value, 2);
+assert.equal(editor.fields.payment_account.value, '31');
 assert.equal(editor.parts.lines.children[0].querySelector('[data-line-field="unit_price"]').value, '11.2500');
 assert.ok(editor.calls.some(url => url.includes('page=2')));
 editor.parts.lines.children[0].querySelector('[data-line-field="quantity"]').value = '4.000001';
@@ -135,6 +139,11 @@ assert.equal(race.redirects.length, 0);
 
 const creator = await setup({ edit: false });
 assert.equal(creator.parts.lines.children.length, 1);
+assert.deepEqual(creator.fields.payment_account.children.map(option => option.value), ['', '31']);
+creator.fields.warehouse.value = '1';
+creator.fields.warehouse.listeners.change();
+assert.deepEqual(creator.fields.payment_account.children.map(option => option.value), ['', '30', '31']);
+creator.fields.payment_account.value = '30';
 const firstLine = creator.parts.lines.children[0];
 const productChoice = firstLine.querySelector('[data-line-field="product"]');
 const unitPrice = firstLine.querySelector('[data-line-field="unit_price"]');
@@ -144,6 +153,7 @@ assert.equal(unitPrice.value, '12.3456');
 unitPrice.value = '15.0000';
 await creator.form.listeners.submit(event);
 assert.equal(creator.saved[0].method, 'POST');
+assert.equal(creator.saved[0].data.payment_account, '30');
 assert.equal(creator.saved[0].data.items[0].id, undefined);
 assert.equal(creator.saved[0].data.items[0].unit_price, '15.0000');
 productChoice.value = '6';
@@ -179,6 +189,7 @@ console.log('Purchase editing UI passed: conditional icons, all item pages, pres
 const restrictedCreator = await setup({edit: false, restricted: true});
 assert.equal(restrictedCreator.fields.warehouse.disabled, true);
 assert.equal(String(restrictedCreator.fields.warehouse.value), '1');
+restrictedCreator.fields.payment_account.value = '30';
 await restrictedCreator.form.listeners.submit(event);
 assert.equal(String(restrictedCreator.saved[0].data.warehouse), '1');
 const restrictedEditor = await setup({restricted: true});

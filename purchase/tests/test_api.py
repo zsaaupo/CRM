@@ -11,18 +11,20 @@ from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
 
+from accounting.models import FinancialAccount
 from common.models import TradeStatus
 from inventory.models import Currency, Product, UnitOfMeasure
 from people.models import Party
 from purchase.models import PurchaseOrder, PurchaseOrderItem
 from purchase.serializers import PurchaseOrderItemSerializer, PurchaseOrderSerializer
-from warehouse.models import Stock
+from warehouse.models import Stock, WareHouse
 
 
 class PurchaseAPITests(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_user(username='purchase-operator')
         self.role = assign_warehouse_role(self.user, all_warehouses=True).role
+        self.payment_account = FinancialAccount.objects.create(name='Purchase bank', type='bank')
         self.unit = UnitOfMeasure.objects.create(name='Pieces', code='PCS')
         self.product = Product.objects.create(sku='KEYBOARD', name='Keyboard', currency_id='BDT', unit=self.unit)
         self.supplier = Party.objects.create(code='SUP-1', name='Example supplier', is_supplier=True)
@@ -41,7 +43,21 @@ class PurchaseAPITests(TestCase):
             codename__in=[f'{action}_{model._meta.model_name}' for action in actions]))
 
     def order_payload(self, **changes):
-        return {'currency': 'BDT', 'exchange_rate': '1.00000000', 'supplier': self.supplier.pk, **changes}
+        return {'currency': 'BDT', 'exchange_rate': '1.00000000', 'supplier': self.supplier.pk,
+                'payment_account': self.payment_account.pk, **changes}
+
+    def test_purchase_creation_requires_an_eligible_payment_account(self):
+        self.grant(PurchaseOrder, 'add')
+        url = reverse('purchase:purchase-order-list')
+        payload = self.order_payload()
+        del payload['payment_account']
+        branch = WareHouse.objects.create(name='Branch', address='Dhaka', phone='1')
+        branch_bank = FinancialAccount.objects.create(name='Branch bank', type='bank', warehouse=branch)
+        inactive_bank = FinancialAccount.objects.create(name='Inactive bank', type='bank', is_active=False)
+        for changes in ({}, {'payment_account': branch_bank.pk}, {'payment_account': inactive_bank.pk}):
+            response = self.client.post(url, {**payload, **changes}, format='json')
+            self.assertEqual(response.status_code, 400, response.data)
+            self.assertIn('payment_account', response.data)
 
     def item_payload(self, **changes):
         return {'purchase_order': self.order.pk, 'line_number': 2, 'product': self.product.pk, 'unit': self.unit.pk,

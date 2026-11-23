@@ -29,6 +29,8 @@ class PurchaseOrder(TimeStampedModel):
     expected_date = models.DateField(null=True, blank=True)
     warehouse = models.ForeignKey('warehouse.WareHouse', on_delete=models.PROTECT, null=True, blank=True,
                                   related_name='purchase_orders')
+    payment_account = models.ForeignKey('accounting.FinancialAccount', on_delete=models.PROTECT, null=True,
+                                        blank=True, related_name='purchases_to_pay')
     is_received = models.BooleanField(default=False, editable=False)
     currency = models.ForeignKey('inventory.Currency', to_field='code', on_delete=models.PROTECT,
                                  related_name='purchase_orders')
@@ -67,6 +69,12 @@ class PurchaseOrder(TimeStampedModel):
                 errors['supplier'] = 'Choose a non-deleted party marked as a supplier.'
         if self.currency_id == settings.INVENTORY_BASE_CURRENCY and self.exchange_rate != Decimal('1'):
             errors['exchange_rate'] = 'The base currency exchange rate must be 1.'
+        if self.payment_account_id:
+            from accounting.services import payment_account_error
+
+            error = payment_account_error(self.payment_account, self.warehouse_id)
+            if error:
+                errors['payment_account'] = error
         if errors:
             raise ValidationError(errors)
 
@@ -81,6 +89,12 @@ class PurchaseOrder(TimeStampedModel):
     @property
     def grand_total(self):
         return self.calculate_totals()[2]
+
+    @property
+    def original_payment_amount(self):
+        if hasattr(self, 'posted_payment_amount'):
+            return self.posted_payment_amount
+        return self.payments.filter(purchase_return__isnull=True).values_list('amount', flat=True).first()
 
     def calculate_totals(self):
         with localcontext() as context:

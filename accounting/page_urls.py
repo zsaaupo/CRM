@@ -2,7 +2,7 @@ from django.urls import path
 
 from .page_views import (
     ACCOUNTS, CATEGORIES, EXPENSES, AccountingFormPageView, AccountingListPageView, AccountStatementPageView,
-    AccountTransferFormPageView, AccountTransferListPageView, ExpenseDetailPageView,
+    AccountTransferFormPageView, AccountTransferListPageView, CashFlowListPageView, ExpenseDetailPageView,
 )
 
 
@@ -23,6 +23,7 @@ urlpatterns = [
     path('financial-accounts/<int:pk>/edit/', AccountingFormPageView.as_view(resource=ACCOUNTS, mode='edit'),
          name='edit-financial-account'),
     path('financial-accounts/<int:pk>/statement/', AccountStatementPageView.as_view(), name='account-statement'),
+    path('cash-flow/', CashFlowListPageView.as_view(), name='cash-flow-list'),
     path('account-transfers/', AccountTransferListPageView.as_view(), name='account-transfer-list'),
     path('account-transfers/add/', AccountTransferFormPageView.as_view(), name='add-account-transfer'),
 ]

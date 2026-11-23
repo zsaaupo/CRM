@@ -7,6 +7,7 @@ from django.db.models import F
 from django.utils import timezone
 from rest_framework.exceptions import APIException, NotFound, PermissionDenied, ValidationError
 
+from accounting.services import post_received_purchase_payment
 from inventory.models import Product
 from warehouse.models import Stock, WareHouse
 from warehouse.scope import lock_warehouse_scope, scoped_queryset
@@ -119,6 +120,7 @@ def receive_purchase(actor, purchase_id):
                 stock.refresh_from_db(fields=['quantity'])
                 if stock.quantity != expected_quantity:
                     raise ValidationError({'quantity': 'The database cannot store this resulting stock quantity accurately.'})
+            post_received_purchase_payment(order, scope, actor, date=timezone.localdate(now))
             return order, True
     except OperationalError as exc:
         if 'locked' in str(exc).lower() or 'deadlock' in str(exc).lower():

@@ -7,6 +7,7 @@ from django.test import Client, TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
 
+from accounting.models import FinancialAccount
 from inventory.models import Product, UnitOfMeasure
 from purchase.models import PurchaseOrder, PurchaseOrderItem
 from warehouse.api_views import StockListAPIView
@@ -138,7 +139,10 @@ class StockReadTests(TestCase):
 
     def test_receiving_a_purchase_updates_the_list_and_details_without_duplicate_stock_rows(self):
         self.grant('warehouse.view_stock', 'purchase.change_purchaseorder')
-        order = PurchaseOrder.objects.create(currency_id='BDT', exchange_rate=1, warehouse=self.warehouse)
+        account = FinancialAccount.objects.create(name='Purchase bank', type='bank', warehouse=self.warehouse,
+                                                  opening_balance=100)
+        order = PurchaseOrder.objects.create(currency_id='BDT', exchange_rate=1, warehouse=self.warehouse,
+                                              payment_account=account)
         PurchaseOrderItem.objects.create(purchase_order=order, line_number=1, product=self.product, unit=self.unit,
                                          quantity='2', unit_price=1)
         response = self.client.post(reverse('purchase:purchase-order-receive'),

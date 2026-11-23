@@ -1,0 +1,16 @@
+{% extends 'inventory/list.html' %}
+
+{% block catalog_toolbar_class %} cash-flow-toolbar{% endblock %}
+
+{% block catalog_toolbar_controls %}
+<div class="cash-flow-controls">
+    {{ block.super }}
+    <form class="cash-flow-account-filter" data-catalog-filters data-catalog-auto-filter aria-label="Filter cash flow">
+        <label for="cash-flow-account" class="sr-only">Account</label>
+        <select id="cash-flow-account" name="account" class="form-input">
+            <option value="">All accounts</option>
+            {% for account in filter_accounts %}<option value="{{ account.pk }}">{{ account.name }}</option>{% endfor %}
+        </select>
+    </form>
+</div>
+{% endblock %}

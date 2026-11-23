@@ -14,9 +14,11 @@
     {% if receive_api_url %}<form data-catalog-receive-form hidden>{% csrf_token %}</form>{% endif %}
     {% if complete_api_url %}<form data-catalog-complete-form hidden>{% csrf_token %}</form>{% endif %}
     <section class="users-panel" aria-label="{{ resource.plural|capfirst }} directory">
-        <div class="users-toolbar">
+        <div class="users-toolbar{% block catalog_toolbar_class %}{% endblock %}">
             <div><h2 class="section-title">All {{ resource.plural }} <span class="user-count" data-catalog-count hidden></span></h2><p class="mt-1 text-xs text-stone-400">{{ list_description|default:'Your catalog, in one place.' }}</p></div>
+            {% block catalog_toolbar_controls %}
             <form role="search" class="users-search" data-catalog-search><label for="catalog-search" class="sr-only">Search {{ resource.plural }}</label><input id="catalog-search" name="q" type="search" class="form-input" placeholder="Search {{ resource.plural }}..." autocomplete="off"><button type="submit" class="secondary-button">Search</button></form>
+            {% endblock %}
         </div>
         {% block catalog_filters %}{% endblock %}
         <p class="users-list-status" data-catalog-status role="status" aria-live="polite">Loading {{ resource.plural }}...</p>

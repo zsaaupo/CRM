@@ -2,15 +2,19 @@ from concurrent.futures import ThreadPoolExecutor
 from decimal import Decimal
 from threading import Barrier
 from time import sleep
+from uuid import uuid4
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
 from django.db import close_old_connections, connections
 from django.test import TestCase, TransactionTestCase
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 from rest_framework.test import APIClient
 
+from accounting.models import MAX_AMOUNT, AccountTransaction, FinancialAccount, PurchasePayment
+from accounting.services import post_transfer
 from common.models import ProductStatus, TradeStatus
 from inventory.models import Currency, Product, ProductType, UnitOfMeasure
 from purchase.models import PurchaseOrder, PurchaseReturn
@@ -31,7 +35,10 @@ class PurchaseReturnTests(TestCase):
         cls.unit = UnitOfMeasure.objects.create(code='PR-PCS', name='Pieces')
         cls.product = Product.objects.create(sku='PR-PRODUCT', name='Product', currency_id='BDT', unit=cls.unit)
         cls.stock = Stock.objects.create(warehouse=cls.warehouse, product=cls.product, quantity=10, create_by='initial')
-        cls.order = PurchaseOrder.objects.create(currency_id='BDT', exchange_rate=1, warehouse=cls.warehouse)
+        cls.account = FinancialAccount.objects.create(name='Purchase bank', type='bank', warehouse=cls.warehouse,
+                                                      opening_balance=100)
+        cls.order = PurchaseOrder.objects.create(currency_id='BDT', exchange_rate=1, warehouse=cls.warehouse,
+                                                  payment_account=cls.account)
         cls.received = cls.order.items.create(product=cls.product, unit=cls.unit, line_number=1,
                                               quantity=Decimal('5.123456'), unit_price=10)
         receive_purchase(cls.admin, cls.order.pk)
@@ -70,6 +77,10 @@ class PurchaseReturnTests(TestCase):
         self.assertEqual(self.stock.quantity, Decimal('15.123456'))
         self.assertTrue(self.complete(record['id'])['completed_now'])
         self.assertFalse(self.complete(record['id'])['completed_now'])
+        refund = PurchasePayment.objects.get(purchase_return_id=record['id'])
+        self.assertEqual((refund.amount, refund.account_id), (Decimal('11.2346'), self.account.pk))
+        self.assertEqual(refund.transaction.direction, AccountTransaction.Direction.INFLOW)
+        self.assertEqual(refund.transaction.balance_after, Decimal('60.0000'))
         self.stock.refresh_from_db()
         self.assertEqual(self.stock.quantity, Decimal('14'))
         self.assertEqual(self.stock.create_by, 'initial')
@@ -84,11 +95,71 @@ class PurchaseReturnTests(TestCase):
         self.assertEqual((self.stock.quantity, branch_stock.quantity), (Decimal('10'), Decimal('100')))
         self.assertTrue(self.order.is_received)
         self.assertEqual(self.order.updated_at, received_at)
+        self.assertEqual(self.account.transactions.first().balance_after, Decimal('100.0000'))
         detail = reverse('purchase:purchase-return-detail', args=[record['id']])
         self.assertEqual(self.client.patch(detail, {'notes': 'Change'}, format='json',
                                            HTTP_X_CSRFTOKEN=self.token).status_code, 409)
         self.assertEqual(self.client.delete(detail, HTTP_X_CSRFTOKEN=self.token).status_code, 409)
         self.assertEqual(self.client.get(detail).data['items'][0]['quantity'], '1.123456')
+        self.assertEqual(self.client.get(detail).data['refund_amount'], '11.2346')
+        original = reverse('purchase:purchase-order-detail', args=[self.order.pk])
+        self.assertEqual(self.client.get(original).data['payment_amount'], '51.2346')
+        self.role.permissions.add(*Permission.objects.filter(content_type__app_label='accounting', codename__in=[
+            'view_financialaccount', 'view_accounttransaction',
+        ]))
+        statement = reverse('accounting:account-statement', args=[self.account.pk])
+        row, = self.client.get(statement, {'q': record['return_number']}).data['results']
+        self.assertEqual((row['source'], row['purchase_payment'], row['direction']),
+                         (f'Purchase refund {refund.number}', refund.pk, 'inflow'))
+        cash_flow = self.client.get(reverse('accounting:cash-flow-list'), {'account': self.account.pk})
+        self.assertEqual(cash_flow.status_code, 200, cash_flow.data)
+        self.assertEqual([(entry['direction'], entry['amount']) for entry in cash_flow.data['results']], [
+            ('inflow', '40.0000'), ('inflow', '11.2346'), ('outflow', '51.2346'),
+        ])
+
+    def test_fractional_refunds_use_the_original_discount_tax_and_exchange_rate(self):
+        currency = Currency.objects.create(code='EUR', name='Euro', exchange_rate=10)
+        order = PurchaseOrder.objects.create(warehouse=self.warehouse, payment_account=self.account,
+                                             currency=currency, exchange_rate='1.1', shipping_cost='0.5')
+        item = order.items.create(product=self.product, unit=self.unit, line_number=1, quantity=3, unit_price=1,
+                                  discount_amount='0.2', tax_rate=25)
+        receive_purchase(self.admin, order.pk)
+
+        amounts = []
+        for _ in range(3):
+            record = self.create_return(purchase_order=order.pk,
+                                        items=[{'purchase_order_item': item.pk, 'quantity': '1'}])
+            self.complete(record['id'])
+            amounts.append(PurchasePayment.objects.get(purchase_return_id=record['id']).amount)
+
+        self.assertEqual(amounts, [Decimal('1.2833'), Decimal('1.2834'), Decimal('1.2833')])
+        payment = order.payments.get(purchase_return__isnull=True)
+        self.assertEqual(payment.amount - sum(amounts), Decimal('0.5500'))
+
+    def test_legacy_purchase_without_a_recorded_payment_returns_stock_without_a_refund(self):
+        order = PurchaseOrder.objects.create(warehouse=self.warehouse, currency_id='BDT', exchange_rate=1,
+                                             is_received=True)
+        item = order.items.create(product=self.product, unit=self.unit, line_number=1, quantity=1, unit_price=10)
+        record = self.create_return(purchase_order=order.pk, items=[{'purchase_order_item': item.pk, 'quantity': '1'}])
+        self.complete(record['id'])
+        self.assertFalse(order.payments.exists())
+        self.stock.refresh_from_db()
+        self.assertEqual(self.stock.quantity, Decimal('14.123456'))
+
+    def test_refund_exceeding_account_balance_limit_rolls_back_the_return(self):
+        other = FinancialAccount.objects.create(name='Other bank', type='bank', warehouse=self.warehouse,
+                                                opening_balance=MAX_AMOUNT)
+        balance = self.account.transactions.first().balance_after
+        post_transfer(
+            self.admin, source_account=other.pk, destination_account=self.account.pk,
+            amount=MAX_AMOUNT - balance, date=timezone.localdate(), reference='', request_key=uuid4(),
+        )
+        record = self.create_return()
+        self.assertIn('amount', self.complete(record['id'], expected=400))
+        self.stock.refresh_from_db()
+        self.assertEqual(self.stock.quantity, Decimal('15.123456'))
+        self.assertFalse(PurchaseReturn.objects.get(pk=record['id']).is_completed)
+        self.assertFalse(PurchasePayment.objects.filter(purchase_return_id=record['id']).exists())
 
     def test_second_draft_can_be_edited_after_first_return_completes(self):
         first, second = self.create_return('3'), self.create_return('3')
@@ -166,7 +237,8 @@ class PurchaseReturnTests(TestCase):
         detail_url = reverse('purchase:purchase-return-detail', args=[returned['id']])
         detail_page = self.client.get(reverse('purchase_pages:return-detail', args=[returned['id']]))
         self.assertContains(detail_page, f'data-api-url="{detail_url}"')
-        self.assertContains(detail_page, 'Complete and deduct stock')
+        self.assertContains(detail_page, 'Complete return')
+        self.assertContains(detail_page, 'Refunded amount')
         self.assertEqual(self.client.post(reverse('purchase:purchase-return-complete'), {
             'return_id': returned['id'], 'is_completed': True,
         }, format='json').status_code, 403)
@@ -190,9 +262,11 @@ class PurchaseReturnConcurrencyTests(TransactionTestCase):
         warehouse = WareHouse.objects.create(name='Race warehouse', address='Address', phone='1')
         unit = UnitOfMeasure.objects.create(code='PR-RACE-PCS', name='Pieces')
         product = Product.objects.create(sku='PR-RACE', name='Product', currency_id='BDT', unit=unit)
-        order = PurchaseOrder.objects.create(warehouse=warehouse, currency_id='BDT', exchange_rate=1, is_received=True)
+        account = FinancialAccount.objects.create(name='Race bank', type='bank', warehouse=warehouse, opening_balance=10)
+        order = PurchaseOrder.objects.create(warehouse=warehouse, currency_id='BDT', exchange_rate=1,
+                                             payment_account=account)
         item = order.items.create(product=product, unit=unit, line_number=1, quantity=4, unit_price=1)
-        Stock.objects.create(warehouse=warehouse, product=product, quantity=4)
+        receive_purchase(admin, order.pk)
         drafts = [PurchaseReturn.objects.create(purchase_order=order) for _ in range(2)]
         for draft in drafts:
             draft.items.create(purchase_order_item=item, quantity=3)
@@ -219,3 +293,4 @@ class PurchaseReturnConcurrencyTests(TransactionTestCase):
             self.assertEqual(sorted(pool.map(complete, [draft.pk for draft in drafts])), ['blocked', 'completed'])
         self.assertEqual(PurchaseReturn.objects.filter(is_completed=True).count(), 1)
         self.assertEqual(Stock.objects.get(warehouse=warehouse, product=product).quantity, Decimal('1'))
+        self.assertEqual(order.payments.filter(purchase_return__isnull=False).count(), 1)

@@ -9,7 +9,8 @@ from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
 
-from inventory.models import Product, UnitOfMeasure
+from accounting.models import AccountTransaction, FinancialAccount, PurchasePayment
+from inventory.models import Currency, Product, UnitOfMeasure
 from people.models import Party
 from purchase.models import PurchaseOrder, PurchaseOrderItem
 from warehouse.models import Stock, WareHouse
@@ -22,6 +23,7 @@ class PurchaseReceivingTests(TestCase):
         self.role.permissions.add(Permission.objects.get(content_type__app_label='purchase', codename='change_purchaseorder'))
         self.warehouse = WareHouse.objects.create(name='Main', address='Dhaka', phone='1')
         self.branch = WareHouse.objects.create(name='Branch', address='Dhaka', phone='2')
+        self.payment_account = FinancialAccount.objects.create(name='Purchase bank', type='bank', opening_balance=1000)
         self.unit = UnitOfMeasure.objects.create(name='Pieces', code='RECEIVE-PCS')
         self.product = Product.objects.create(name='Rice', sku='RECEIVE-RICE', unit=self.unit, currency_id='BDT')
         self.other = Product.objects.create(name='Tea', sku='RECEIVE-TEA', unit=self.unit, currency_id='BDT')
@@ -35,7 +37,8 @@ class PurchaseReceivingTests(TestCase):
 
     def order_with_item(self, quantity='2', warehouse=None, supplier=None):
         order = PurchaseOrder.objects.create(currency_id='BDT', exchange_rate=1, warehouse=warehouse or self.warehouse,
-                                              supplier=supplier, create_by='original', modified_by='original')
+                                              payment_account=self.payment_account, supplier=supplier,
+                                              create_by='original', modified_by='original')
         PurchaseOrderItem.objects.create(purchase_order=order, line_number=1, product=self.product, unit=self.unit,
                                          quantity=quantity, unit_price='10')
         return order
@@ -72,6 +75,44 @@ class PurchaseReceivingTests(TestCase):
         self.order.refresh_from_db()
         self.assertEqual(self.order.updated_at, received_at)
         self.assertEqual(Stock.objects.get().quantity, Decimal('3.123456'))
+        payment = PurchasePayment.objects.get(purchase_order=self.order)
+        self.assertEqual(AccountTransaction.objects.count(), 1)
+        self.assertEqual(payment.amount, Decimal('31.2346'))
+
+    def test_foreign_currency_receipt_posts_an_outflow_at_the_order_exchange_rate(self):
+        currency = Currency.objects.create(code='EUR', name='Euro', exchange_rate=150)
+        self.order.currency = currency
+        self.order.exchange_rate = Decimal('125.50000000')
+        self.order.save(update_fields=['currency', 'exchange_rate'])
+        self.item.quantity = Decimal('0.1')
+        self.item.save(update_fields=['quantity'])
+
+        response = self.receive()
+        self.assertEqual(response.data['purchase_order']['payment_amount'], '125.5000')
+        payment = PurchasePayment.objects.get(purchase_order=self.order)
+        self.assertEqual(payment.account_id, self.payment_account.pk)
+        self.role.permissions.add(*Permission.objects.filter(content_type__app_label='accounting', codename__in=[
+            'view_financialaccount', 'view_accounttransaction',
+        ]))
+        url = reverse('accounting:account-statement', args=[self.payment_account.pk])
+        statement = self.client.get(url, {'q': self.order.order_number}).data
+        entry, = statement['results']
+        self.assertEqual((entry['purchase_payment'], entry['source'], entry['direction'], entry['amount'],
+                          entry['balance_after'], entry['reference']),
+                         (payment.pk, f'Purchase payment {payment.number}', 'outflow', '125.5000',
+                          '874.5000', self.order.order_number))
+
+    def test_insufficient_funds_rolls_back_receipt_and_stock(self):
+        empty_account = FinancialAccount.objects.create(name='Empty bank', type='bank', warehouse=self.warehouse)
+        self.order.payment_account = empty_account
+        self.order.save(update_fields=['payment_account'])
+        response = self.receive(status=400)
+        self.assertIn('amount', response.data)
+        self.order.refresh_from_db()
+        self.assertFalse(self.order.is_received)
+        self.assertFalse(Stock.objects.exists())
+        self.assertFalse(PurchasePayment.objects.exists())
+        self.assertFalse(AccountTransaction.objects.exists())
 
     def test_repeated_products_purchases_suppliers_and_branches_use_existing_balance(self):
         Stock.objects.create(warehouse=self.warehouse, product=self.product, quantity='10', create_by='opening')
@@ -135,15 +176,23 @@ class PurchaseReceivingTests(TestCase):
         self.assertFalse(Stock.objects.exists())
         response = self.client.post(reverse('purchase:purchase-order-list'), {
             'currency': 'BDT', 'exchange_rate': '1', 'is_received': True, 'warehouse': self.branch.pk,
+            'payment_account': self.payment_account.pk,
         }, format='json')
         self.assertEqual(response.status_code, 201, response.data)
         self.assertFalse(response.data['purchase_order']['is_received'])
+        self.assertFalse(PurchasePayment.objects.exists())
         response = self.client.patch(reverse('purchase:purchase-order-item-update', args=[self.item.pk]),
                                      {'quantity': '4'}, format='json')
         self.assertEqual(response.status_code, 200, response.data)
 
     def test_missing_empty_purchase_and_receiving_warehouse_errors_do_not_lock_order(self):
         self.receive(status=404, purchase_id=99999)
+        self.order.payment_account = None
+        self.order.save(update_fields=['payment_account'])
+        response = self.receive(status=400)
+        self.assertIn('payment_account', response.data)
+        self.order.payment_account = self.payment_account
+        self.order.save(update_fields=['payment_account'])
         self.order.warehouse = None
         self.order.save()
         self.receive(status=400)

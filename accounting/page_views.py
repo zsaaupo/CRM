@@ -42,9 +42,14 @@ STATEMENT = CatalogResource(
     (('date', 'Date', 'text'), ('source', 'Source', 'text'), ('reference', 'Reference', 'text'),
      ('direction_label', 'Direction', 'text'), ('amount', 'Amount', 'price'), ('balance_after', 'Balance after', 'price')),
 )
+CASH_FLOW = CatalogResource(
+    'cash-flow', 'cash-flow', 'cash flow entry', 'cash flow entries', AccountTransaction,
+    (('date', 'Date', 'text'), ('account_name', 'Account', 'text'), ('source', 'Source', 'text'),
+     ('reference', 'Reference', 'text'), ('direction_label', 'Direction', 'text'), ('amount', 'Amount', 'price')),
+)
 SALES_PAYMENTS = CatalogResource(
     'sales-payment', 'sales-payments', 'payment', 'sales payments', SalesPayment,
-    (('name', 'Payment', 'text'), ('date', 'Date', 'text'), ('account_name', 'Account', 'text'),
+    (('name', 'Payment', 'text'), ('type_label', 'Type', 'text'), ('date', 'Date', 'text'), ('account_name', 'Account', 'text'),
      ('method_label', 'Method', 'text'), ('reference', 'Reference', 'text'), ('amount', 'Amount', 'price')),
 )
 
@@ -249,6 +254,22 @@ class AccountStatementPageView(FinanceListPageView):
         return context
 
 
+class CashFlowListPageView(FinanceListPageView):
+    resource = CASH_FLOW
+    permission_required = STATEMENT_VIEW
+    finance_key = 'cash-flow'
+    template_name = 'accounting/cash_flow.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context.update(
+            page_label='Cash flow', list_heading='Cash flow', filter_accounts=self.accounts().only('name'),
+            list_api_url=reverse('accounting:cash-flow-list'),
+            list_description='Posted inflows and outflows in posting order, newest first.',
+        )
+        return context
+
+
 class AccountTransferListPageView(FinanceListPageView):
     resource = TRANSFERS
     permission_required = TRANSFER_VIEW
@@ -271,9 +292,10 @@ class SalesPaymentListPageView(FinanceListPageView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         order = self.sales_order()
-        total, paid, due = sales_payment_totals(order)
+        total, paid, refunded = sales_payment_totals(order)
         context.update(
-            sales_order=order, payment_total=total, paid=paid, due=due, currency=settings.INVENTORY_BASE_CURRENCY,
+            sales_order=order, payment_total=total, paid=paid, refunded=refunded, due=total - paid,
+            currency=settings.INVENTORY_BASE_CURRENCY,
             list_api_url=reverse('accounting:sales-payment-list', args=[order.pk]),
             secondary_url=reverse('sale_pages:sale-detail', args=[order.pk]), secondary_label='Back to sale',
             list_description='Search by account or payment reference.',

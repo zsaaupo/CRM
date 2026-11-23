@@ -8,7 +8,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from accounting.models import AccountTransaction, AccountTransfer, ExpensePayment, SalesPayment
+from accounting.models import AccountTransaction, AccountTransfer, ExpensePayment, PurchasePayment, SalesPayment
 from hrm.models import (
     Employee, EmployeeLoan, LeaveRequest, LeaveType, PayrollPeriod, PayrollRun, Payslip, PayslipLine,
     SalaryPayment,
@@ -29,6 +29,7 @@ class ProjectAdminTests(TestCase):
 
     def test_all_project_models_have_admin_lists(self):
         self.client.force_login(self.root)
+        posted_models = (AccountTransaction, AccountTransfer, ExpensePayment, PurchasePayment, SalesPayment)
         for app_label in ('account', 'accounting', 'common', 'hrm', 'inventory', 'people', 'purchase', 'report', 'sale', 'warehouse'):
             for model in apps.get_app_config(app_label).get_models():
                 with self.subTest(model=model._meta.label):
@@ -36,7 +37,7 @@ class ProjectAdminTests(TestCase):
                     url = reverse(f'admin:{app_label}_{model._meta.model_name}_changelist')
                     self.assertEqual(self.client.get(url).status_code, 200)
                     add = reverse(f'admin:{app_label}_{model._meta.model_name}_add')
-                    expected = 403 if model in (AccountTransaction, AccountTransfer, ExpensePayment, SalesPayment) else 200
+                    expected = 403 if model in posted_models else 200
                     self.assertEqual(self.client.get(add).status_code, expected)
 
     def test_leave_request_visibility_follows_reviewer_permissions(self):

@@ -11,6 +11,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from account.permissions import has_role_permissions
+from accounting.models import ZERO, base_currency
 from common.serializers import AUDIT_FIELDS, CatalogSerializer
 from common.view import BaseAPIMixin, BaseDetailAPIView, BaseListAPIView, BaseListCreateAPIView, BaseUpdateAPIView
 from warehouse.scope import HasWarehouseAccess, lock_warehouse_scope, warehouse_scope
@@ -46,9 +47,20 @@ class SalesReturnLineSerializer(serializers.ModelSerializer):
 
 class SalesReturnDetailSerializer(SalesReturnSerializer):
     items = SalesReturnLineSerializer(many=True, read_only=True)
+    refund_amount = serializers.SerializerMethodField()
+    currency = serializers.SerializerMethodField()
 
     class Meta(SalesReturnSerializer.Meta):
-        fields = [*SalesReturnSerializer.Meta.fields, 'items']
+        fields = [*SalesReturnSerializer.Meta.fields, 'items', 'refund_amount', 'currency']
+
+    def get_refund_amount(self, record):
+        if not record.is_completed:
+            return None
+        amounts = record.refund_payments.values_list('amount', flat=True)
+        return format(sum(amounts, ZERO), '.4f')
+
+    def get_currency(self, record):
+        return base_currency()
 
     def get_fields(self):
         fields = super().get_fields()

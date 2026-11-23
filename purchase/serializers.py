@@ -6,6 +6,7 @@ from django.utils import timezone
 from rest_framework import serializers
 from rest_framework.exceptions import NotFound, PermissionDenied
 
+from accounting.serializers import PaymentAccountField
 from common.models import TradeStatus
 from common.serializers import AUDIT_FIELDS, CatalogSerializer
 from inventory.models import Currency
@@ -23,6 +24,8 @@ class PurchaseOrderSerializer(WarehouseScopedSerializerMixin, CatalogSerializer)
     )
     supplier_name = serializers.CharField(source='supplier.name', read_only=True, default=None)
     supplier_code = serializers.CharField(source='supplier.code', read_only=True, default=None)
+    payment_account = PaymentAccountField()
+    payment_account_name = serializers.CharField(source='payment_account.name', read_only=True, default=None)
     currency = serializers.SlugRelatedField(slug_field='code', queryset=Currency.objects.all())
     status = serializers.SlugRelatedField(slug_field='code', queryset=TradeStatus.objects.all(), required=False)
     subtotal = serializers.DecimalField(max_digits=40, decimal_places=4, read_only=True)
@@ -39,7 +42,8 @@ class PurchaseOrderSerializer(WarehouseScopedSerializerMixin, CatalogSerializer)
         model = PurchaseOrder
         fields = [
             'id', 'order_number', 'supplier', 'supplier_name', 'supplier_code', 'order_date', 'expected_date', 'currency',
-            'exchange_rate', 'status', 'warehouse', 'warehouse_name', 'is_received', 'supplier_reference', 'shipping_cost', 'notes',
+            'exchange_rate', 'status', 'warehouse', 'warehouse_name', 'payment_account', 'payment_account_name',
+            'is_received', 'supplier_reference', 'shipping_cost', 'notes',
             'subtotal', 'tax_total', 'grand_total', *AUDIT_FIELDS[1:],
         ]
         read_only_fields = [*AUDIT_FIELDS, 'order_number', 'is_received', 'subtotal', 'tax_total', 'grand_total']
@@ -86,9 +90,12 @@ class PurchaseOrderItemSerializer(WarehouseScopedSerializerMixin, CatalogSeriali
 class PurchaseOrderDetailSerializer(PurchaseOrderSerializer):
     currency_name = serializers.CharField(source='currency.name', read_only=True)
     status_name = serializers.CharField(source='status.name', read_only=True)
+    payment_amount = serializers.DecimalField(
+        source='original_payment_amount', max_digits=15, decimal_places=4, read_only=True,
+    )
 
     class Meta(PurchaseOrderSerializer.Meta):
-        fields = [*PurchaseOrderSerializer.Meta.fields, 'currency_name', 'status_name']
+        fields = [*PurchaseOrderSerializer.Meta.fields, 'currency_name', 'status_name', 'payment_amount']
 
 
 class PurchaseOrderItemFilterSerializer(serializers.Serializer):

@@ -6,6 +6,7 @@ from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
 
+from accounting.models import FinancialAccount
 from people.models import Party
 from purchase.models import PurchaseOrder
 
@@ -14,6 +15,7 @@ class PurchaseSupplierTests(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_user(username='purchase-supplier-operator')
         self.role = assign_warehouse_role(self.user, all_warehouses=True).role
+        self.payment_account = FinancialAccount.objects.create(name='Purchase bank', type='bank')
         self.role.permissions.add(*Permission.objects.filter(content_type__app_label='purchase',
             codename__in=['add_purchaseorder', 'change_purchaseorder', 'view_purchaseorder', 'add_purchaseorderitem']))
         self.supplier = Party.objects.create(code='SUP', name='Supplier company', is_supplier=True)
@@ -32,7 +34,7 @@ class PurchaseSupplierTests(TestCase):
         self.update = reverse('purchase:purchase-order-update', args=[self.order.pk])
 
     def payload(self, supplier):
-        return {'currency': 'BDT', 'exchange_rate': '1', 'supplier': supplier}
+        return {'currency': 'BDT', 'exchange_rate': '1', 'supplier': supplier, 'payment_account': self.payment_account.pk}
 
     def test_dropdown_only_lists_non_deleted_suppliers_without_party_view_permission(self):
         response = self.client.get(reverse('purchase:purchase-options'))

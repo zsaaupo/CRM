@@ -29,7 +29,8 @@ class WarehouseScopeTests(TestCase):
         self.role.permissions.set(Permission.objects.filter(content_type__app_label__in=['warehouse', 'purchase', 'sale']))
         self.utt = WareHouse.objects.create(name='UTT', code='UTT', address='Dhaka', phone='1')
         self.other = WareHouse.objects.create(name='Other', code='OTHER', address='Dhaka', phone='2')
-        self.payment_account = FinancialAccount.objects.create(name='Sales bank', type='bank', warehouse=self.utt)
+        self.payment_account = FinancialAccount.objects.create(name='Warehouse bank', type='bank', warehouse=self.utt,
+                                                               opening_balance=100)
         self.scope = RoleWarehouseAccess.objects.create(role=self.role, warehouse=self.utt)
         self.unit = UnitOfMeasure.objects.create(name='Pieces', code='SCOPE-PCS')
         self.product = Product.objects.create(name='Rice', sku='SCOPE-RICE', unit=self.unit, currency_id='BDT')
@@ -37,6 +38,8 @@ class WarehouseScopeTests(TestCase):
                        for warehouse in [self.utt, self.other]]
         self.purchases = [self.order(PurchaseOrder, PurchaseOrderItem, 'purchase_order', warehouse)
                           for warehouse in [self.utt, self.other, None]]
+        self.purchases[0].payment_account = self.payment_account
+        self.purchases[0].save(update_fields=['payment_account'])
         self.sales = [self.order(SalesOrder, SalesOrderItem, 'sales_order', warehouse)
                       for warehouse in [self.utt, self.other, None]]
         self.sales[0].payment_account = self.payment_account
@@ -86,9 +89,8 @@ class WarehouseScopeTests(TestCase):
     def test_creation_defaults_to_assignment_and_rejects_null_or_other_warehouse(self):
         for app, route, orders in self.resources():
             url = reverse(f'{app}:{route}-list')
-            payload = {'currency': 'BDT', 'exchange_rate': '1', 'items': [self.line()]}
-            if app == 'sale':
-                payload['payment_account'] = self.payment_account.pk
+            payload = {'currency': 'BDT', 'exchange_rate': '1', 'items': [self.line()],
+                       'payment_account': self.payment_account.pk}
             response = self.client.post(url, payload, format='json')
             self.assertEqual(response.status_code, 201, response.data)
             record = response.data[route.replace('-', '_')]
@@ -177,12 +179,10 @@ class WarehouseScopeTests(TestCase):
         self.scope.warehouse = None
         self.scope.all_warehouses = True
         self.scope.save()
+        other_account = FinancialAccount.objects.create(name='Other bank', type='bank', warehouse=self.other)
         for app, route, orders in self.resources():
             self.assertEqual(self.client.get(reverse(f'{app}:{route}-list-view')).data['count'], 3)
-            payload = {'warehouse': self.other.pk}
-            if app == 'sale':
-                other_account = FinancialAccount.objects.create(name='Other bank', type='bank', warehouse=self.other)
-                payload['payment_account'] = other_account.pk
+            payload = {'warehouse': self.other.pk, 'payment_account': other_account.pk}
             response = self.client.patch(reverse(f'{app}:{route}-update', args=[orders[0].pk]),
                 payload, format='json')
             self.assertEqual(response.status_code, 200, response.data)

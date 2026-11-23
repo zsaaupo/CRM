@@ -1,3 +1,4 @@
+from collections import defaultdict
 from decimal import ROUND_HALF_UP, localcontext
 
 from django.db import connections, transaction
@@ -12,8 +13,8 @@ from sale.models import MONEY_PRECISION
 from warehouse.scope import lock_warehouse_scope, scoped_queryset
 
 from .models import (
-    MAX_AMOUNT, ZERO, AccountTransaction, AccountTransfer, Expense, ExpensePayment, FinancialAccount, SalesPayment,
-    base_currency,
+    MAX_AMOUNT, ZERO, AccountTransaction, AccountTransfer, Expense, ExpensePayment, FinancialAccount, PurchasePayment,
+    SalesPayment, base_currency,
 )
 
 
@@ -23,6 +24,7 @@ STATEMENT_VIEW = (ACCOUNT_VIEW, 'accounting.view_accounttransaction')
 TRANSFER_VIEW = (ACCOUNT_VIEW, 'accounting.view_accounttransfer')
 PAYMENT_VIEW = (EXPENSE_VIEW, ACCOUNT_VIEW, 'accounting.view_expensepayment')
 SALES_PAYMENT_VIEW = ('sale.view_salesorder', ACCOUNT_VIEW, 'accounting.view_salespayment')
+PURCHASE_PAYMENT_VIEW = ('purchase.view_purchaseorder', ACCOUNT_VIEW, 'accounting.view_purchasepayment')
 EXPENSE_COMPLETE = ('accounting.change_expense',)
 
 
@@ -60,8 +62,26 @@ def sales_payment_totals(sales_order):
         context.prec = 50
         total = (sales_order.grand_total * sales_order.exchange_rate).quantize(MONEY_PRECISION, rounding=ROUND_HALF_UP)
         postings = AccountTransaction.objects.filter(sales_payment__sales_order=sales_order)
-        paid = sum(postings.order_by().values_list('amount', flat=True).iterator(), ZERO)
-        return total, paid, total - paid
+        paid = refunded = ZERO
+        for direction, amount in postings.order_by().values_list('direction', 'amount').iterator():
+            if direction == AccountTransaction.Direction.INFLOW:
+                paid += amount
+            else:
+                refunded += amount
+        return total, paid, refunded
+
+
+def return_refund_amount(order, quantities, previous):
+    # Round cumulative values so partial returns reconcile to the original merchandise totals.
+    before = after = ZERO
+    for line in order.items.filter(pk__in=quantities.keys() | previous.keys()):
+        returned = previous.get(line.pk, 0)
+        line_total = line.line_total
+        before += line_total * returned / line.quantity
+        after += line_total * (returned + quantities.get(line.pk, 0)) / line.quantity
+    rate = order.exchange_rate
+    return ((after * rate).quantize(MONEY_PRECISION, rounding=ROUND_HALF_UP)
+            - (before * rate).quantize(MONEY_PRECISION, rounding=ROUND_HALF_UP))
 
 
 def lock_rows(queryset):
@@ -130,7 +150,17 @@ def audit_fields(actor):
 
 
 def post_transaction(account, direction, actor, *, date, amount, transfer=None, expense_payment=None,
-                     sales_payment=None):
+                     sales_payment=None, purchase_payment=None):
+    if sales_payment:
+        expected_direction = (AccountTransaction.Direction.OUTFLOW if sales_payment.sales_return_id
+                              else AccountTransaction.Direction.INFLOW)
+        if direction != expected_direction:
+            raise ValidationError({'direction': 'The transaction direction must match its sale payment or refund.'})
+    if purchase_payment:
+        expected_direction = (AccountTransaction.Direction.INFLOW if purchase_payment.purchase_return_id
+                              else AccountTransaction.Direction.OUTFLOW)
+        if direction != expected_direction:
+            raise ValidationError({'direction': 'The transaction direction must match its purchase payment or refund.'})
     last_balance = account.transactions.values_list('balance_after', flat=True).first()
     balance = account.opening_balance if last_balance is None else last_balance
     balance += amount if direction == AccountTransaction.Direction.INFLOW else -amount
@@ -140,7 +170,8 @@ def post_transaction(account, direction, actor, *, date, amount, transfer=None, 
         raise ValidationError({'amount': 'The resulting account balance is too large.'})
     return AccountTransaction.objects.create(
         account=account, direction=direction, date=date, amount=amount, balance_after=balance,
-        transfer=transfer, expense_payment=expense_payment, sales_payment=sales_payment, **audit_fields(actor),
+        transfer=transfer, expense_payment=expense_payment, sales_payment=sales_payment,
+        purchase_payment=purchase_payment, **audit_fields(actor),
     )
 
 
@@ -197,7 +228,8 @@ def complete_expense(actor, expense_pk):
 def post_completed_sale_payment(sales_order, scope, actor, *, date):
     """Called while the sale completion transaction holds the order lock."""
     account = lock_payment_account(scope, sales_order.payment_account_id, sales_order.warehouse_id)
-    _, _, due = sales_payment_totals(sales_order)
+    total, paid, _ = sales_payment_totals(sales_order)
+    due = total - paid
     if due <= ZERO:
         return
     if due > MAX_AMOUNT:
@@ -208,3 +240,74 @@ def post_completed_sale_payment(sales_order, scope, actor, *, date):
     )
     post_transaction(account, AccountTransaction.Direction.INFLOW, actor, date=date, amount=due,
                      sales_payment=payment)
+
+
+def post_sales_return_refund(record, scope, actor, *, date, amount):
+    """Refund the original collection accounts while the sale order is locked."""
+    if amount <= ZERO:
+        return
+    refundable = defaultdict(lambda: ZERO)
+    entries = AccountTransaction.objects.filter(sales_payment__sales_order=record.sales_order_id)
+    for account_id, direction, posted in entries.order_by().values_list('account_id', 'direction', 'amount').iterator():
+        refundable[account_id] += posted if direction == AccountTransaction.Direction.INFLOW else -posted
+
+    # Lock accounts in primary-key order, matching internal transfers.
+    for account_id, collected in sorted(refundable.items()):
+        refund = min(amount, collected)
+        if refund <= ZERO:
+            continue
+        if refund > MAX_AMOUNT:
+            raise ValidationError({'amount': 'The sales refund exceeds the ledger limit.'})
+        account = lock_payment_account(scope, account_id, record.sales_order.warehouse_id)
+        payment = SalesPayment.objects.create(
+            sales_order_id=record.sales_order_id, sales_return=record, account=account, amount=refund,
+            date=date, reference=record.return_number, method=account.type, **audit_fields(actor),
+        )
+        post_transaction(account, AccountTransaction.Direction.OUTFLOW, actor, date=date, amount=refund,
+                         sales_payment=payment)
+        amount -= refund
+        if amount == ZERO:
+            break
+
+
+def post_received_purchase_payment(purchase_order, scope, actor, *, date):
+    """Called inside the transaction that receives and locks the purchase."""
+    account = lock_payment_account(scope, purchase_order.payment_account_id, purchase_order.warehouse_id)
+    with localcontext() as context:
+        context.prec = 50
+        amount = (purchase_order.grand_total * purchase_order.exchange_rate).quantize(
+            MONEY_PRECISION, rounding=ROUND_HALF_UP,
+        )
+    if amount == ZERO:
+        return
+    if amount > MAX_AMOUNT:
+        raise ValidationError({'amount': 'The purchase payment exceeds the ledger limit.'})
+    payment = PurchasePayment.objects.create(
+        purchase_order=purchase_order, account=account, amount=amount, date=date,
+        reference=purchase_order.order_number, method=account.type, **audit_fields(actor),
+    )
+    post_transaction(account, AccountTransaction.Direction.OUTFLOW, actor, date=date, amount=amount,
+                     purchase_payment=payment)
+
+
+def post_purchase_return_refund(record, scope, actor, *, date, amount):
+    """Credit the original paying account while the purchase order is locked."""
+    if amount <= ZERO:
+        return
+    entries = AccountTransaction.objects.filter(purchase_payment__purchase_order_id=record.purchase_order_id)
+    original = entries.filter(direction=AccountTransaction.Direction.OUTFLOW,
+                              purchase_payment__purchase_return__isnull=True).first()
+    if original is None:
+        return
+    refunds = entries.filter(direction=AccountTransaction.Direction.INFLOW).order_by().values_list('amount', flat=True)
+    refunded = sum(refunds.iterator(), ZERO)
+    refund = min(amount, original.amount - refunded)
+    if refund <= ZERO:
+        return
+    account = lock_payment_account(scope, original.account_id, record.purchase_order.warehouse_id)
+    payment = PurchasePayment.objects.create(
+        purchase_order_id=record.purchase_order_id, purchase_return=record, account=account, amount=refund,
+        date=date, reference=record.return_number, method=account.type, **audit_fields(actor),
+    )
+    post_transaction(account, AccountTransaction.Direction.INFLOW, actor, date=date, amount=refund,
+                     purchase_payment=payment)

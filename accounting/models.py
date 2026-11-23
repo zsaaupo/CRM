@@ -184,6 +184,8 @@ class ExpensePayment(TimeStampedModel):
 
 class SalesPayment(TimeStampedModel):
     sales_order = models.ForeignKey('sale.SalesOrder', on_delete=models.PROTECT, related_name='payments')
+    sales_return = models.ForeignKey('sale.SalesReturn', on_delete=models.PROTECT, blank=True, null=True,
+                                     related_name='refund_payments')
     account = models.ForeignKey(FinancialAccount, on_delete=models.PROTECT, related_name='sales_payments')
     date = models.DateField(default=timezone.localdate)
     amount = models.DecimalField(max_digits=15, decimal_places=4, validators=[MinValueValidator(MIN_AMOUNT)])
@@ -195,11 +197,46 @@ class SalesPayment(TimeStampedModel):
         ordering = ['-pk']
         constraints = [
             models.CheckConstraint(condition=models.Q(amount__gt=0), name='accounting_sales_payment_amount_positive'),
+            models.UniqueConstraint(fields=['sales_return', 'account'], name='accounting_refund_return_account_unique'),
         ]
+
+    @property
+    def type_label(self):
+        return 'Sales refund' if self.sales_return_id else 'Sales payment'
 
     @property
     def number(self):
         return f'SP-{self.pk}'
+
+    def __str__(self):
+        return self.number
+
+
+class PurchasePayment(TimeStampedModel):
+    purchase_order = models.ForeignKey('purchase.PurchaseOrder', on_delete=models.PROTECT, related_name='payments')
+    purchase_return = models.OneToOneField('purchase.PurchaseReturn', on_delete=models.PROTECT, blank=True, null=True,
+                                           related_name='refund_payment')
+    account = models.ForeignKey(FinancialAccount, on_delete=models.PROTECT, related_name='purchase_payments')
+    date = models.DateField(default=timezone.localdate)
+    amount = models.DecimalField(max_digits=15, decimal_places=4, validators=[MinValueValidator(MIN_AMOUNT)])
+    method = models.CharField(max_length=20, choices=FinancialAccount.Type.choices)
+    reference = models.CharField(max_length=150, blank=True)
+
+    class Meta:
+        ordering = ['-pk']
+        constraints = [
+            models.CheckConstraint(condition=models.Q(amount__gt=0), name='accounting_purchase_payment_amount_positive'),
+            models.UniqueConstraint(fields=['purchase_order'], condition=models.Q(purchase_return__isnull=True),
+                                    name='accounting_purchase_original_payment_unique'),
+        ]
+
+    @property
+    def type_label(self):
+        return 'Purchase refund' if self.purchase_return_id else 'Purchase payment'
+
+    @property
+    def number(self):
+        return f'PP-{self.pk}'
 
     def __str__(self):
         return self.number
@@ -217,6 +254,8 @@ class AccountTransaction(TimeStampedModel):
                                         blank=True, null=True)
     sales_payment = models.OneToOneField(SalesPayment, on_delete=models.PROTECT, related_name='transaction',
                                          blank=True, null=True)
+    purchase_payment = models.OneToOneField(PurchasePayment, on_delete=models.PROTECT, related_name='transaction',
+                                            blank=True, null=True)
     date = models.DateField()
     direction = models.CharField(max_length=7, choices=Direction.choices)
     amount = models.DecimalField(max_digits=15, decimal_places=4, validators=[MinValueValidator(MIN_AMOUNT)])
@@ -229,13 +268,18 @@ class AccountTransaction(TimeStampedModel):
             models.CheckConstraint(condition=models.Q(amount__gt=0), name='accounting_tx_amount_positive'),
             models.CheckConstraint(condition=models.Q(balance_after__gte=0), name='accounting_tx_balance_nonnegative'),
             models.CheckConstraint(
-                condition=(models.Q(transfer__isnull=False, expense_payment__isnull=True, sales_payment__isnull=True) |
-                           models.Q(transfer__isnull=True, expense_payment__isnull=False, sales_payment__isnull=True) |
-                           models.Q(transfer__isnull=True, expense_payment__isnull=True, sales_payment__isnull=False)),
+                condition=(
+                    models.Q(transfer__isnull=False, expense_payment__isnull=True,
+                             sales_payment__isnull=True, purchase_payment__isnull=True) |
+                    models.Q(transfer__isnull=True, expense_payment__isnull=False,
+                             sales_payment__isnull=True, purchase_payment__isnull=True) |
+                    models.Q(transfer__isnull=True, expense_payment__isnull=True,
+                             sales_payment__isnull=False, purchase_payment__isnull=True) |
+                    models.Q(transfer__isnull=True, expense_payment__isnull=True,
+                             sales_payment__isnull=True, purchase_payment__isnull=False)
+                ),
                 name='accounting_tx_one_source',
             ),
-            models.CheckConstraint(condition=models.Q(sales_payment__isnull=True) | models.Q(direction='inflow'),
-                                   name='accounting_tx_sales_payment_inflow'),
             models.UniqueConstraint(fields=['expense_payment', 'direction'], name='accounting_tx_payment_direction'),
             models.UniqueConstraint(fields=['transfer', 'account', 'direction'],
                                     name='accounting_tx_transfer_account_direction'),

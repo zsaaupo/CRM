@@ -1,6 +1,6 @@
 import { getJSON, postJSON, patchJSON } from "../../js/api.js";
 
-const headerFields = ["supplier", "warehouse", "supplier_reference", "order_date", "expected_date", "currency", "exchange_rate", "status", "shipping_cost", "notes"];
+const headerFields = ["supplier", "warehouse", "supplier_reference", "order_date", "expected_date", "currency", "exchange_rate", "status", "shipping_cost", "notes", "payment_account"];
 const lineFields = ["product", "unit", "quantity", "unit_price", "discount_amount", "tax_rate", "description"];
 
 export function purchasePayload(form) {
@@ -60,6 +60,14 @@ export function initializePurchaseForm(form) {
             option.textContent = record.label;
             select.append(option);
         }
+    }
+
+    function updatePaymentAccounts(preferred = field("payment_account").value) {
+        const select = field("payment_account");
+        const warehouse = String(field("warehouse").value);
+        const eligible = options.payment_account.filter(account => account.warehouse == null || String(account.warehouse) === warehouse);
+        choices(select, eligible, eligible.length ? "Select payment account" : "No payment account for this warehouse");
+        select.value = eligible.some(account => String(account.value) === String(preferred)) ? String(preferred) : "";
     }
 
     function updateLineNumbers() {
@@ -151,6 +159,7 @@ export function initializePurchaseForm(form) {
                 readOnly = true;
                 throw new Error("This purchase has been received and is read-only. Return to the purchase list.");
             }
+            if (!Array.isArray(data.payment_account)) throw new Error("Could not load payment accounts. Try again.");
             for (const name of ["currency", "status", "product"]) {
                 if (!Array.isArray(data[name])) throw new Error("Could not load purchase choices. Please try again.");
                 if (!data[name].length) throw new Error(`No ${name} records are available. Add the missing records or contact your administrator, then try again.`);
@@ -186,6 +195,7 @@ export function initializePurchaseForm(form) {
                 for (const name of headerFields) field(name).value = record[name] ?? "";
                 field("exchange_rate").readOnly = record.currency === options.base_currency;
             }
+            updatePaymentAccounts(record?.payment_account ?? "");
             field("expected_date").min = field("order_date").value;
             ready = true;
             if (isEdit) {
@@ -233,6 +243,7 @@ export function initializePurchaseForm(form) {
     retry.addEventListener("click", load);
     addButton.addEventListener("click", () => addLine(true));
     field("currency").addEventListener("change", updateCurrency);
+    field("warehouse").addEventListener("change", () => updatePaymentAccounts());
     field("order_date").addEventListener("change", () => { field("expected_date").min = field("order_date").value; });
     field("expected_date").min = field("order_date").value;
     form.addEventListener("input", (event) => { event.target.removeAttribute("aria-invalid"); });

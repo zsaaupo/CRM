@@ -264,26 +264,33 @@ class AccountTransactionSerializer(serializers.ModelSerializer):
     class Meta:
         model = AccountTransaction
         fields = [*AUDIT_FIELDS, 'date', 'account', 'direction', 'direction_label', 'amount', 'balance_after',
-                  'currency', 'source', 'reference', 'transfer', 'expense_payment', 'sales_payment']
+                  'currency', 'source', 'reference', 'transfer', 'expense_payment', 'sales_payment', 'purchase_payment']
         read_only_fields = fields
 
     def get_source(self, row):
+        if row.purchase_payment_id:
+            return f'{row.purchase_payment.type_label} {row.purchase_payment.number}'
         if row.sales_payment_id:
-            return f'Sales payment {row.sales_payment.number}'
+            return f'{row.sales_payment.type_label} {row.sales_payment.number}'
         return f'Transfer {row.transfer.number}' if row.transfer_id else f'Expense payment {row.expense_payment.number}'
 
     def get_reference(self, row):
-        return (row.transfer or row.expense_payment or row.sales_payment).reference
+        return (row.transfer or row.expense_payment or row.sales_payment or row.purchase_payment).reference
 
 
-class AccountStatementAPIView(WarehouseScopeAPIMixin, BaseListAPIView):
-    queryset = AccountTransaction.objects.select_related('account', 'transfer', 'expense_payment', 'sales_payment')
+class AccountTransactionListAPIView(WarehouseScopeAPIMixin, BaseListAPIView):
+    queryset = AccountTransaction.objects.select_related(
+        'account', 'transfer', 'expense_payment', 'sales_payment', 'purchase_payment',
+    )
     serializer_class = AccountTransactionSerializer
     required_permissions = STATEMENT_VIEW
     warehouse_lookup = 'account__warehouse_id'
     ordering = ['-pk']
-    search_fields = ['transfer__reference', 'expense_payment__reference', 'sales_payment__reference']
+    search_fields = ['transfer__reference', 'expense_payment__reference', 'sales_payment__reference',
+                     'purchase_payment__reference']
 
+
+class AccountStatementAPIView(AccountTransactionListAPIView):
     def get_queryset(self):
         self.account = get_object_or_404(scoped_queryset(
             accounts_with_balances(FinancialAccount.objects.select_related('warehouse')), self.request.warehouse_scope,
@@ -294,6 +301,30 @@ class AccountStatementAPIView(WarehouseScopeAPIMixin, BaseListAPIView):
         response = super().list(request, *args, **kwargs)
         response.data['account'] = FinancialAccountSerializer(self.account).data
         return response
+
+
+class CashFlowTransactionSerializer(AccountTransactionSerializer):
+    account_name = serializers.CharField(source='account.name', read_only=True)
+
+    class Meta(AccountTransactionSerializer.Meta):
+        fields = [*AccountTransactionSerializer.Meta.fields, 'account_name']
+        read_only_fields = fields
+
+
+class CashFlowFilterSerializer(serializers.Serializer):
+    account = serializers.IntegerField(required=False, min_value=1, max_value=2**63 - 1)
+
+
+class CashFlowListAPIView(AccountTransactionListAPIView):
+    serializer_class = CashFlowTransactionSerializer
+    search_fields = [*AccountTransactionListAPIView.search_fields, 'account__name']
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        filters = CashFlowFilterSerializer(data=self.request.query_params)
+        filters.is_valid(raise_exception=True)
+        account = filters.validated_data.get('account')
+        return queryset.filter(account_id=account) if account is not None else queryset
 
 
 class PostingSerializer(serializers.Serializer):
@@ -373,9 +404,11 @@ class ExpensePaymentListAPIView(WarehouseScopeAPIMixin, BaseListAPIView):
         return super().get_queryset().filter(expense=expense)
 
 class SalesPaymentSerializer(PaymentSerializer):
+    type_label = serializers.CharField()
+
     class Meta:
         model = SalesPayment
-        fields = [*AUDIT_FIELDS, 'name', 'sales_order', *PaymentSerializer.payment_fields]
+        fields = [*AUDIT_FIELDS, 'name', 'sales_order', 'sales_return', 'type_label', *PaymentSerializer.payment_fields]
         read_only_fields = fields
 
 

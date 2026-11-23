@@ -1,12 +1,13 @@
 from django.contrib import admin
 
+from accounting.admin import PaymentAccountAdminMixin
 from warehouse.admin import WarehouseScopedAdmin
 
 from .models import PurchaseOrder, PurchaseOrderItem, PurchaseReturn, PurchaseReturnItem
 
 
 @admin.register(PurchaseOrder)
-class PurchaseOrderAdmin(WarehouseScopedAdmin):
+class PurchaseOrderAdmin(PaymentAccountAdminMixin, WarehouseScopedAdmin):
     posted_lookup = 'is_received'
     list_display = ['order_number', 'order_date', 'supplier', 'warehouse', 'is_received']
     list_filter = ['is_received', 'order_date']

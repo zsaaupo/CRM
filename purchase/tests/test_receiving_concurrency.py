@@ -8,6 +8,7 @@ from django.db import close_old_connections, connections
 from django.test import TransactionTestCase
 from rest_framework.test import APIRequestFactory, force_authenticate
 
+from accounting.models import FinancialAccount, PurchasePayment
 from common.models import ProductStatus, TradeStatus
 from inventory.models import Currency, Product, ProductType, UnitOfMeasure
 from purchase.models import PurchaseOrder, PurchaseOrderItem
@@ -26,10 +27,13 @@ class PurchaseReceiveConcurrencyTests(TransactionTestCase):
         self.unit = UnitOfMeasure.objects.create(name='Pieces', code='RACE-PCS')
         self.product = Product.objects.create(name='Rice', sku='RACE-RICE', unit=self.unit, currency_id='BDT')
         self.warehouse = WareHouse.objects.create(name='Main', address='Dhaka', phone='1')
+        self.payment_account = FinancialAccount.objects.create(name='Purchase bank', type='bank', warehouse=self.warehouse,
+                                                               opening_balance=100)
         self.order = self.new_order('2')
 
     def new_order(self, quantity):
-        order = PurchaseOrder.objects.create(currency_id='BDT', exchange_rate=1, warehouse=self.warehouse)
+        order = PurchaseOrder.objects.create(currency_id='BDT', exchange_rate=1, warehouse=self.warehouse,
+                                              payment_account=self.payment_account)
         PurchaseOrderItem.objects.create(purchase_order=order, line_number=1, product=self.product, unit=self.unit,
                                          quantity=quantity, unit_price=1)
         return order
@@ -58,6 +62,7 @@ class PurchaseReceiveConcurrencyTests(TransactionTestCase):
             return receive_purchase(actor, self.order.pk)[1]
         self.assertEqual(sorted(self.race([receive, receive])), [False, True])
         self.assertEqual(Stock.objects.get().quantity, Decimal('2'))
+        self.assertEqual(PurchasePayment.objects.filter(purchase_order=self.order).count(), 1)
 
     def test_two_purchases_of_same_product_share_one_balance(self):
         other = self.new_order('3')

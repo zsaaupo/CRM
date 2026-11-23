@@ -293,6 +293,60 @@ class FinanceTests(TestCase):
         self.assertEqual(local.status_code, 200, local.data)
         self.assertEqual([row['amount'] for row in self.client.get(self.payments).data['results']], ['65.0001'])
 
+    def test_cash_flow_lists_posted_movements_and_filters_by_account(self):
+        url = reverse('accounting:cash-flow-list')
+        self.assertEqual(self.client.get(url).data['count'], 0)
+        self.assertEqual(self.complete_expense().status_code, 200)
+        self.assertEqual(self.complete_sale(self.sales_order()).status_code, 200)
+        self.assertEqual(self.client.post(self.transfers, self.transfer_data('20'), format='json').status_code, 201)
+
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200, response.data)
+        rows = response.data['results']
+        self.assertEqual([(row['account_name'], row['direction'], row['amount']) for row in rows], [
+            (self.bank.name, 'inflow', '20.0000'),
+            (self.account.name, 'outflow', '20.0000'),
+            (self.account.name, 'inflow', '70.0001'),
+            (self.account.name, 'outflow', '70.0001'),
+        ])
+        self.assertEqual(self.client.get(url, {'account': self.bank.pk}).data['results'], rows[:1])
+        self.assertEqual(self.client.get(url, {'account': self.account.pk, 'q': 'Deposit'}).data['results'], rows[1:2])
+        self.assertEqual(self.client.get(url, {'account': 'invalid'}).status_code, 400)
+        self.assertEqual(self.client.post(url, {}, format='json').status_code, 405)
+
+    def test_cash_flow_page_and_filter_respect_account_permissions_and_warehouse_scope(self):
+        api_url = reverse('accounting:cash-flow-list')
+        page_url = reverse('accounting_pages:cash-flow-list')
+        assignment = assign_warehouse_role(self.staff, warehouse=self.warehouse)
+        permissions = Permission.objects.filter(content_type__app_label='accounting', codename__in=[
+            'view_financialaccount', 'view_accounttransaction',
+        ])
+        assignment.role.permissions.set(permissions)
+        for destination in (self.bank, self.shared, self.remote):
+            response = self.client.post(self.transfers, self.transfer_data('5', destination), format='json')
+            self.assertEqual(response.status_code, 201, response.data)
+        self.bank.is_active = False
+        self.bank.save(update_fields=['is_active'])
+
+        self.client.force_login(self.staff)
+        self.assertEqual({row['account'] for row in self.client.get(api_url).data['results']},
+                         {self.account.pk, self.bank.pk})
+        self.assertEqual(self.client.get(api_url, {'account': self.remote.pk}).data['count'], 0)
+        self.assertEqual(self.client.get(api_url, {'account': self.shared.pk}).data['count'], 0)
+        page = self.client.get(page_url)
+        self.assertContains(page, f'data-api-url="{api_url}"')
+        self.assertContains(page, f'href="{page_url}"')
+        self.assertContains(page, '<option value="">All accounts</option>', html=True)
+        for account in (self.bank, self.account):
+            self.assertContains(page, f'<option value="{account.pk}">{account.name}</option>', html=True)
+        for account in (self.remote, self.shared):
+            self.assertNotContains(page, f'<option value="{account.pk}">{account.name}</option>', html=True)
+
+        assignment.role.permissions.set(permissions.filter(codename='view_financialaccount'))
+        self.assertEqual(self.client.get(api_url).status_code, 403)
+        self.assertEqual(self.client.get(page_url).status_code, 403)
+        self.assertNotContains(self.client.get(reverse('accounting_pages:financial-account-list')), f'href="{page_url}"')
+
     def test_accounting_pages_link_to_statements_and_expense_completion(self):
         account_list = self.client.get(reverse('accounting_pages:financial-account-list'))
         self.assertContains(account_list, 'accounting-submenu')

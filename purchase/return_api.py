@@ -11,6 +11,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from account.permissions import has_role_permissions
+from accounting.models import ZERO, base_currency
 from common.serializers import AUDIT_FIELDS, CatalogSerializer
 from common.view import BaseAPIMixin, BaseDetailAPIView, BaseListAPIView, BaseListCreateAPIView, BaseUpdateAPIView
 from warehouse.scope import HasWarehouseAccess, lock_warehouse_scope, warehouse_scope
@@ -47,9 +48,20 @@ class PurchaseReturnLineSerializer(serializers.ModelSerializer):
 
 class PurchaseReturnDetailSerializer(PurchaseReturnSerializer):
     items = PurchaseReturnLineSerializer(many=True, read_only=True)
+    refund_amount = serializers.SerializerMethodField()
+    currency = serializers.SerializerMethodField()
 
     class Meta(PurchaseReturnSerializer.Meta):
-        fields = [*PurchaseReturnSerializer.Meta.fields, 'items']
+        fields = [*PurchaseReturnSerializer.Meta.fields, 'items', 'refund_amount', 'currency']
+
+    def get_refund_amount(self, record):
+        if not record.is_completed:
+            return None
+        payment = getattr(record, 'refund_payment', None)
+        return format(payment.amount if payment else ZERO, '.4f')
+
+    def get_currency(self, record):
+        return base_currency()
 
     def get_fields(self):
         fields = super().get_fields()
@@ -196,7 +208,7 @@ class PurchaseReturnDetailAPIView(PurchaseReturnResource, BaseDetailAPIView):
         return PurchaseReturnWriteSerializer if self.request.method in ('PATCH', 'PUT') else PurchaseReturnDetailSerializer
 
     def get_queryset(self):
-        queryset = super().get_queryset()
+        queryset = super().get_queryset().select_related('refund_payment')
         if has_role_permissions(self.request.user, ('purchase.view_purchasereturnitem',)):
             return queryset.prefetch_related(Prefetch('items', queryset=PurchaseReturnItem.objects.select_related(
                 'purchase_order_item__unit', 'purchase_order_item__product')))

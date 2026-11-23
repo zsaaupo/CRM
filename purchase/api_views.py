@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.db import OperationalError
+from django.db.models import OuterRef, Subquery
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import never_cache
 from rest_framework.exceptions import PermissionDenied
@@ -7,6 +8,8 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.generics import GenericAPIView
 
+from accounting.models import PurchasePayment
+from accounting.services import available_payment_accounts, payment_account_options
 from common.models import TradeStatus
 from common.view import BaseAPIMixin, BaseDetailAPIView, BaseListAPIView, BaseListCreateAPIView, BaseUpdateAPIView
 from inventory.models import Currency, Product
@@ -34,7 +37,9 @@ class PurchaseConcurrencyMixin:
 
 class PurchaseOrderListCreateAPIView(PurchaseConcurrencyMixin, WarehouseScopeAPIMixin, BaseListCreateAPIView):
     serializer_class = PurchaseOrderSerializer
-    queryset = PurchaseOrder.objects.select_related('currency', 'status', 'supplier', 'warehouse').prefetch_related('items')
+    queryset = PurchaseOrder.objects.select_related(
+        'currency', 'status', 'supplier', 'warehouse', 'payment_account',
+    ).prefetch_related('items')
     response_key = 'purchase_order'
     search_fields = ['order_number', 'supplier__name', 'supplier__code', 'supplier_reference', 'notes']
     ordering = ['-order_date', '-pk']
@@ -57,7 +62,10 @@ class PurchaseOrderListAPIView(PurchaseConcurrencyMixin, WarehouseScopeAPIMixin,
 
 class PurchaseOrderDetailAPIView(PurchaseConcurrencyMixin, WarehouseScopeAPIMixin, PurchaseDeleteGuardMixin, BaseDetailAPIView):
     serializer_class = PurchaseOrderDetailSerializer
-    queryset = PurchaseOrderListCreateAPIView.queryset
+    queryset = PurchaseOrderListCreateAPIView.queryset.annotate(posted_payment_amount=Subquery(
+        PurchasePayment.objects.filter(purchase_order_id=OuterRef('pk'), purchase_return__isnull=True)
+        .order_by().values('amount')[:1],
+    ))
 
     def get_serializer_class(self):
         return PurchaseOrderCreateSerializer if self.request.method in ('PUT', 'PATCH') else PurchaseOrderDetailSerializer
@@ -141,6 +149,7 @@ class PurchaseOptionsAPIView(PurchaseConcurrencyMixin, WarehouseScopeAPIMixin, B
                 {'value': row.pk, 'label': str(row)}
                 for row in scoped_queryset(WareHouse.objects.filter(is_active=True), warehouse_scope(request.user), 'pk').order_by('name', 'pk')
             ],
+            'payment_account': payment_account_options(available_payment_accounts(request.warehouse_scope)),
             'currency': [
                 {'value': row.code, 'label': f'{row.name} ({row.code})',
                  'exchange_rate': str(row.exchange_rate) if row.exchange_rate is not None else None}

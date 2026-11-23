@@ -5,6 +5,7 @@ from django.test import Client, TestCase
 from django.urls import reverse
 
 from inventory.models import Product, UnitOfMeasure
+from purchase.api_views import PurchaseOrderDetailAPIView
 from purchase.models import PurchaseOrder, PurchaseOrderItem
 from purchase.serializers import PurchaseOrderDetailSerializer
 
@@ -83,9 +84,10 @@ class PurchaseDetailPageTests(TestCase):
 
     def test_queries_missing_record_empty_items_and_revoked_access(self):
         with self.assertNumQueries(2):
-            data = PurchaseOrderDetailSerializer(PurchaseOrder.objects.select_related('currency', 'status', 'supplier')
-                                                 .prefetch_related('items').get(pk=self.order.pk)).data
+            order = PurchaseOrderDetailAPIView.queryset.get(pk=self.order.pk)
+            data = PurchaseOrderDetailSerializer(order).data
         self.assertEqual(data['grand_total'], '39.5000')
+        self.assertIsNone(data['payment_amount'])
         role = Group.objects.create(name='Purchase readers')
         role.permissions.add(*Permission.objects.filter(content_type__app_label='purchase',
                              codename__in=['view_purchaseorder', 'view_purchaseorderitem']))

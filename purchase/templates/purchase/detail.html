@@ -16,6 +16,7 @@
                 {% include 'includes/detail_field.html' with name='status_name' label='Status' only %}
                 {% include 'includes/detail_field.html' with name='is_received' label='Received (read-only)' kind='boolean' only %}
                 {% include 'includes/detail_field.html' with name='warehouse_name' label='Receiving warehouse' only %}
+                {% include 'includes/detail_field.html' with name='payment_account_name' label='Payment account' only %}
                 {% include 'includes/detail_field.html' with name='supplier_name' label='Supplier' only %}
                 {% include 'includes/detail_field.html' with name='supplier_code' label='Supplier code' only %}
                 {% include 'includes/detail_field.html' with name='supplier_reference' label='Supplier reference' only %}
@@ -42,6 +43,7 @@
             {% include 'includes/detail_field.html' with name='tax_total' label='Tax total' kind='money' only %}
             {% include 'includes/detail_field.html' with name='shipping_cost' label='Shipping cost' kind='money' only %}
             {% include 'includes/detail_field.html' with name='grand_total' label='Grand total' kind='money' only %}
+            {% include 'includes/detail_field.html' with name='payment_amount' label='Paid amount ('|add:base_currency|add:')' only %}
         </dl></section>
         {% include 'includes/detail_audit.html' %}
     </div>

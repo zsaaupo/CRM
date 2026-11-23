@@ -165,9 +165,18 @@ locked orders 409.
 
 Open **Sales > Sales returns**, or choose **Create return** from a completed
 sale. Choose return quantities against the original sale lines, then save the
-draft. Completion restores stock to the original sale warehouse and locks the
-return. A draft leaves stock unchanged. Remaining quantity is calculated per
+draft. Completion restores stock to the original sale warehouse, posts the
+refund, and locks the return in one transaction. Remaining quantity is calculated per
 sale line using completed returns.
+
+The refund covers the returned merchandise at its original discounted price
+with proportional tax and the exchange rate saved on the sale. Shipping is
+excluded from the merchandise refund. If a sale has several original payment
+accounts, each can refund up to the amount still collected through that
+account. An unfunded refund account rolls back both the refund and the return.
+The return detail response exposes the posted `refund_amount` and `currency`.
+Account statements show each refund as a sales refund outflow with the return
+number as its reference.
 
 | Method and path under `/sale/api/` | Purpose |
 | --- | --- |

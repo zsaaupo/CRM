@@ -6,9 +6,12 @@ from common.admin import AuditedAdmin
 from warehouse.admin import WarehouseScopedAdmin
 from warehouse.scope import scoped_queryset
 
-from .models import AccountTransaction, AccountTransfer, Expense, ExpenseCategory, ExpensePayment, FinancialAccount, SalesPayment
+from .models import (
+    AccountTransaction, AccountTransfer, Expense, ExpenseCategory, ExpensePayment, FinancialAccount, PurchasePayment,
+    SalesPayment,
+)
 from .services import (
-    PAYMENT_VIEW, SALES_PAYMENT_VIEW, STATEMENT_VIEW, TRANSFER_VIEW, available_payment_accounts, lock_rows,
+    PAYMENT_VIEW, PURCHASE_PAYMENT_VIEW, SALES_PAYMENT_VIEW, STATEMENT_VIEW, TRANSFER_VIEW, available_payment_accounts, lock_rows,
     transfer_queryset,
 )
 
@@ -87,7 +90,8 @@ class PostedFinanceAdmin(WarehouseScopedAdmin):
 class AccountTransactionAdmin(PostedFinanceAdmin):
     warehouse_lookup = 'account__warehouse_id'
     view_permissions = STATEMENT_VIEW
-    list_display = ['date', 'account', 'direction', 'amount', 'balance_after', 'transfer', 'expense_payment', 'sales_payment']
+    list_display = ['date', 'account', 'direction', 'amount', 'balance_after', 'transfer', 'expense_payment',
+                    'sales_payment', 'purchase_payment']
     list_select_related = ['account']
     list_filter = ['direction', 'date']
     # exclude = ['transfer', 'expense_payment', 'sales_payment']
@@ -120,9 +124,21 @@ class ExpensePaymentAdmin(PostedFinanceAdmin):
 class SalesPaymentAdmin(PostedFinanceAdmin):
     view_permissions = SALES_PAYMENT_VIEW
     warehouse_lookup = 'sales_order__warehouse_id'
-    list_display = ['number', 'date', 'sales_order', 'account', 'amount', 'method', 'reference']
-    list_select_related = ['sales_order', 'account']
+    list_display = ['number', 'date', 'sales_order', 'sales_return', 'account', 'amount', 'method', 'reference']
+    list_select_related = ['sales_order', 'sales_return', 'account']
     search_fields = ['reference', 'account__name', 'sales_order__order_number']
+
+    def scope_queryset(self, queryset, scope):
+        return scoped_queryset(super().scope_queryset(queryset, scope), scope, 'account__warehouse_id')
+
+
+@admin.register(PurchasePayment)
+class PurchasePaymentAdmin(PostedFinanceAdmin):
+    view_permissions = PURCHASE_PAYMENT_VIEW
+    warehouse_lookup = 'purchase_order__warehouse_id'
+    list_display = ['number', 'date', 'purchase_order', 'purchase_return', 'account', 'amount', 'method', 'reference']
+    list_select_related = ['purchase_order', 'purchase_return', 'account']
+    search_fields = ['reference', 'account__name', 'purchase_order__order_number']
 
     def scope_queryset(self, queryset, scope):
         return scoped_queryset(super().scope_queryset(queryset, scope), scope, 'account__warehouse_id')

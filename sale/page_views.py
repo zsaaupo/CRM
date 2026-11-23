@@ -214,6 +214,7 @@ class SalesReturnDetailPageView(SalesReturnPageView):
             context['edit_url'] = reverse('sale_pages:edit-return', args=[record.pk])
         if has_role_permissions(user, ('sale.change_salesreturn',)):
             context['complete_api_url'] = reverse('sale:sales-return-complete')
+            context['return_complete_label'] = 'Complete return'
         return context
 
 # Sales quotations

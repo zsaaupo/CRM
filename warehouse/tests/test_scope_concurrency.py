@@ -11,6 +11,7 @@ from django.test import TransactionTestCase
 from rest_framework.exceptions import NotFound
 from rest_framework.test import APIRequestFactory, force_authenticate
 
+from accounting.models import FinancialAccount
 from common.models import ProductStatus, TradeStatus
 from inventory.models import Currency, Product, ProductType, UnitOfMeasure
 from purchase.models import PurchaseOrder, PurchaseOrderItem
@@ -40,9 +41,13 @@ class WarehouseScopeConcurrencyTests(TransactionTestCase):
         unit = UnitOfMeasure.objects.create(name='Pieces', code='SCOPE-RACE')
         self.product = Product.objects.create(sku='SCOPE-RACE', name='Rice', currency_id='BDT', unit=unit)
         self.stock = Stock.objects.create(warehouse=self.utt, product=self.product, quantity=10)
+        self.payment_account = FinancialAccount.objects.create(
+            name='Warehouse cash', type=FinancialAccount.Type.CASH, warehouse=self.utt, opening_balance=100,
+        )
 
     def race_reassignment(self, model, item_model, parent, service, flag, expected_quantity):
-        order = model.objects.create(warehouse=self.utt, currency_id='BDT', exchange_rate=1)
+        order = model.objects.create(warehouse=self.utt, currency_id='BDT', exchange_rate=1,
+                                     payment_account=self.payment_account)
         item_model.objects.create(**{parent: order}, line_number=1, product=self.product,
                                   unit=self.product.unit, quantity=3, unit_price=1)
         barrier = Barrier(2)
@@ -88,6 +93,8 @@ class WarehouseScopeConcurrencyTests(TransactionTestCase):
         self.assertEqual(self.scope.warehouse_id, self.other.pk)
         self.assertEqual(getattr(order, flag), operated)
         self.assertEqual(self.stock.quantity, Decimal(expected_quantity if operated else '10'))
+        self.assertEqual(list(self.payment_account.transactions.values_list('amount', flat=True)),
+                         [Decimal('3.0000')] if operated else [])
         with self.assertRaises(NotFound):
             service(self.user, order.pk)
 

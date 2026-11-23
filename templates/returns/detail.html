@@ -23,6 +23,7 @@
                 {% include 'includes/detail_field.html' with name='return_date' label='Return date' only %}
                 {% include 'includes/detail_field.html' with name='is_completed' label='Completed' kind='boolean' only %}
                 {% include 'includes/detail_field.html' with name='completed_at' label='Completed at' kind='datetime' only %}
+                {% block return_payment_fields %}{% endblock %}
                 {% include 'includes/detail_field.html' with name='notes' label='Notes' full=True only %}
             </dl>
             {% if complete_api_url %}

@@ -8,6 +8,7 @@ from django.test import Client, TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
 
+from accounting.models import FinancialAccount
 from inventory.models import Product, UnitOfMeasure
 from purchase.models import PurchaseOrder, PurchaseOrderItem
 from purchase.page_views import PURCHASE_EDIT_PERMISSIONS
@@ -21,8 +22,10 @@ class PurchaseEditingTests(TestCase):
         self.unit = UnitOfMeasure.objects.create(name='Pieces', code='EDIT-PCS')
         self.product = Product.objects.create(name='Rice', sku='EDIT-RICE', unit=self.unit, currency_id='BDT')
         self.warehouse = WareHouse.objects.create(name='Main', address='Dhaka', phone='1')
+        self.payment_account = FinancialAccount.objects.create(name='Purchase bank', type='bank', opening_balance=100)
         self.order = PurchaseOrder.objects.create(currency_id='BDT', exchange_rate='1', warehouse=self.warehouse,
-                                                  create_by='original', modified_by='original')
+                                                  payment_account=self.payment_account, create_by='original',
+                                                  modified_by='original')
         self.first = self.line(1, '2')
         self.second = self.line(2, '3')
         self.client = APIClient(enforce_csrf_checks=True)
@@ -146,7 +149,8 @@ class PurchaseEditingTests(TestCase):
             response = self.client.patch(self.update, {'items': items}, format='json')
             self.assertEqual(response.status_code, 400, response.data)
         response = self.client.post(reverse('purchase:purchase-order-list'), {
-            'currency': 'BDT', 'exchange_rate': '1', 'items': [self.payload(self.first)],
+            'currency': 'BDT', 'exchange_rate': '1', 'payment_account': self.payment_account.pk,
+            'items': [self.payload(self.first)],
         }, format='json')
         self.assertEqual(response.status_code, 400, response.data)
         self.assertEqual(self.order.items.count(), 2)

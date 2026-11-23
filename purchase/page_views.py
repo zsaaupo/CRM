@@ -124,7 +124,7 @@ class PurchaseReturnPageView(WarehouseScopePageMixin, ProtectedAccountPageView):
             return_order_label='Original purchase order', return_order_field='purchase_order',
             return_order_number_field='purchase_order_number', return_original_label='Original purchase',
             return_party_field='supplier_name', return_party_label='Supplier', return_quantity_label='Received',
-            return_complete_label='Complete and deduct stock',
+            return_complete_label='Complete return',
         )
         return context
 
@@ -189,7 +189,7 @@ class PurchaseReturnEditPageView(PurchaseReturnCreatePageView):
 
 
 class PurchaseReturnDetailPageView(PurchaseReturnPageView):
-    template_name = 'returns/detail.html'
+    template_name = 'purchase/return_detail.html'
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)

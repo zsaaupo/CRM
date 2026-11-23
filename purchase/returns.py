@@ -1,4 +1,4 @@
-"""Validate supplier returns and atomically deduct stock from the receiving warehouse."""
+"""Validate supplier returns and post stock and refund changes atomically."""
 
 from collections import defaultdict
 from decimal import Decimal, InvalidOperation, localcontext
@@ -9,6 +9,7 @@ from django.utils import timezone
 from rest_framework.exceptions import APIException, NotFound, PermissionDenied, ValidationError
 
 from account.permissions import has_role_permissions
+from accounting.services import post_purchase_return_refund, return_refund_amount
 from inventory.models import Product
 from warehouse.models import Stock, WareHouse
 from warehouse.scope import lock_warehouse_scope, scoped_queryset
@@ -72,11 +73,11 @@ def returned_quantities(order, exclude_return=None):
     return returned
 
 
-def validate_items(order, quantities, exclude_return=None, products=None):
+def validate_items(order, quantities, products=None, *, previous=None):
     if not quantities:
         raise ValidationError({'items': 'Add at least one return quantity.'})
     received = {line.pk: line for line in order.items.select_related('product').filter(pk__in=quantities)}
-    returned = returned_quantities(order, exclude_return)
+    returned = returned_quantities(order) if previous is None else previous
     for pk, quantity in quantities.items():
         line = received.get(pk)
         if line is None:
@@ -128,6 +129,7 @@ def complete_return(user, pk):
             if not orders.update(is_received=F('is_received')):
                 raise ValidationError({'purchase_order': 'A received purchase with a receiving warehouse is required.'})
             order = orders.get()
+            record.purchase_order = order
             warehouse = WareHouse.objects.select_for_update().filter(pk=order.warehouse_id, is_active=True).first()
             if warehouse is None:
                 raise ValidationError({'warehouse': 'The original purchase warehouse must be active.'})
@@ -137,11 +139,14 @@ def complete_return(user, pk):
             product_ids = order.items.filter(pk__in=quantities).values_list('product_id', flat=True)
             products = {product.pk: product for product in Product.objects.select_for_update().filter(
                 pk__in=product_ids).order_by('pk')}
-            received = validate_items(order, quantities, exclude_return=pk, products=products)
+            previous = returned_quantities(order, exclude_return=pk)
+            received = validate_items(order, quantities, products=products, previous=previous)
             stock_quantities = defaultdict(Decimal)
             for line_id, quantity in quantities.items():
                 stock_quantities[received[line_id].product_id] += quantity
             deduct_stock(warehouse, stock_quantities, products, user, now)
+            post_purchase_return_refund(record, scope, user, date=timezone.localdate(now),
+                                        amount=return_refund_amount(order, quantities, previous))
             return record, True
     except OperationalError as exc:
         if 'locked' in str(exc).lower() or 'deadlock' in str(exc).lower():

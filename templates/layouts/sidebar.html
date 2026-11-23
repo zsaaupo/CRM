@@ -125,6 +125,7 @@
         </button>
         <div id="accounting-submenu" class="sidebar-submenu" {% if page_section != 'accounting' %}hidden{% endif %}>
             {% if finance_access.accounts %}<a href="{% url 'accounting_pages:financial-account-list' %}" data-nav-item class="sidebar-sub-link {% if finance_key == 'accounts' %}is-current{% endif %}">Financial accounts</a>{% endif %}
+            {% if finance_access.cash_flow %}<a href="{% url 'accounting_pages:cash-flow-list' %}" data-nav-item class="sidebar-sub-link {% if finance_key == 'cash-flow' %}is-current{% endif %}" {% if finance_key == 'cash-flow' %}aria-current="page"{% endif %}>Cash flow</a>{% endif %}
             {% if finance_access.transfers %}<a href="{% url 'accounting_pages:account-transfer-list' %}" data-nav-item class="sidebar-sub-link {% if finance_key == 'transfers' %}is-current{% endif %}">Account transfers</a>{% endif %}
         </div>
         {% endif %}

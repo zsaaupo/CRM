@@ -338,6 +338,9 @@ if (panel) {
             .map((input) => [input.name, input.value]);
         load(1);
     });
+    if (filters?.hasAttribute("data-catalog-auto-filter")) {
+        filters.addEventListener("change", () => filters.requestSubmit());
+    }
     filters?.addEventListener("reset", () => {
         filterValues = [];
         load(1);

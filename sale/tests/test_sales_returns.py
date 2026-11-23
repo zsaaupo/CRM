@@ -2,16 +2,19 @@ from concurrent.futures import ThreadPoolExecutor
 from decimal import Decimal
 from threading import Barrier
 from time import sleep
+from uuid import uuid4
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
 from django.db import close_old_connections, connections
 from django.test import TestCase, TransactionTestCase
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 from rest_framework.test import APIClient
 
-from accounting.models import FinancialAccount
+from accounting.models import AccountTransaction, FinancialAccount, SalesPayment
+from accounting.services import post_transaction, post_transfer
 from common.models import ProductStatus, TradeStatus
 from inventory.models import Currency, Product, ProductType, UnitOfMeasure
 from sale.models import SalesOrder, SalesOrderItem, SalesReturn, SalesReturnItem
@@ -32,9 +35,9 @@ class SalesReturnTests(TestCase):
         cls.unit = UnitOfMeasure.objects.create(code='RETURN-PCS', name='Pieces')
         cls.product = Product.objects.create(sku='RETURN-PRODUCT', name='Product', currency_id='BDT', unit=cls.unit)
         cls.stock = Stock.objects.create(warehouse=cls.warehouse, product=cls.product, quantity=10, create_by='initial')
-        account = FinancialAccount.objects.create(name='Sales bank', type='bank', warehouse=cls.warehouse)
+        cls.account = FinancialAccount.objects.create(name='Sales bank', type='bank', warehouse=cls.warehouse)
         cls.order = SalesOrder.objects.create(currency_id='BDT', exchange_rate=1, warehouse=cls.warehouse,
-                                             payment_account=account)
+                                             payment_account=cls.account)
         cls.sold = SalesOrderItem.objects.create(sales_order=cls.order, product=cls.product, unit=cls.unit, line_number=1,
                                                 quantity=Decimal('5.123456'), unit_price=10)
         complete_sale(cls.admin, cls.order.pk)
@@ -72,6 +75,11 @@ class SalesReturnTests(TestCase):
         first = self.complete(record['id'])
         self.assertTrue(first['completed_now'])
         self.assertFalse(self.complete(record['id'])['completed_now'])
+        refund = SalesPayment.objects.get(sales_return_id=record['id'])
+        self.assertEqual(refund.amount, Decimal('11.2346'))
+        self.assertEqual(refund.account_id, self.account.pk)
+        self.assertEqual(refund.transaction.direction, AccountTransaction.Direction.OUTFLOW)
+        self.assertEqual(refund.transaction.balance_after, Decimal('40.0000'))
         self.stock.refresh_from_db()
         self.assertEqual(self.stock.quantity, Decimal('6'))
         self.assertEqual(self.stock.create_by, 'initial')
@@ -85,10 +93,78 @@ class SalesReturnTests(TestCase):
         self.order.refresh_from_db()
         self.assertEqual((self.stock.quantity, branch_stock.quantity), (Decimal('10'), Decimal('100')))
         self.assertEqual(self.order.fulfilled_at, fulfilled_at)
+        self.assertEqual(self.account.transactions.first().balance_after, Decimal('0.0000'))
         detail = reverse('sale:sales-return-detail', args=[record['id']])
         self.assertEqual(self.client.patch(detail, {'notes': 'Change'}, format='json', HTTP_X_CSRFTOKEN=self.token).status_code, 409)
         self.assertEqual(self.client.delete(detail, HTTP_X_CSRFTOKEN=self.token).status_code, 409)
         self.assertEqual(self.client.get(detail).data['items'][0]['quantity'], '1.123456')
+        self.assertEqual(self.client.get(detail).data['refund_amount'], '11.2346')
+        self.role.permissions.add(*Permission.objects.filter(content_type__app_label='accounting', codename__in=[
+            'view_financialaccount', 'view_accounttransaction', 'view_salespayment',
+        ]))
+        statement_url = reverse('accounting:account-statement', args=[self.account.pk])
+        row, = self.client.get(statement_url, {'q': record['return_number']}).data['results']
+        self.assertEqual((row['source'], row['sales_payment'], row['direction']),
+                         (f'Sales refund {refund.number}', refund.pk, 'outflow'))
+        cash_flow = self.client.get(reverse('accounting:cash-flow-list'), {'account': self.account.pk})
+        self.assertEqual(cash_flow.status_code, 200, cash_flow.data)
+        self.assertEqual([(entry['direction'], entry['amount']) for entry in cash_flow.data['results']], [
+            ('outflow', '40.0000'), ('outflow', '11.2346'), ('inflow', '51.2346'),
+        ])
+        payments_page = self.client.get(reverse('sale_pages:sales-payment-list', args=[self.order.pk]))
+        self.assertEqual(payments_page.context['refunded'], Decimal('51.2346'))
+        self.assertEqual(payments_page.context['due'], Decimal('0.0000'))
+
+    def test_partial_refunds_reconcile_original_discount_tax_and_exchange_rate(self):
+        currency = Currency.objects.create(code='EUR', name='Euro', exchange_rate=10)
+        order = SalesOrder.objects.create(warehouse=self.warehouse, payment_account=self.account,
+                                          currency=currency, exchange_rate='1.1', shipping_cost='0.5')
+        item = order.items.create(product=self.product, unit=self.unit, line_number=1, quantity=3, unit_price=1,
+                                  discount_amount='0.2', tax_rate=25)
+        complete_sale(self.admin, order.pk)
+
+        amounts = []
+        for _ in range(3):
+            record = self.create_return(sales_order=order.pk, items=[{'sales_order_item': item.pk, 'quantity': '1'}])
+            self.complete(record['id'])
+            amounts.append(SalesPayment.objects.get(sales_return_id=record['id']).amount)
+
+        self.assertEqual(amounts, [Decimal('1.2833'), Decimal('1.2834'), Decimal('1.2833')])
+        receipt = order.payments.get(sales_return__isnull=True)
+        self.assertEqual(receipt.amount - sum(amounts), Decimal('0.5500'))
+
+    def test_refund_is_limited_to_legacy_payments_and_uses_their_original_accounts(self):
+        order = SalesOrder.objects.create(warehouse=self.warehouse, currency_id='BDT', exchange_rate=1,
+                                          is_completed=True)
+        item = order.items.create(product=self.product, unit=self.unit, line_number=1, quantity=2, unit_price=10)
+        other = FinancialAccount.objects.create(name='Other sales bank', type='bank', warehouse=self.warehouse)
+        date = timezone.localdate()
+        for account, amount in [(self.account, Decimal('3')), (other, Decimal('4'))]:
+            payment = order.payments.create(account=account, amount=amount, method=account.type)
+            post_transaction(account, AccountTransaction.Direction.INFLOW, self.admin, date=date, amount=amount,
+                             sales_payment=payment)
+
+        record = self.create_return(sales_order=order.pk, items=[{'sales_order_item': item.pk, 'quantity': '1'}])
+        self.complete(record['id'])
+        refunds = order.payments.filter(sales_return_id=record['id']).values_list('account_id', 'amount')
+        self.assertCountEqual(refunds, [(self.account.pk, Decimal('3')), (other.pk, Decimal('4'))])
+        record = self.create_return(sales_order=order.pk, items=[{'sales_order_item': item.pk, 'quantity': '1'}])
+        self.complete(record['id'])
+        self.assertFalse(order.payments.filter(sales_return_id=record['id']).exists())
+
+    def test_insufficient_refund_funds_roll_back_completion_and_restock(self):
+        other = FinancialAccount.objects.create(name='Other bank', type='bank', warehouse=self.warehouse)
+        post_transfer(
+            self.admin, source_account=self.account.pk, destination_account=other.pk, amount=Decimal('50'),
+            date=timezone.localdate(), reference='', request_key=uuid4(),
+        )
+        record = self.create_return()
+        response = self.complete(record['id'], expected=400)
+        self.assertIn('amount', response)
+        self.stock.refresh_from_db()
+        self.assertEqual(self.stock.quantity, Decimal('4.876544'))
+        self.assertFalse(SalesReturn.objects.get(pk=record['id']).is_completed)
+        self.assertFalse(SalesPayment.objects.filter(sales_return_id=record['id']).exists())
 
     def test_competing_draft_rechecks_remaining_and_can_be_edited(self):
         first, second = self.create_return('3'), self.create_return('3')
@@ -168,6 +244,7 @@ class SalesReturnTests(TestCase):
         detail_url = reverse('sale:sales-return-detail', args=[record['id']])
         self.assertContains(self.client.get(reverse('sale_pages:return-detail', args=[record['id']])),
                             f'data-api-url="{detail_url}"')
+        self.assertContains(self.client.get(reverse('sale_pages:return-detail', args=[record['id']])), 'Refunded amount')
         self.assertEqual(self.client.post(reverse('sale:sales-return-complete'), {
             'return_id': record['id'], 'is_completed': True,
         }, format='json').status_code, 403)

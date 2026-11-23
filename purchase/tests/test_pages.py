@@ -8,6 +8,7 @@ from django.test import Client, TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
 
+from accounting.models import FinancialAccount
 from inventory.models import Currency, Product, UnitOfMeasure
 from purchase.models import PurchaseOrder, PurchaseOrderItem
 from warehouse.models import Stock
@@ -17,6 +18,7 @@ class PurchasePageTests(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_user(username='purchase-page-operator')
         self.role = assign_warehouse_role(self.user, all_warehouses=True).role
+        self.payment_account = FinancialAccount.objects.create(name='Purchase bank', type='bank')
         self.unit = UnitOfMeasure.objects.create(name='Pieces', code='PCS')
         self.product = Product.objects.create(name='Keyboard', sku='KEYBOARD', currency_id='BDT', unit=self.unit,
                                               cost_price='12.3456')
@@ -37,6 +39,7 @@ class PurchasePageTests(TestCase):
 
     def payload(self):
         return {'supplier': None, 'currency': 'BDT', 'exchange_rate': '1', 'shipping_cost': '5',
+                'payment_account': self.payment_account.pk,
                 'items': [{'line_number': 1, 'product': self.product.pk, 'unit': self.unit.pk,
                            'quantity': '3', 'unit_price': '10', 'discount_amount': '2', 'tax_rate': '15'},
                           {'line_number': 2, 'product': self.product.pk, 'unit': self.unit.pk,
@@ -89,7 +92,8 @@ class PurchasePageTests(TestCase):
         self.assertContains(response, 'data-purchase-submit disabled')
         self.assertContains(response, 'data-purchase-add-line disabled')
         self.assertContains(response, 'data-line-unit-label readonly')
-        for name in ['supplier', 'warehouse', 'order_date', 'expected_date', 'currency', 'exchange_rate', 'status', 'shipping_cost', 'notes']:
+        for name in ['supplier', 'warehouse', 'payment_account', 'order_date', 'expected_date', 'currency',
+                     'exchange_rate', 'status', 'shipping_cost', 'notes']:
             self.assertContains(response, f'name="{name}"')
         for name in ['product', 'unit', 'quantity', 'unit_price', 'discount_amount', 'tax_rate', 'description']:
             self.assertContains(response, f'data-line-field="{name}"')
@@ -106,6 +110,8 @@ class PurchasePageTests(TestCase):
         self.assertIn('no-store', response['Cache-Control'])
         data = response.data
         self.assertEqual(data['base_currency'], 'BDT')
+        self.assertEqual(data['payment_account'],
+                         [{'value': self.payment_account.pk, 'label': self.payment_account.name, 'warehouse': None}])
         self.assertEqual(data['product'], [{'value': self.product.pk, 'label': 'KEYBOARD — Keyboard',
                                           'unit': self.unit.pk, 'unit_label': 'Pieces (PCS)',
                                           'cost_price': '12.3456'}])

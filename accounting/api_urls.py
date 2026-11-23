@@ -1,7 +1,7 @@
 from django.urls import path
 
 from .api_views import (
-    AccountStatementAPIView, AccountTransferListCreateAPIView, ExpenseCategoryDetailAPIView,
+    AccountStatementAPIView, AccountTransferListCreateAPIView, CashFlowListAPIView, ExpenseCategoryDetailAPIView,
     ExpenseCategoryListCreateAPIView, ExpenseCompleteAPIView, ExpenseDetailAPIView, ExpenseListCreateAPIView,
     ExpenseOptionsAPIView, ExpensePaymentListAPIView, FinancialAccountDetailAPIView, FinancialAccountListCreateAPIView,
     SalesPaymentListAPIView,
@@ -21,6 +21,7 @@ urlpatterns = [
     path('financial-accounts/', FinancialAccountListCreateAPIView.as_view(), name='financial-account-list'),
     path('financial-accounts/<int:pk>/', FinancialAccountDetailAPIView.as_view(), name='financial-account-detail'),
     path('financial-accounts/<int:pk>/statement/', AccountStatementAPIView.as_view(), name='account-statement'),
+    path('cash-flow/', CashFlowListAPIView.as_view(), name='cash-flow-list'),
     path('account-transfers/', AccountTransferListCreateAPIView.as_view(), name='account-transfer-list'),
     path('expenses/<int:expense_pk>/payments/', ExpensePaymentListAPIView.as_view(), name='expense-payment-list'),
     path('sales-orders/<int:sales_order_pk>/payments/', SalesPaymentListAPIView.as_view(),
