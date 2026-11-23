@@ -7,13 +7,9 @@
     <div><dt class="form-label">Opening balance</dt><dd>{{ financial_account.currency }} {{ financial_account.opening_balance }}</dd></div>
     <div><dt class="form-label">Warehouse</dt><dd>{{ financial_account.warehouse.name|default:'Shared' }}</dd></div>
 </dl>
-{% elif expense or sales_order %}
+{% elif sales_order %}
 <dl class="flex flex-wrap gap-x-8 gap-y-3 border-b border-stone-200 px-5 py-4 text-sm">
-    {% if expense %}
-    <div><dt class="form-label">Expense #{{ expense.pk }}</dt><dd>{{ expense.category.name }} · {{ expense.warehouse.name }}</dd></div>
-    {% else %}
     <div><dt class="form-label">Sales order</dt><dd>{{ sales_order.order_number }} · {{ sales_order.warehouse.name }}</dd></div>
-    {% endif %}
     <div><dt class="form-label">Amount</dt><dd>{{ currency }} {{ payment_total }}</dd></div>
     <div><dt class="form-label">Paid</dt><dd>{{ currency }} {{ paid }}</dd></div>
     <div><dt class="form-label">Outstanding</dt><dd>{{ currency }} {{ due }}</dd></div>

@@ -181,6 +181,8 @@ class FinanceTests(TestCase):
         self.assertEqual(ExpensePayment.objects.count(), 2)
         listing = self.client.get(reverse('accounting:expense-list')).data['results'][0]
         self.assertEqual((listing['payment_status'], listing['outstanding_amount']), ('Paid', '0.0000'))
+        detail_page = self.client.get(reverse('accounting_pages:expense-detail', args=[self.expense.pk]))
+        self.assertNotContains(detail_page, 'Edit expense')
         ledger = self.statement()
         self.assertEqual(ledger['account']['balance'], '30.0000')
         self.assertEqual([(entry['direction'], entry['amount'], entry['balance_after']) for entry in ledger['results']],
@@ -191,9 +193,6 @@ class FinanceTests(TestCase):
         self.assertEqual(self.client.delete(reverse('accounting:financial-account-detail',
                                                    args=[self.account.pk])).status_code, 409)
         payment_id = partial.expense_payment_id
-        payment_page = reverse('accounting_pages:expense-payment-list', args=[self.expense.pk])
-        self.assertNotContains(self.client.get(payment_page), f'{payment_page}0/reverse/')
-        self.assertEqual(self.client.get(f'{payment_page}{payment_id}/reverse/').status_code, 404)
         self.assertEqual(self.client.post(f'{self.payments}{payment_id}/reverse/', {}, format='json').status_code, 404)
         self.assertEqual(AccountTransaction.objects.count(), 2)
 
@@ -294,17 +293,17 @@ class FinanceTests(TestCase):
         self.assertEqual(local.status_code, 200, local.data)
         self.assertEqual([row['amount'] for row in self.client.get(self.payments).data['results']], ['65.0001'])
 
-    def test_accounting_pages_link_to_scoped_payment_and_statement_apis(self):
+    def test_accounting_pages_link_to_statements_and_expense_completion(self):
         account_list = self.client.get(reverse('accounting_pages:financial-account-list'))
         self.assertContains(account_list, 'accounting-submenu')
         self.assertContains(account_list, reverse('accounting_pages:account-statement', args=[0]))
         statement = self.client.get(reverse('accounting_pages:account-statement', args=[self.account.pk]))
         self.assertContains(statement, reverse('accounting:account-statement', args=[self.account.pk]))
         self.assertContains(statement, 'Main cash statement')
-        payment_list = self.client.get(reverse('accounting_pages:expense-payment-list', args=[self.expense.pk]))
-        self.assertNotContains(payment_list, 'Record payment')
-        self.assertNotContains(payment_list, '>Reversed<')
-        expenses = self.client.get(reverse('accounting_pages:expense-list'))
+        expense_list_url = reverse('accounting_pages:expense-list')
+        expenses = self.client.get(expense_list_url)
+        self.assertContains(expenses, reverse('accounting_pages:expense-detail', args=[0]))
+        self.assertEqual(self.client.get(f'{expense_list_url}{self.expense.pk}/payments/').status_code, 404)
         self.assertContains(expenses, reverse('accounting:expense-complete'))
         expense_form = self.client.get(reverse('accounting_pages:add-expense'))
         self.assertContains(expense_form, 'name="payment_account"')

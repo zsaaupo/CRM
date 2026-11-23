@@ -1,7 +1,6 @@
 from uuid import uuid4
 
 from django.conf import settings
-from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
 
@@ -12,14 +11,8 @@ from sale.returns import completed_orders
 from warehouse.models import WareHouse
 from warehouse.scope import all_warehouse_access, has_warehouse_scope, scoped_queryset, warehouse_scope
 
-from .models import (
-    AccountTransaction, AccountTransfer, Expense, ExpenseCategory, ExpensePayment, FinancialAccount,
-    SalesPayment,
-)
-from .services import (
-    PAYMENT_VIEW, SALES_PAYMENT_VIEW, STATEMENT_VIEW, TRANSFER_VIEW, accounts_with_balances,
-    paid_amount, sales_payment_totals,
-)
+from .models import AccountTransaction, AccountTransfer, Expense, ExpenseCategory, FinancialAccount, SalesPayment
+from .services import SALES_PAYMENT_VIEW, STATEMENT_VIEW, TRANSFER_VIEW, accounts_with_balances, sales_payment_totals
 
 
 CATEGORIES = CatalogResource(
@@ -49,15 +42,10 @@ STATEMENT = CatalogResource(
     (('date', 'Date', 'text'), ('source', 'Source', 'text'), ('reference', 'Reference', 'text'),
      ('direction_label', 'Direction', 'text'), ('amount', 'Amount', 'price'), ('balance_after', 'Balance after', 'price')),
 )
-PAYMENT_COLUMNS = (
-    ('name', 'Payment', 'text'), ('date', 'Date', 'text'), ('account_name', 'Account', 'text'),
-    ('method_label', 'Method', 'text'), ('reference', 'Reference', 'text'), ('amount', 'Amount', 'price'),
-)
-PAYMENTS = CatalogResource(
-    'expense-payment', 'expense-payments', 'payment', 'expense payments', ExpensePayment, PAYMENT_COLUMNS,
-)
 SALES_PAYMENTS = CatalogResource(
-    'sales-payment', 'sales-payments', 'payment', 'sales payments', SalesPayment, PAYMENT_COLUMNS,
+    'sales-payment', 'sales-payments', 'payment', 'sales payments', SalesPayment,
+    (('name', 'Payment', 'text'), ('date', 'Date', 'text'), ('account_name', 'Account', 'text'),
+     ('method_label', 'Method', 'text'), ('reference', 'Reference', 'text'), ('amount', 'Amount', 'price')),
 )
 
 
@@ -116,14 +104,14 @@ class AccountingListPageView(AccountingPageView):
             }[resource.key],
             columns=table_columns(resource), hide_list_hint=resource is ACCOUNTS,
         )
-        if resource is EXPENSES and has_role_permissions(self.request.user, PAYMENT_VIEW):
-            context['view_url_template'] = reverse('accounting_pages:expense-payment-list', args=[0])
-        if resource is ACCOUNTS and has_role_permissions(self.request.user, STATEMENT_VIEW):
+        if resource is EXPENSES:
+            context['view_url_template'] = reverse('accounting_pages:expense-detail', args=[0])
+        elif resource is ACCOUNTS and has_role_permissions(self.request.user, STATEMENT_VIEW):
             context['view_url_template'] = reverse('accounting_pages:account-statement', args=[0])
         if can_change or can_delete or 'view_url_template' in context:
             context['columns'].append({
                 'key': 'actions', 'label': 'Actions', 'type': 'edit',
-                'view_label': {EXPENSES.key: 'Payments', ACCOUNTS.key: 'Statement'}.get(resource.key),
+                'view_label': 'Statement' if resource is ACCOUNTS else None,
             })
         if can_change:
             context['edit_url_template'] = reverse(f'accounting_pages:edit-{resource.key}', args=[0])
@@ -139,6 +127,25 @@ class AccountingListPageView(AccountingPageView):
             if can_change:
                 context.update(complete_api_url=reverse('accounting:expense-complete'), complete_id_field='expense_id',
                                complete_result_key='expense', complete_label='expense')
+        return context
+
+
+class ExpenseDetailPageView(AccountingPageView):
+    resource = EXPENSES
+    mode = 'detail'
+    template_name = 'accounting/expense_detail.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        scope = warehouse_scope(self.request.user)
+        expenses = scoped_queryset(Expense.objects.only('is_completed'), scope)
+        expense = get_object_or_404(expenses, pk=self.kwargs['pk'])
+        context.update(
+            expense_id=expense.pk, page_label='Expense details',
+            detail_api_url=reverse('accounting:expense-detail', args=[expense.pk]),
+        )
+        if self.can('change') and not expense.is_completed:
+            context['edit_url'] = reverse('accounting_pages:edit-expense', args=[expense.pk])
         return context
 
 
@@ -200,9 +207,7 @@ class FinancePageView(ProtectedAccountPageView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['resource'] = self.resource
-        if self.resource is PAYMENTS:
-            context.update(page_section='expense', expense_key='expense', section_label='Expenses')
-        elif self.resource is SALES_PAYMENTS:
+        if self.resource is SALES_PAYMENTS:
             context.update(page_section='sale', section_label='Sales')
         else:
             context.update(page_section='accounting', finance_key=self.finance_key, section_label='Accounting')
@@ -211,11 +216,6 @@ class FinancePageView(ProtectedAccountPageView):
     def accounts(self):
         scope = warehouse_scope(self.request.user)
         return scoped_queryset(FinancialAccount.objects.all(), scope)
-
-    def expense(self):
-        scope = warehouse_scope(self.request.user)
-        return get_object_or_404(scoped_queryset(Expense.objects.select_related('category', 'warehouse'), scope),
-                                 pk=self.kwargs['expense_pk'])
 
     def sales_order(self):
         orders = completed_orders(warehouse_scope(self.request.user)).select_related('warehouse')
@@ -260,24 +260,6 @@ class AccountTransferListPageView(FinanceListPageView):
             list_api_url=reverse('accounting:account-transfer-list'), can_add=self.can('accounting.add_accounttransfer'),
             add_url=reverse('accounting_pages:add-account-transfer'), add_label='New transfer',
             list_description='Funds moved between financial accounts.',
-        )
-        return context
-
-
-class ExpensePaymentListPageView(FinanceListPageView):
-    resource = PAYMENTS
-    permission_required = PAYMENT_VIEW
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        expense = self.expense()
-        paid = paid_amount(expense)
-        due = expense.amount - paid
-        context.update(
-            expense=expense, payment_total=expense.amount, paid=paid, due=due, currency=settings.INVENTORY_BASE_CURRENCY,
-            list_api_url=reverse('accounting:expense-payment-list', args=[expense.pk]),
-            secondary_url=reverse('accounting_pages:expense-list'), secondary_label='Back to expenses',
-            list_description='Payments recorded against this expense.',
         )
         return context
 

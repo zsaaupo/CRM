@@ -1,0 +1,49 @@
+{% extends "layouts/dashboard.html" %}
+{% load static %}
+
+{% block title %}Expense #{{ expense_id }} | eManager{% endblock %}
+
+{% block content %}
+<div class="workspace-content" data-record-detail data-api-url="{{ detail_api_url }}" data-title-field="id" data-login-url="{% url 'account_pages:login' %}">
+    <div class="page-heading">
+        <div>
+            <p class="page-eyebrow">Expenses</p>
+            <h1 class="page-title">Expense #<span data-record-title>{{ expense_id }}</span><span class="text-emerald-600">.</span></h1>
+        </div>
+        <div class="flex flex-wrap gap-3">
+            <a href="{{ list_url }}" class="secondary-button">Back to expenses <span aria-hidden="true">&rarr;</span></a>
+            {% if edit_url %}<a href="{{ edit_url }}" class="primary-button compact-primary" data-expense-edit hidden>Edit expense</a>{% endif %}
+        </div>
+    </div>
+
+    {% include 'includes/detail_status.html' %}
+    <div data-record-content hidden>
+        <section class="user-form-card mb-6" aria-labelledby="expense-information-heading">
+            <h2 id="expense-information-heading" class="section-title mb-6">Expense information</h2>
+            <dl class="profile-grid">
+                {% include 'includes/detail_field.html' with name='date' label='Expense date' only %}
+                {% include 'includes/detail_field.html' with name='category_name' label='Category' only %}
+                {% include 'includes/detail_field.html' with name='warehouse_name' label='Warehouse' only %}
+                {% include 'includes/detail_field.html' with name='is_completed' label='Completed' kind='boolean' only %}
+                {% include 'includes/detail_field.html' with name='completed_at' label='Completed at' kind='datetime' only %}
+            </dl>
+        </section>
+
+        <section class="user-form-card mb-6" aria-labelledby="expense-payment-heading">
+            <h2 id="expense-payment-heading" class="section-title mb-6">Payment details</h2>
+            <dl class="profile-grid">
+                {% include 'includes/detail_field.html' with name='payment_account_name' label='Payment account' only %}
+                {% include 'includes/detail_field.html' with name='payment_status' label='Payment status' only %}
+                {% include 'includes/detail_field.html' with name='amount' label='Amount' kind='money' only %}
+                {% include 'includes/detail_field.html' with name='paid_amount' label='Paid' kind='money' only %}
+                {% include 'includes/detail_field.html' with name='outstanding_amount' label='Outstanding' kind='money' only %}
+            </dl>
+        </section>
+
+        {% include 'includes/detail_audit.html' %}
+    </div>
+    <noscript><p class="form-error">Enable JavaScript to load expense details.</p></noscript>
+</div>
+{% endblock %}
+
+{% block workspace_js %}<script type="module" src="{% static 'accounting/js/expense_detail.js' %}"></script>{% endblock %}

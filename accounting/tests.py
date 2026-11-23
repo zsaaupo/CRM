@@ -131,6 +131,7 @@ class ExpenseTests(TestCase):
         self.assertEqual(self.client.patch(detail, {'amount': '1'}, format='json').status_code, 404)
         self.assertEqual(self.client.delete(detail).status_code, 404)
         self.assertEqual(self.client.get(reverse('accounting_pages:edit-expense', args=[other.pk])).status_code, 404)
+        self.assertEqual(self.client.get(reverse('accounting_pages:expense-detail', args=[other.pk])).status_code, 404)
         listing = self.client.get(reverse('accounting_pages:expense-list'))
         self.assertContains(listing, 'Expense list')
         self.assertContains(listing, '<span>Expenses</span>')
@@ -149,9 +150,18 @@ class ExpenseTests(TestCase):
         self.assertContains(form, f'data-options-url="{reverse("accounting:expense-options")}"')
         edit = self.client.get(reverse('accounting_pages:edit-expense', args=[expense.pk]))
         self.assertContains(edit, f'data-options-url="{reverse("accounting:expense-edit-options", args=[expense.pk])}"')
+        page_url = reverse('accounting_pages:expense-detail', args=[expense.pk])
+        page = self.client.get(page_url)
+        self.assertContains(page, reverse('accounting:expense-detail', args=[expense.pk]))
+        self.assertContains(page, reverse('accounting_pages:edit-expense', args=[expense.pk]))
+        self.assertContains(page, 'data-detail-field="outstanding_amount"')
+
+        self.role.permissions.remove(Permission.objects.get(codename='change_expense', content_type__app_label='accounting'))
+        self.assertNotContains(self.client.get(page_url), 'Edit expense')
 
         self.grant(self.staff.user_permissions, 'view_expense')
         self.role.permissions.clear()
         self.assertEqual(self.client.get(self.list_url).status_code, 403)
         self.assertEqual(self.client.get(reverse('accounting_pages:expense-list')).status_code, 403)
+        self.assertEqual(self.client.get(page_url).status_code, 403)
 

@@ -87,10 +87,10 @@ class PostedFinanceAdmin(WarehouseScopedAdmin):
 class AccountTransactionAdmin(PostedFinanceAdmin):
     warehouse_lookup = 'account__warehouse_id'
     view_permissions = STATEMENT_VIEW
-    list_display = ['date', 'account', 'direction', 'amount', 'balance_after']
+    list_display = ['date', 'account', 'direction', 'amount', 'balance_after', 'transfer', 'expense_payment', 'sales_payment']
     list_select_related = ['account']
     list_filter = ['direction', 'date']
-    exclude = ['transfer', 'expense_payment', 'sales_payment']
+    # exclude = ['transfer', 'expense_payment', 'sales_payment']
 
 
 @admin.register(AccountTransfer)
