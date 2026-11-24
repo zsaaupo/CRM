@@ -1,4 +1,5 @@
 from django.urls import path
+from .activity import REPORTS
 
 from .api_views import (
     StockDetailAPIView, StockListAPIView,
@@ -15,6 +16,8 @@ from .api_views import (
 app_name = 'warehouse'
 
 urlpatterns = [
+    *[path(f'reports/<int:warehouse_id>/{key}/', view.as_view(), name=f'report-{key}')
+      for key, (_, view, _) in REPORTS.items()],
     path('transfers/options/', TransferOptionsAPIView.as_view(), name='transfer-options'),
     path('transfers/edit-options/', TransferEditOptionsAPIView.as_view(), name='transfer-edit-options'),
     path('transfers/complete/', TransferCompleteAPIView.as_view(), name='transfer-complete'),

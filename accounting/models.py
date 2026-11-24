@@ -20,14 +20,18 @@ def base_currency():
     return settings.INVENTORY_BASE_CURRENCY
 
 
-class ExpenseCategory(TimeStampedModel):
+class TransferType(models.TextChoices):
+    FUND_TRANSFER = 'fund_transfer', 'Fund transfer'
+    MONEY_TRANSFER = 'money_transfer', 'Money transfer'
+
+
+class IncomeExpenseCategory(TimeStampedModel):
     name = models.CharField(max_length=150)
     is_active = models.BooleanField(default=True)
 
     class Meta:
         ordering = ['name', 'pk']
-        verbose_name_plural = 'expense categories'
-        constraints = [models.UniqueConstraint(Lower(Trim('name')), name='accounting_expense_category_name_unique')]
+        abstract = True
 
     def clean(self):
         super().clean()
@@ -40,36 +44,47 @@ class ExpenseCategory(TimeStampedModel):
         return self.name
 
 
-class Expense(TimeStampedModel):
+class ExpenseCategory(IncomeExpenseCategory):
+    class Meta(IncomeExpenseCategory.Meta):
+        verbose_name_plural = 'expense categories'
+        constraints = [models.UniqueConstraint(Lower(Trim('name')), name='accounting_expense_category_name_unique')]
+
+
+class IncomeCategory(IncomeExpenseCategory):
+    class Meta(IncomeExpenseCategory.Meta):
+        verbose_name_plural = 'income categories'
+        constraints = [models.UniqueConstraint(Lower(Trim('name')), name='accounting_income_category_name_unique')]
+
+
+class IncomeExpense(TimeStampedModel):
     date = models.DateField(default=timezone.localdate, db_index=True)
-    category = models.ForeignKey(ExpenseCategory, on_delete=models.PROTECT, related_name='expenses')
-    warehouse = models.ForeignKey('warehouse.WareHouse', on_delete=models.PROTECT, related_name='expenses')
+    warehouse = models.ForeignKey('warehouse.WareHouse', on_delete=models.PROTECT, related_name='%(class)ss')
     # SQLite converts stored decimal values with 15 significant digits.
     amount = models.DecimalField(max_digits=15, decimal_places=4, validators=[MinValueValidator(MIN_AMOUNT)])
     payment_account = models.ForeignKey('FinancialAccount', on_delete=models.PROTECT, null=True, blank=True,
-                                        related_name='expenses_to_pay')
+                                        related_name='%(class)ss_to_pay')
     is_completed = models.BooleanField(default=False, editable=False)
     completed_at = models.DateTimeField(null=True, blank=True, editable=False)
 
     class Meta:
+        abstract = True
         ordering = ['-date', '-pk']
         constraints = [
-            models.CheckConstraint(condition=models.Q(amount__gt=0), name='accounting_expense_amount_positive'),
+            models.CheckConstraint(condition=models.Q(amount__gt=0), name='accounting_%(class)s_amount_positive'),
             models.CheckConstraint(
                 condition=(models.Q(is_completed=False, completed_at__isnull=True) |
                            models.Q(is_completed=True, completed_at__isnull=False, payment_account__isnull=False)),
-                name='accounting_expense_completion_valid',
+                name='accounting_%(class)s_completion_valid',
             ),
         ]
-        indexes = [models.Index(fields=['warehouse', '-date'], name='accounting_exp_wh_date_idx')]
 
     def clean(self):
         super().clean()
         previous = type(self).objects.filter(pk=self.pk).first()
         errors = {}
-        if self.category_id and not ExpenseCategory.objects.filter(pk=self.category_id, is_active=True).exists():
+        if self.category_id and not self._meta.get_field('category').related_model.objects.filter(pk=self.category_id, is_active=True).exists():
             if previous is None or previous.category_id != self.category_id:
-                errors['category'] = 'Choose an active expense category.'
+                errors['category'] = f'Choose an active {self._meta.model_name} category.'
         if self.warehouse_id:
             warehouses = self._meta.get_field('warehouse').related_model.objects
             if not warehouses.filter(pk=self.warehouse_id, is_active=True).exists():
@@ -84,12 +99,26 @@ class Expense(TimeStampedModel):
         if previous and any(getattr(self, field) != getattr(previous, field)
                             for field in ('date', 'category_id', 'warehouse_id', 'amount')):
             if previous.payments.exists():
-                errors['__all__'] = 'This expense has payment history and cannot be edited.'
+                errors['__all__'] = f'This {self._meta.model_name} has payment history and cannot be edited.'
         if errors:
             raise ValidationError(errors)
 
     def __str__(self):
         return f'{self.date} - {self.category} - {self.amount}'
+
+
+class Expense(IncomeExpense):
+    category = models.ForeignKey(ExpenseCategory, on_delete=models.PROTECT, related_name='expenses')
+
+    class Meta(IncomeExpense.Meta):
+        indexes = [models.Index(fields=['warehouse', '-date'], name='accounting_exp_wh_date_idx')]
+
+
+class Income(IncomeExpense):
+    category = models.ForeignKey(IncomeCategory, on_delete=models.PROTECT, related_name='incomes')
+
+    class Meta(IncomeExpense.Meta):
+        indexes = [models.Index(fields=['warehouse', '-date'], name='accounting_inc_wh_date_idx')]
 
 
 class FinancialAccount(TimeStampedModel):
@@ -135,6 +164,7 @@ class FinancialAccount(TimeStampedModel):
 
 
 class AccountTransfer(TimeStampedModel):
+    transfer_type = models.CharField(max_length=20, choices=TransferType.choices, default=TransferType.FUND_TRANSFER)
     source_account = models.ForeignKey(FinancialAccount, on_delete=models.PROTECT, related_name='outgoing_transfers')
     destination_account = models.ForeignKey(FinancialAccount, on_delete=models.PROTECT,
                                             related_name='incoming_transfers')
@@ -144,8 +174,11 @@ class AccountTransfer(TimeStampedModel):
     request_key = models.UUIDField(default=uuid4, unique=True, editable=False)
 
     class Meta:
+        verbose_name = 'fund transfer'
         ordering = ['-pk']
         constraints = [
+            models.CheckConstraint(condition=models.Q(transfer_type__in=TransferType.values),
+                                   name='accounting_transfer_valid_type'),
             models.CheckConstraint(condition=~models.Q(source_account=models.F('destination_account')),
                                    name='accounting_transfer_distinct_accounts'),
             models.CheckConstraint(condition=models.Q(amount__gt=0), name='accounting_transfer_amount_positive'),
@@ -159,9 +192,7 @@ class AccountTransfer(TimeStampedModel):
         return self.number
 
 
-class ExpensePayment(TimeStampedModel):
-    expense = models.ForeignKey(Expense, on_delete=models.PROTECT, related_name='payments')
-    account = models.ForeignKey(FinancialAccount, on_delete=models.PROTECT, related_name='expense_payments')
+class IncomeExpensePayment(TimeStampedModel):
     date = models.DateField(default=timezone.localdate)
     amount = models.DecimalField(max_digits=15, decimal_places=4, validators=[MinValueValidator(MIN_AMOUNT)])
     method = models.CharField(max_length=20, choices=FinancialAccount.Type.choices)
@@ -170,16 +201,34 @@ class ExpensePayment(TimeStampedModel):
 
     class Meta:
         ordering = ['-pk']
-        constraints = [
-            models.CheckConstraint(condition=models.Q(amount__gt=0), name='accounting_payment_amount_positive'),
-        ]
+        abstract = True
+
+    def __str__(self):
+        return self.number
+
+
+class ExpensePayment(IncomeExpensePayment):
+    expense = models.ForeignKey(Expense, on_delete=models.PROTECT, related_name='payments')
+    account = models.ForeignKey(FinancialAccount, on_delete=models.PROTECT, related_name='expense_payments')
+
+    class Meta(IncomeExpensePayment.Meta):
+        constraints = [models.CheckConstraint(condition=models.Q(amount__gt=0), name='accounting_payment_amount_positive')]
 
     @property
     def number(self):
         return f'EP-{self.pk}'
 
-    def __str__(self):
-        return self.number
+
+class IncomePayment(IncomeExpensePayment):
+    income = models.ForeignKey(Income, on_delete=models.PROTECT, related_name='payments')
+    account = models.ForeignKey(FinancialAccount, on_delete=models.PROTECT, related_name='income_payments')
+
+    class Meta(IncomeExpensePayment.Meta):
+        constraints = [models.CheckConstraint(condition=models.Q(amount__gt=0), name='accounting_income_payment_positive')]
+
+    @property
+    def number(self):
+        return f'IP-{self.pk}'
 
 
 class SalesPayment(TimeStampedModel):
@@ -252,6 +301,8 @@ class AccountTransaction(TimeStampedModel):
                                  blank=True, null=True)
     expense_payment = models.ForeignKey(ExpensePayment, on_delete=models.PROTECT, related_name='transactions',
                                         blank=True, null=True)
+    income_payment = models.ForeignKey(IncomePayment, on_delete=models.PROTECT, related_name='transactions',
+                                       blank=True, null=True)
     sales_payment = models.OneToOneField(SalesPayment, on_delete=models.PROTECT, related_name='transaction',
                                          blank=True, null=True)
     purchase_payment = models.OneToOneField(PurchasePayment, on_delete=models.PROTECT, related_name='transaction',
@@ -270,16 +321,19 @@ class AccountTransaction(TimeStampedModel):
             models.CheckConstraint(
                 condition=(
                     models.Q(transfer__isnull=False, expense_payment__isnull=True,
-                             sales_payment__isnull=True, purchase_payment__isnull=True) |
+                             sales_payment__isnull=True, purchase_payment__isnull=True, income_payment__isnull=True) |
                     models.Q(transfer__isnull=True, expense_payment__isnull=False,
-                             sales_payment__isnull=True, purchase_payment__isnull=True) |
+                             sales_payment__isnull=True, purchase_payment__isnull=True, income_payment__isnull=True) |
                     models.Q(transfer__isnull=True, expense_payment__isnull=True,
-                             sales_payment__isnull=False, purchase_payment__isnull=True) |
+                             sales_payment__isnull=False, purchase_payment__isnull=True, income_payment__isnull=True) |
                     models.Q(transfer__isnull=True, expense_payment__isnull=True,
-                             sales_payment__isnull=True, purchase_payment__isnull=False)
+                             sales_payment__isnull=True, purchase_payment__isnull=False, income_payment__isnull=True) |
+                    models.Q(transfer__isnull=True, expense_payment__isnull=True, income_payment__isnull=False,
+                             sales_payment__isnull=True, purchase_payment__isnull=True)
                 ),
                 name='accounting_tx_one_source',
             ),
+            models.UniqueConstraint(fields=['income_payment', 'direction'], name='accounting_tx_income_payment_direction'),
             models.UniqueConstraint(fields=['expense_payment', 'direction'], name='accounting_tx_payment_direction'),
             models.UniqueConstraint(fields=['transfer', 'account', 'direction'],
                                     name='accounting_tx_transfer_account_direction'),

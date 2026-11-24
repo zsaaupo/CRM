@@ -1,0 +1,43 @@
+{% extends "layouts/dashboard.html" %}
+{% load static %}
+{% block title %}Ledger | eManager{% endblock %}
+{% block content %}
+<div class="workspace-content">
+    <div class="page-heading">
+        <div><p class="page-eyebrow">Accounting</p><h1 class="page-title">Ledger<span class="text-emerald-600">.</span></h1></div>
+    </div>
+    <form id="ledger-form" action="{% url 'accounting:ledger' %}" method="post" class="user-form-card" autocomplete="off">
+        {% csrf_token %}
+        <fieldset>
+            <legend class="section-title">Generate ledger</legend>
+            <div class="ledger-controls">
+                {% include 'inventory/includes/field.html' with name='account' label='Account' field_type='select' required=True only %}
+                {% include 'inventory/includes/field.html' with name='start_date' label='Start date' field_type='date' required=True only %}
+                {% include 'inventory/includes/field.html' with name='end_date' label='End date' field_type='date' required=True only %}
+                <button type="submit" class="primary-button compact-primary" disabled>Generate</button>
+            </div>
+        </fieldset>
+        <p id="ledger-status" class="form-status mt-5" role="status">Loading accounts…</p>
+        <button type="button" class="secondary-button mt-3" id="ledger-retry" hidden>Retry loading accounts</button>
+    </form>
+    <section id="ledger-report" class="users-panel mt-5" aria-labelledby="ledger-account" hidden>
+        <div class="users-toolbar"><div><h2 id="ledger-account" class="section-title"></h2><p id="ledger-period" class="page-description"></p></div></div>
+        <dl class="flex flex-wrap gap-x-8 gap-y-3 border-b border-stone-200 px-5 py-4 text-sm">
+            <div><dt class="form-label">Opening balance</dt><dd data-total="opening_balance"></dd></div>
+            <div><dt class="form-label">Total inflow</dt><dd data-total="total_inflow"></dd></div>
+            <div><dt class="form-label">Total outflow</dt><dd data-total="total_outflow"></dd></div>
+            <div><dt class="form-label">Closing balance</dt><dd data-total="closing_balance"></dd></div>
+        </dl>
+        <div class="users-table-scroll">
+            <table class="users-table">
+                <caption class="sr-only">Ledger entries in transaction date order</caption>
+                <thead><tr><th>Date</th><th>Source</th><th>Reference</th><th>Inflow</th><th>Outflow</th><th>Balance</th></tr></thead>
+                <tbody></tbody>
+            </table>
+        </div>
+        <p id="ledger-empty" class="users-empty" hidden>No transactions in this date range.</p>
+    </section>
+    <noscript><p class="form-error">Enable JavaScript to generate a ledger.</p></noscript>
+</div>
+{% endblock %}
+{% block workspace_js %}<script type="module" src="{% static 'accounting/js/ledger.js' %}"></script>{% endblock %}

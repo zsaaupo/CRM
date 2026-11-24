@@ -1,0 +1,54 @@
+{% extends 'layouts/dashboard.html' %}
+{% block title %}Daybook | eManager{% endblock %}
+{% block extra_css %}
+<style>
+@media print {
+    .workspace-sidebar, .workspace-topbar, .skip-link, .book-controls { display: none !important; }
+    .workspace-main, .workspace-content { margin: 0 !important; padding: 0 !important; }
+    .users-panel, .users-table-scroll { overflow: visible; }
+}
+</style>
+{% endblock %}
+{% block content %}
+<div class="workspace-content">
+    <div class="page-heading"><div><p class="page-eyebrow">Accounting</p><h1 class="page-title">{{ page_label }}</h1></div>
+        {% if report %}{% if printing %}<button class="secondary-button book-controls" onclick="window.print()">Print</button>
+        {% else %}<a class="secondary-button book-controls" href="?{{ query }}&amp;print=1">Print view</a>{% endif %}{% endif %}
+    </div>
+    {% if not printing %}
+    <form method="get" class="user-form-card book-controls mb-6">
+        <div class="user-form-grid">{% for field in form %}<div>
+            <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}</label>{{ field }}
+            {% if field.errors %}<p class="form-error" role="alert">{{ field.errors|join:' ' }}</p>{% endif %}
+        </div>{% endfor %}</div>
+        <div class="user-form-actions"><button class="primary-button compact-primary" type="submit">Apply filters</button></div>
+    </form>
+    {% endif %}
+    {% if report %}
+    <section class="users-panel">
+        <div class="users-toolbar"><div>
+            <h2 class="section-title">Posted transactions</h2><p>{{ report.start|default:'Beginning of ledger' }} through {{ report.end|default:'Latest posting' }}</p>
+            <p class="page-description">{{ currency }} · {{ scope_label }} · Generated {{ generated_at|date:'Y-m-d H:i T' }}</p>
+        </div></div>
+        <div class="p-5"><strong>Total inflow {{ report.inflow|floatformat:4 }} · Total outflow {{ report.outflow|floatformat:4 }} · Net {{ report.net|floatformat:4 }}</strong>
+            <p>Both columns show positive amounts. Net movement is inflow minus outflow.</p></div>
+        {% if report.entries %}<div class="users-table-scroll"><table class="users-table"><thead><tr>
+            <th>Ledger date</th><th>Voucher / reference</th><th>Account</th><th>Inflow</th><th>Outflow</th><th>Posted by / time</th>
+        </tr></thead>
+        {% for entry in report.entries %}<tbody>{% for line in entry.lines %}<tr>
+            <td>{{ entry.date|date:'Y-m-d' }}</td><td>{{ entry.voucher }} · {{ entry.source }}{% if entry.narration != entry.source %}<br>{{ entry.narration }}{% endif %}<br>{{ entry.reference }}</td>
+            <td>#{{ line.account }} · {{ line.name }}</td>
+            <td>{% if line.direction == 'inflow' %}{{ line.amount|floatformat:4 }}{% endif %}</td>
+            <td>{% if line.direction == 'outflow' %}{{ line.amount|floatformat:4 }}{% endif %}</td>
+            <td>{{ line.posted_by|default:'—' }} · {{ line.posted_at|date:'Y-m-d H:i' }}</td>
+        </tr>{% endfor %}<tr><th colspan="3">Voucher subtotal · matching lines</th><td>{{ entry.inflow|floatformat:4 }}</td><td>{{ entry.outflow|floatformat:4 }}</td><td>Created by {{ entry.created_by|default:'—' }}</td></tr></tbody>{% endfor %}
+        </table></div>{% else %}<p class="users-empty">No posted transactions for this period.</p>{% endif %}
+        {% if not printing and report.pages > 1 %}<nav class="users-pagination" aria-label="Report pages">
+            {% if report.page > 1 %}<a class="secondary-button" href="?{{ query }}&amp;page={{ report.page|add:'-1' }}">Previous</a>{% endif %}
+            <span>Page {{ report.page }} of {{ report.pages }}</span>
+            {% if report.page < report.pages %}<a class="secondary-button" href="?{{ query }}&amp;page={{ report.page|add:1 }}">Next</a>{% endif %}
+        </nav>{% endif %}
+    </section>
+    {% endif %}
+</div>
+{% endblock %}

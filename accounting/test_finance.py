@@ -1,3 +1,4 @@
+import json
 from decimal import Decimal
 from uuid import uuid4
 
@@ -223,6 +224,7 @@ class FinanceTests(TestCase):
         payload = self.transfer_data('50.3000')
         posted = self.client.post(self.transfers, payload, format='json')
         self.assertEqual(posted.status_code, 201, posted.data)
+        self.assertEqual(posted.data['account_transfer']['transfer_type'], 'fund_transfer')
         self.assertEqual(self.client.post(self.transfers, payload, format='json').status_code, 200)
         self.assertEqual(self.client.get(self.transfers, {'q': 'Deposit'}).data['count'], 1)
         self.assertEqual(self.statement()['account']['balance'], '49.7001')
@@ -246,6 +248,63 @@ class FinanceTests(TestCase):
         self.assertEqual(self.statement()['account']['balance'], '49.7001')
         self.assertEqual(self.statement(self.bank)['account']['balance'], '40.3000')
         self.assertEqual(AccountTransaction.objects.count(), 3)
+
+    def test_transfer_type_is_validated_and_saved_by_the_api(self):
+        payload = self.transfer_data('5')
+        response = self.client.post(self.transfers, {**payload, 'transfer_type': 'other'}, format='json')
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('transfer_type', response.data)
+
+        response = self.client.post(self.transfers, {**payload, 'transfer_type': 'money_transfer'}, format='json')
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(self.client.get(self.transfers).data['results'][0]['transfer_type'], 'money_transfer')
+        retry = self.client.post(self.transfers, {**payload, 'transfer_type': 'fund_transfer'}, format='json')
+        self.assertEqual(retry.status_code, 400)
+        self.assertIn('request_key', retry.data)
+
+    def test_transfer_list_filters_json_requests_and_transfer_pages(self):
+        for transfer_type in ('fund_transfer', 'money_transfer'):
+            payload = {**self.transfer_data('5'), 'transfer_type': transfer_type}
+            posted = self.client.post(self.transfers, payload, format='json')
+            self.assertEqual(posted.status_code, 201, posted.data)
+
+        for label, expected in [('fund transfer', 'fund_transfer'), ('money transfer', 'money_transfer')]:
+            with self.subTest(label=label):
+                response = self.client.generic('GET', self.transfers, json.dumps({'transfer_type': label}),
+                                               content_type='application/json')
+                self.assertEqual(response.status_code, 200, response.data)
+                self.assertEqual([row['transfer_type'] for row in response.data['results']], [expected])
+
+        for key, kind in [('account-transfer', 'fund_transfer'), ('money-transfer', 'money_transfer')]:
+            with self.subTest(key=key):
+                list_url = reverse(f'accounting_pages:{key}-list')
+                add_url = reverse(f'accounting_pages:add-{key}')
+                page = self.client.get(list_url)
+                self.assertContains(page, f'href="{list_url}" data-nav-item class="sidebar-sub-link is-current"')
+                self.assertContains(page, f'href="{add_url}"')
+                api_url = page.context['list_api_url']
+                self.assertContains(page, f'data-api-url="{api_url}"')
+                rows = self.client.get(api_url).data['results']
+                self.assertEqual([row['transfer_type'] for row in rows], [kind])
+                form = self.client.get(add_url)
+                self.assertContains(form, f'<input type="hidden" name="transfer_type" value="{kind}">', html=True)
+                self.assertContains(form, f'action="{self.transfers}"')
+                self.assertContains(form, f'data-success-url="{list_url}"')
+        invalid = self.client.get(self.transfers, {'transfer_type': 'unknown'})
+        self.assertEqual(invalid.status_code, 400)
+        self.assertIn('transfer_type', invalid.data)
+
+    def test_json_transfer_filter_carries_over_to_next_page(self):
+        AccountTransfer.objects.bulk_create([
+            AccountTransfer(source_account=self.account, destination_account=self.bank, amount=1, transfer_type=kind)
+            for kind in ['money_transfer'] + ['fund_transfer'] * 21
+        ])
+        first = self.client.generic('GET', self.transfers, '{"transfer_type":"fund_transfer"}',
+                                    content_type='application/json')
+        self.assertEqual(first.data['count'], 21)
+        second = self.client.get(first.data['next'])
+        self.assertEqual(second.data['count'], 21)
+        self.assertEqual([row['transfer_type'] for row in second.data['results']], ['fund_transfer'])
 
     def test_historical_transfer_offsets_remain_on_both_statements(self):
         response = self.client.post(self.transfers, self.transfer_data('50.3000'), format='json')
@@ -347,6 +406,54 @@ class FinanceTests(TestCase):
         self.assertEqual(self.client.get(page_url).status_code, 403)
         self.assertNotContains(self.client.get(reverse('accounting_pages:financial-account-list')), f'href="{page_url}"')
 
+    def test_ledger_uses_effective_dates_and_generation_is_read_only(self):
+        for date, amount, kind in [('2026-04-03', '8', 'money_transfer'), ('2026-04-01', '2', 'fund_transfer'),
+                                   ('2026-04-02', '3', 'fund_transfer'), ('2026-04-04', '1', 'money_transfer')]:
+            posted = self.client.post(self.transfers, {**self.transfer_data(amount), 'date': date,
+                                                       'transfer_type': kind}, format='json')
+            self.assertEqual(posted.status_code, 201, posted.data)
+        url = reverse('accounting:ledger')
+        request = {'account': self.account.pk, 'start_date': '2026-04-02', 'end_date': '2026-04-03'}
+        result = self.client.post(url, request, format='json')
+        self.assertEqual(result.status_code, 200, result.data)
+        ledger = result.json()
+        self.assertEqual((ledger['opening_balance'], ledger['total_inflow'], ledger['total_outflow'],
+                          ledger['closing_balance']), ('98.0001', '0.0000', '11.0000', '87.0001'))
+        self.assertEqual([row['running_balance'] for row in ledger['results']], ['95.0001', '87.0001'])
+        self.assertTrue(ledger['results'][0]['source'].startswith('Fund transfer TR-'))
+        self.assertTrue(ledger['results'][1]['source'].startswith('Money transfer TR-'))
+        self.assertEqual(self.client.post(url, request, format='json').json(), ledger)
+        self.assertEqual(AccountTransaction.objects.count(), 8)
+        bank = self.client.post(url, {**request, 'account': self.bank.pk}, format='json').json()
+        self.assertEqual((bank['total_inflow'], bank['closing_balance']), ('11.0000', '13.0000'))
+        empty = self.client.post(url, {**request, 'start_date': '2026-05-01', 'end_date': '2026-05-01'},
+                                 format='json').json()
+        self.assertEqual(empty['results'], [])
+        self.assertEqual(empty['opening_balance'], empty['closing_balance'])
+        for invalid in ({}, {**request, 'end_date': '2026-04-01'}, {**request, 'start_date': 'invalid'}):
+            self.assertEqual(self.client.post(url, invalid, format='json').status_code, 400)
+
+    def test_ledger_page_and_api_require_statement_access_and_scope(self):
+        url = reverse('accounting:ledger')
+        page_url = reverse('accounting_pages:ledger')
+        assignment = assign_warehouse_role(self.staff, warehouse=self.warehouse)
+        permissions = Permission.objects.filter(content_type__app_label='accounting', codename__in=[
+            'view_financialaccount', 'view_accounttransaction',
+        ])
+        assignment.role.permissions.set(permissions)
+        self.client.force_login(self.staff)
+        page = self.client.get(page_url)
+        self.assertContains(page, f'action="{url}"')
+        self.assertContains(page, f'href="{page_url}"')
+        self.assertEqual({a['id'] for a in self.client.get(url).data['accounts']}, {self.account.pk, self.bank.pk})
+        request = {'account': self.remote.pk, 'start_date': '2026-01-01', 'end_date': '2026-01-31'}
+        self.assertEqual(self.client.post(url, request, format='json').status_code, 404)
+        assignment.role.permissions.set(permissions.filter(codename='view_financialaccount'))
+        self.assertEqual(self.client.get(page_url).status_code, 403)
+        self.assertEqual(self.client.get(url).status_code, 403)
+        self.assertEqual(self.client.post(url, request, format='json').status_code, 403)
+        self.assertNotContains(self.client.get(reverse('accounting_pages:financial-account-list')), f'href="{page_url}"')
+
     def test_accounting_pages_link_to_statements_and_expense_completion(self):
         account_list = self.client.get(reverse('accounting_pages:financial-account-list'))
         self.assertContains(account_list, 'accounting-submenu')
@@ -363,3 +470,111 @@ class FinanceTests(TestCase):
         self.assertContains(expense_form, 'name="payment_account"')
         transfer_form = self.client.get(reverse('accounting_pages:add-account-transfer'))
         self.assertContains(transfer_form, f'action="{self.transfers}"')
+        self.assertContains(transfer_form, '<input type="hidden" name="transfer_type" value="fund_transfer">', html=True)
+
+    def test_income_category_draft_completion_and_ledger(self):
+        category = self.client.post(reverse('accounting:income-category-list'), {'name': 'Room hire'}, format='json')
+        self.assertEqual(category.status_code, 201, category.data)
+        category_id = category.data['income_category']['id']
+        options = self.client.get(reverse('accounting:income-options')).data
+        self.assertEqual(options['category'], [{'value': category_id, 'label': 'Room hire'}])
+        url = reverse('accounting:income-list')
+        created = self.client.post(url, {'category': category_id, 'warehouse': self.warehouse.pk,
+                                         'amount': '7', 'payment_account': self.bank.pk}, format='json')
+        self.assertEqual(created.status_code, 201, created.data)
+        pk = created.data['income']['id']
+        detail = reverse('accounting:income-detail', args=[pk])
+        self.assertEqual(self.client.patch(detail, {'amount': '8.1234'}, format='json').status_code, 200)
+        self.assertFalse(AccountTransaction.objects.exists())
+        self.assertEqual(self.client.get(url, {'category': category_id}).data['total_amount'], '8.1234')
+        page = self.client.get(reverse('accounting_pages:income-list'))
+        self.assertContains(page, reverse('accounting:income-complete'))
+        self.assertContains(page, 'Income categories')
+        self.assertContains(self.client.get(reverse('accounting_pages:add-income')), 'Receive into account')
+        self.assertContains(self.client.get(reverse('accounting_pages:income-detail', args=[pk])), detail)
+        self.assertContains(self.client.get(reverse('accounting_pages:edit-income', args=[pk])),
+                            reverse('accounting:income-edit-options', args=[pk]))
+        self.assertContains(self.client.get(reverse('accounting_pages:add-income-category')), 'name="name"')
+        complete = reverse('accounting:income-complete')
+        payload = {'income_id': pk, 'is_completed': True}
+        response = self.client.post(complete, payload, format='json')
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['income']['paid_amount'], '8.1234')
+        self.assertFalse(self.client.post(complete, payload, format='json').data['completed_now'])
+        self.assertEqual(self.client.patch(detail, {'amount': '10'}, format='json').status_code, 409)
+        self.assertEqual(self.client.delete(detail).status_code, 409)
+        payments = self.client.get(reverse('accounting:income-payment-list', args=[pk])).data['results']
+        self.assertEqual([p['amount'] for p in payments], ['8.1234'])
+        self.assertEqual(self.statement(self.bank)['account']['balance'], '8.1234')
+        today = timezone.localdate().isoformat()
+        ledger = self.client.post(reverse('accounting:ledger'), {'account': self.bank.pk, 'start_date': today,
+                                                                 'end_date': today}, format='json').data
+        self.assertEqual(ledger['total_inflow'], '8.1234')
+        self.assertEqual([r['source'] for r in ledger['results']], [f"Income payment {payments[0]['name']}"])
+
+        assignment = assign_warehouse_role(self.staff, warehouse=self.other_warehouse)
+        self.client.force_login(self.staff)
+        self.assertEqual(self.client.get(url).status_code, 403)
+        assignment.role.permissions.set(Permission.objects.filter(content_type__app_label='accounting',
+                                                                  codename__in=['view_income', 'change_income']))
+        self.assertEqual(self.client.get(url).data['count'], 0)
+        self.assertEqual(self.client.get(detail).status_code, 404)
+        self.assertEqual(self.client.post(complete, payload, format='json').status_code, 404)
+
+    def test_daybook_reconciles_with_the_cash_ledger(self):
+        daybook = reverse('accounting:daybook')
+        for date, amount in [('2025-04-30', '7'), ('2025-05-01', '2.0001')]:
+            posted = self.client.post(self.transfers, {**self.transfer_data(amount), 'date': date}, format='json')
+            self.assertEqual(posted.status_code, 201)
+        filters = {'start_date': '2025-04-30', 'end_date': '2025-04-30'}
+        data = self.client.get(daybook, filters).json()
+        self.assertEqual((data['count'], data['inflow'], data['outflow']), (1, '7.0000', '7.0000'))
+        entry, = data['entries']
+        self.assertEqual(entry['reference'], 'Deposit')
+        self.assertEqual(entry['source'], 'Fund transfer')
+        self.assertEqual(len(entry['lines']), 2)
+        data = self.client.get(daybook, {**filters, 'account': self.account.pk, 'q': entry['voucher']}).json()
+        self.assertEqual((data['inflow'], data['outflow']), ('0.0000', '7.0000'))
+        self.assertEqual(self.client.get(daybook, {**filters, 'status': 'draft'}).status_code, 400)
+        self.assertEqual(self.client.get(daybook, {**filters, 'end_date': '2025-04-29'}).status_code, 400)
+        self.assertContains(self.client.get(reverse('accounting_pages:daybook'), {**filters, 'source': 'expense'}),
+                            'No posted transactions for this period')
+        ledger = self.client.post(reverse('accounting:ledger'), {**filters, 'account': self.account.pk}, format='json')
+        self.assertEqual(data['outflow'], ledger.json()['total_outflow'])
+        self.assertEqual(data['inflow'], ledger.json()['total_inflow'])
+        self.assertContains(self.client.get(reverse('accounting_pages:daybook'), filters), entry['voucher'])
+
+        assignment = assign_warehouse_role(self.staff, warehouse=self.warehouse)
+        self.client.force_login(self.staff)
+        self.assertEqual(self.client.get(daybook).status_code, 403)
+        assignment.role.permissions.set(Permission.objects.filter(content_type__app_label='accounting',
+                                       codename__in=['view_financialaccount', 'view_accounttransaction']))
+        self.assertEqual(self.client.get(daybook, {'account': self.remote.pk}).status_code, 400)
+
+    def test_reference_display_arithmetic_is_independent_of_cash_flow_convention(self):
+        rows = [(Decimal('1000.00'), Decimal('91000.00')), (Decimal('2105.00'), Decimal('30.00'))]
+        rows.extend([(Decimal('1105.00'), Decimal('30.00'))] * 19)
+        credits = sum(credit for credit, debit in rows)
+        signed_debits = -sum(debit for credit, debit in rows)
+        self.assertEqual((credits, signed_debits, credits + signed_debits),
+                         (Decimal('24100.00'), Decimal('-91600.00'), Decimal('-67500.00')))
+        self.assertEqual([credit - debit for credit, debit in rows], [-90000, 2075] + [1075] * 19)
+        self.assertContains(self.client.get(reverse('accounting_pages:daybook')),
+                            'Both columns show positive amounts. Net movement is inflow minus outflow.')
+
+    def test_daybook_pagination_keeps_vouchers_together_and_totals_cover_all_pages(self):
+        for i in range(26):
+            posted = self.client.post(self.transfers, {**self.transfer_data('1'), 'date': f'2025-01-{i + 1:02d}'},
+                                      format='json')
+            self.assertEqual(posted.status_code, 201, posted.data)
+        url = reverse('accounting:daybook')
+        filters = {'start_date': '2025-01-01', 'end_date': '2025-01-31'}
+        first = self.client.get(url, filters).json()
+        last = self.client.get(url, {**filters, 'page': 2}).json()
+        self.assertEqual([len(first['entries']), len(last['entries'])], [25, 1])
+        self.assertEqual(len(last['entries'][0]['lines']), 2)
+        self.assertEqual(first['inflow'], last['inflow'])
+        self.assertEqual(last['outflow'], '26.0000')
+        newest = self.client.get(url, {**filters, 'order': 'newest', 'print': '1'}).json()
+        self.assertEqual(len(newest['entries']), 26)
+        self.assertEqual(newest['entries'][0]['date'], last['entries'][0]['date'])

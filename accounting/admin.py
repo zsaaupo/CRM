@@ -8,10 +8,10 @@ from warehouse.scope import scoped_queryset
 
 from .models import (
     AccountTransaction, AccountTransfer, Expense, ExpenseCategory, ExpensePayment, FinancialAccount, PurchasePayment,
-    SalesPayment,
+    Income, IncomeCategory, IncomePayment, SalesPayment,
 )
 from .services import (
-    PAYMENT_VIEW, PURCHASE_PAYMENT_VIEW, SALES_PAYMENT_VIEW, STATEMENT_VIEW, TRANSFER_VIEW, available_payment_accounts, lock_rows,
+    INCOME_PAYMENT_VIEW, PAYMENT_VIEW, PURCHASE_PAYMENT_VIEW, SALES_PAYMENT_VIEW, STATEMENT_VIEW, TRANSFER_VIEW, available_payment_accounts, lock_rows,
     transfer_queryset,
 )
 
@@ -37,14 +37,14 @@ class LockedAccountingAdmin(WarehouseScopedAdmin):
             raise PermissionDenied('A record is outside your warehouse access or has posted activity.')
 
 
-@admin.register(ExpenseCategory)
+@admin.register(ExpenseCategory, IncomeCategory)
 class ExpenseCategoryAdmin(AuditedAdmin):
     list_display = ['name', 'is_active']
     search_fields = ['name']
     list_filter = ['is_active']
 
 
-@admin.register(Expense)
+@admin.register(Expense, Income)
 class ExpenseAdmin(PaymentAccountAdminMixin, LockedAccountingAdmin):
     list_display = ['date', 'category', 'warehouse', 'amount', 'is_completed', 'create_by']
     list_filter = ['date', ('category', admin.RelatedOnlyFieldListFilter),
@@ -91,7 +91,7 @@ class AccountTransactionAdmin(PostedFinanceAdmin):
     warehouse_lookup = 'account__warehouse_id'
     view_permissions = STATEMENT_VIEW
     list_display = ['date', 'account', 'direction', 'amount', 'balance_after', 'transfer', 'expense_payment',
-                    'sales_payment', 'purchase_payment']
+                    'income_payment', 'sales_payment', 'purchase_payment']
     list_select_related = ['account']
     list_filter = ['direction', 'date']
     # exclude = ['transfer', 'expense_payment', 'sales_payment']
@@ -118,6 +118,14 @@ class ExpensePaymentAdmin(PostedFinanceAdmin):
 
     def scope_queryset(self, queryset, scope):
         return scoped_queryset(super().scope_queryset(queryset, scope), scope, 'account__warehouse_id')
+
+
+@admin.register(IncomePayment)
+class IncomePaymentAdmin(ExpensePaymentAdmin):
+    view_permissions = INCOME_PAYMENT_VIEW
+    warehouse_lookup = 'income__warehouse_id'
+    list_display = ['number', 'date', 'income', 'account', 'amount', 'method', 'reference']
+    list_select_related = ['income', 'income__category', 'account']
 
 
 @admin.register(SalesPayment)

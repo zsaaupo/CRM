@@ -1,4 +1,6 @@
+from django.conf import settings
 from django.core.exceptions import ValidationError
+from django.core.validators import MinValueValidator
 from django.db import models
 from django.db.models import Q
 from django.db.models.functions import Lower, Trim
@@ -21,6 +23,39 @@ class PartyQuerySet(models.QuerySet):
 class PartyManager(models.Manager.from_queryset(PartyQuerySet)):
     def get_queryset(self):
         return super().get_queryset().filter(is_deleted=False)
+
+
+class Lead(TimeStampedModel):
+    class Status(models.TextChoices):
+        NEW = 'new', 'New'
+        CONTACTED = 'contacted', 'Contacted'
+        QUALIFIED = 'qualified', 'Qualified'
+        PROPOSAL = 'proposal', 'Proposal'
+        CONVERTED = 'converted', 'Converted'
+        LOST = 'lost', 'Lost'
+
+    name = models.CharField(max_length=200)
+    company = models.CharField(max_length=200, blank=True)
+    job_title = models.CharField(max_length=150, blank=True)
+    email = models.EmailField(blank=True)
+    phone = models.CharField(max_length=32, blank=True)
+    source = models.CharField(max_length=100, blank=True)
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.NEW)
+    expected_value = models.DecimalField(
+        max_digits=14, decimal_places=2, null=True, blank=True, validators=[MinValueValidator(0)],
+    )
+    assigned_to = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, related_name='assigned_leads', null=True, blank=True,
+    )
+    follow_up_date = models.DateField(null=True, blank=True)
+    expected_close_date = models.DateField(null=True, blank=True)
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ['name', 'pk']
+
+    def __str__(self):
+        return self.name
 
 
 class Party(TimeStampedModel):

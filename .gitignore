@@ -26,3 +26,7 @@ media/
 
 # Local rollback snapshots
 rollback_backups/
+
+# Local MCP server
+/eManager_project01/mcp_server.py
+/requirements-mcp.txt

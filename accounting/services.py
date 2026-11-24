@@ -13,8 +13,8 @@ from sale.models import MONEY_PRECISION
 from warehouse.scope import lock_warehouse_scope, scoped_queryset
 
 from .models import (
-    MAX_AMOUNT, ZERO, AccountTransaction, AccountTransfer, Expense, ExpensePayment, FinancialAccount, PurchasePayment,
-    SalesPayment, base_currency,
+    MAX_AMOUNT, ZERO, AccountTransaction, AccountTransfer, FinancialAccount, PurchasePayment,
+    Income, SalesPayment, TransferType, base_currency,
 )
 
 
@@ -25,6 +25,7 @@ TRANSFER_VIEW = (ACCOUNT_VIEW, 'accounting.view_accounttransfer')
 PAYMENT_VIEW = (EXPENSE_VIEW, ACCOUNT_VIEW, 'accounting.view_expensepayment')
 SALES_PAYMENT_VIEW = ('sale.view_salesorder', ACCOUNT_VIEW, 'accounting.view_salespayment')
 PURCHASE_PAYMENT_VIEW = ('purchase.view_purchaseorder', ACCOUNT_VIEW, 'accounting.view_purchasepayment')
+INCOME_PAYMENT_VIEW = ('accounting.view_income', ACCOUNT_VIEW, 'accounting.view_incomepayment')
 EXPENSE_COMPLETE = ('accounting.change_expense',)
 
 
@@ -32,6 +33,11 @@ class ExpenseCompleted(APIException):
     status_code = 409
     default_detail = 'Completed expenses are read-only and cannot be changed or deleted.'
     default_code = 'expense_completed'
+
+
+class IncomeCompleted(ExpenseCompleted):
+    default_detail = 'Completed income is read-only and cannot be changed or deleted.'
+    default_code = 'income_completed'
 
 
 def accounts_with_balances(queryset):
@@ -46,15 +52,17 @@ def transfer_queryset(queryset, scope):
                            scope, 'destination_account__warehouse_id')
 
 
-def paid_amount(expense):
-    if hasattr(expense, 'ledger_payments'):
-        postings = ((entry.direction, entry.amount) for payment in expense.ledger_payments for entry in payment.ledger_rows)
+def paid_amount(record):
+    income = isinstance(record, Income)
+    if hasattr(record, 'ledger_payments'):
+        postings = ((entry.direction, entry.amount) for payment in record.ledger_payments for entry in payment.ledger_rows)
     else:
-        postings = AccountTransaction.objects.filter(expense_payment__expense=expense).order_by().values_list(
+        source = 'income_payment__income' if income else 'expense_payment__expense'
+        postings = AccountTransaction.objects.filter(**{source: record}).order_by().values_list(
             'direction', 'amount',
         ).iterator()
-    return sum((amount if direction == AccountTransaction.Direction.OUTFLOW else -amount
-                for direction, amount in postings), ZERO)
+    paid_direction = AccountTransaction.Direction.INFLOW if income else AccountTransaction.Direction.OUTFLOW
+    return sum((amount if direction == paid_direction else -amount for direction, amount in postings), ZERO)
 
 
 def sales_payment_totals(sales_order):
@@ -91,8 +99,8 @@ def lock_rows(queryset):
     return queryset.select_for_update().order_by('pk')
 
 
-def lock_expense(pk, scope):
-    return get_object_or_404(lock_rows(scoped_queryset(Expense.objects.filter(pk=pk), scope)))
+def lock_income_expense(model, pk, scope):
+    return get_object_or_404(lock_rows(scoped_queryset(model.objects.filter(pk=pk), scope)))
 
 
 def lock_financial_scope(actor, *permissions):
@@ -149,7 +157,7 @@ def audit_fields(actor):
     return {'create_by': username, 'modified_by': username}
 
 
-def post_transaction(account, direction, actor, *, date, amount, transfer=None, expense_payment=None,
+def post_transaction(account, direction, actor, *, date, amount, transfer=None, expense_payment=None, income_payment=None,
                      sales_payment=None, purchase_payment=None):
     if sales_payment:
         expected_direction = (AccountTransaction.Direction.OUTFLOW if sales_payment.sales_return_id
@@ -170,7 +178,7 @@ def post_transaction(account, direction, actor, *, date, amount, transfer=None, 
         raise ValidationError({'amount': 'The resulting account balance is too large.'})
     return AccountTransaction.objects.create(
         account=account, direction=direction, date=date, amount=amount, balance_after=balance,
-        transfer=transfer, expense_payment=expense_payment, sales_payment=sales_payment,
+        transfer=transfer, expense_payment=expense_payment, income_payment=income_payment, sales_payment=sales_payment,
         purchase_payment=purchase_payment, **audit_fields(actor),
     )
 
@@ -183,14 +191,16 @@ def create_source(model, actor, request_key, **payload):
 
 
 @transaction.atomic
-def post_transfer(actor, *, source_account, destination_account, amount, date, reference, request_key):
+def post_transfer(actor, *, source_account, destination_account, amount, date, reference, request_key,
+                  transfer_type=TransferType.FUND_TRANSFER):
     scope = lock_financial_scope(actor, *TRANSFER_VIEW, 'accounting.add_accounttransfer')
     if source_account == destination_account:
         raise ValidationError({'destination_account': 'Choose a different destination account.'})
     accounts = locked_accounts(scope, source_account=source_account, destination_account=destination_account)
     source, destination = accounts['source_account'], accounts['destination_account']
     record, created = create_source(AccountTransfer, actor, request_key, source_account_id=source.pk,
-                                    destination_account_id=destination.pk, amount=amount, date=date, reference=reference)
+                                    destination_account_id=destination.pk, amount=amount, date=date, reference=reference,
+                                    transfer_type=transfer_type)
     if created:
         for field, account in accounts.items():
             check_active_account(account, field)
@@ -202,27 +212,28 @@ def post_transfer(actor, *, source_account, destination_account, amount, date, r
 
 
 @transaction.atomic
-def complete_expense(actor, expense_pk):
-    scope = lock_financial_scope(actor, *EXPENSE_COMPLETE)
-    expense = lock_expense(expense_pk, scope)
-    if expense.is_completed:
-        return expense, False
-    account = lock_payment_account(scope, expense.payment_account_id, expense.warehouse_id)
+def complete_income_expense(actor, model, pk):
+    key = model._meta.model_name
+    scope = lock_financial_scope(actor, f'accounting.change_{key}')
+    record = lock_income_expense(model, pk, scope)
+    if record.is_completed:
+        return record, False
+    account = lock_payment_account(scope, record.payment_account_id, record.warehouse_id)
     now = timezone.now()
-    due = expense.amount - paid_amount(expense)
+    due = record.amount - paid_amount(record)
     if due > ZERO:
         date = timezone.localdate(now)
-        payment = ExpensePayment.objects.create(
-            expense=expense, account=account, amount=due, date=date, reference=f'Expense #{expense.pk}',
+        payment = record.payments.create(
+            account=account, amount=due, date=date, reference=f'{key.capitalize()} #{record.pk}',
             method=account.type, **audit_fields(actor),
         )
-        post_transaction(account, AccountTransaction.Direction.OUTFLOW, actor, date=date, amount=due,
-                         expense_payment=payment)
-    expense.is_completed = True
-    expense.completed_at = now
-    expense.modified_by = actor.get_username()
-    expense.save(update_fields=['is_completed', 'completed_at', 'modified_by', 'updated_at'])
-    return expense, True
+        direction = AccountTransaction.Direction.INFLOW if model is Income else AccountTransaction.Direction.OUTFLOW
+        post_transaction(account, direction, actor, date=date, amount=due, **{f'{key}_payment': payment})
+    record.is_completed = True
+    record.completed_at = now
+    record.modified_by = actor.get_username()
+    record.save(update_fields=['is_completed', 'completed_at', 'modified_by', 'updated_at'])
+    return record, True
 
 
 def post_completed_sale_payment(sales_order, scope, actor, *, date):

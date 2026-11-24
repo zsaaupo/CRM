@@ -3,7 +3,30 @@ from django.urls import reverse
 from django.utils import timezone
 
 from account.page_views import ProtectedAccountPageView
-from .scope import WarehouseScopePageMixin, all_warehouse_access, warehouse_scope
+from .activity import available_reports
+from .models import WareHouse
+from .scope import WarehouseScopePageMixin, all_warehouse_access, has_warehouse_scope, scoped_queryset, warehouse_scope
+
+
+class WarehouseReportPageView(ProtectedAccountPageView):
+    template_name = 'warehouse/report.html'
+
+    def has_permission(self):
+        return has_warehouse_scope(self.request.user) and bool(available_reports(warehouse_scope(self.request.user)))
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        scope = warehouse_scope(self.request.user)
+        reports = {}
+        for key, (label, _, columns) in available_reports(scope).items():
+            reports[key] = {
+                'label': label, 'url': reverse(f'warehouse:report-{key}', args=[0]),
+                'columns': [dict(key=col[0], label=col[1], type=col[2] if len(col) > 2 else 'text') for col in columns],
+            }
+        context.update(page_section='warehouses', page_mode='report', page_label='Warehouse report', reports=reports,
+                       warehouses=scoped_queryset(WareHouse.objects.order_by('name', 'pk'), scope, 'pk'),
+                       choose_warehouse=all_warehouse_access(scope))
+        return context
 
 
 class WareHousePageView(WarehouseScopePageMixin, ProtectedAccountPageView):

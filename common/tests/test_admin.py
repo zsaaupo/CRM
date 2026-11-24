@@ -8,7 +8,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from accounting.models import AccountTransaction, AccountTransfer, ExpensePayment, PurchasePayment, SalesPayment
+from accounting.models import AccountTransaction, AccountTransfer, ExpensePayment, IncomePayment, PurchasePayment, SalesPayment
 from hrm.models import (
     Employee, EmployeeLoan, LeaveRequest, LeaveType, PayrollPeriod, PayrollRun, Payslip, PayslipLine,
     SalaryPayment,
@@ -29,7 +29,7 @@ class ProjectAdminTests(TestCase):
 
     def test_all_project_models_have_admin_lists(self):
         self.client.force_login(self.root)
-        posted_models = (AccountTransaction, AccountTransfer, ExpensePayment, PurchasePayment, SalesPayment)
+        posted_models = (AccountTransaction, AccountTransfer, ExpensePayment, IncomePayment, PurchasePayment, SalesPayment)
         for app_label in ('account', 'accounting', 'common', 'hrm', 'inventory', 'people', 'purchase', 'report', 'sale', 'warehouse'):
             for model in apps.get_app_config(app_label).get_models():
                 with self.subTest(model=model._meta.label):

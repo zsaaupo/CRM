@@ -1,0 +1,12 @@
+{% include 'inventory/includes/field.html' with name='name' label='Name' required=True maxlength='200' only %}
+{% include 'inventory/includes/field.html' with name='company' label='Company' maxlength='200' only %}
+{% include 'inventory/includes/field.html' with name='job_title' label='Job title' maxlength='150' only %}
+{% include 'inventory/includes/field.html' with name='email' label='Email' field_type='email' maxlength='254' only %}
+{% include 'inventory/includes/field.html' with name='phone' label='Phone' field_type='tel' maxlength='32' only %}
+{% include 'inventory/includes/field.html' with name='source' label='Source' maxlength='100' only %}
+{% include 'inventory/includes/field.html' with name='status' label='Status' field_type='select' required=True value='new' only %}
+{% include 'inventory/includes/field.html' with name='expected_value' label='Expected value' field_type='number' step='0.01' only %}
+{% include 'inventory/includes/field.html' with name='assigned_to' label='Assigned to' field_type='select' only %}
+{% include 'inventory/includes/field.html' with name='follow_up_date' label='Follow-up date' field_type='date' nullable_field=True only %}
+{% include 'inventory/includes/field.html' with name='expected_close_date' label='Expected close date' field_type='date' nullable_field=True only %}
+{% include 'inventory/includes/field.html' with name='notes' label='Notes' field_type='textarea' only %}

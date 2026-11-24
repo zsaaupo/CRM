@@ -1,6 +1,16 @@
 from django.contrib import admin
 
-from .models import Party
+from common.admin import AuditedAdmin
+
+from .models import Lead, Party
+
+
+@admin.register(Lead)
+class LeadAdmin(AuditedAdmin):
+    list_display = ['name', 'company', 'status', 'assigned_to', 'follow_up_date', 'expected_close_date']
+    search_fields = ['name', 'company', 'email', 'phone']
+    list_filter = ['status']
+    list_select_related = ['assigned_to']
 
 
 @admin.register(Party)

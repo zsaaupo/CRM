@@ -43,13 +43,14 @@
             {% endfor %}
         </div>
         {% endif %}
-        {% if warehouse_access.view or warehouse_access.stock or warehouse_access.transfers %}
+        {% if warehouse_access.view or warehouse_access.stock or warehouse_access.transfers or warehouse_access.report %}
         <button type="button" class="sidebar-link sidebar-group-toggle {% if page_section == 'warehouses' %}is-current{% endif %}" data-nav-toggle data-warehouses-toggle aria-controls="warehouses-submenu" aria-expanded="{% if page_section == 'warehouses' %}true{% else %}false{% endif %}">
             <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="m3 10 9-7 9 7v11H3V10Z" stroke-linejoin="round"/><path d="M8 21V11h8v10M8 15h8M8 18h8"/></svg>
             <span>Warehouses</span>
             <svg class="sidebar-chevron" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m9 5 7 7-7 7" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
         <div id="warehouses-submenu" class="sidebar-submenu" {% if page_section != 'warehouses' %}hidden{% endif %}>
+            {% if warehouse_access.report %}<a href="{% url 'warehouse_pages:report' %}" data-nav-item class="sidebar-sub-link {% if page_mode == 'report' and page_section == 'warehouses' %}is-current{% endif %}" {% if page_mode == 'report' and page_section == 'warehouses' %}aria-current="page"{% endif %}>Warehouse report</a>{% endif %}
             {% if warehouse_access.view %}<a href="{% url 'warehouse_pages:warehouse-list' %}" data-nav-item class="sidebar-sub-link {% if page_section == 'warehouses' and page_mode == 'list' or page_section == 'warehouses' and page_mode == 'edit' %}is-current{% endif %}" {% if page_section == 'warehouses' and page_mode == 'list' or page_section == 'warehouses' and page_mode == 'edit' %}aria-current="page"{% endif %}>Warehouse list</a>{% endif %}
             {% if warehouse_access.add %}<a href="{% url 'warehouse_pages:add-warehouse' %}" data-nav-item class="sidebar-sub-link {% if page_section == 'warehouses' and page_mode == 'add' %}is-current{% endif %}" {% if page_section == 'warehouses' and page_mode == 'add' %}aria-current="page"{% endif %}>Add warehouse</a>{% endif %}
             {% if warehouse_access.stock %}<a href="{% url 'warehouse_pages:stock-list' %}" data-nav-item class="sidebar-sub-link {% if page_mode == 'stock-list' or page_mode == 'stock-detail' %}is-current{% endif %}" {% if page_mode == 'stock-list' or page_mode == 'stock-detail' %}aria-current="page"{% endif %}>Stock list</a>{% endif %}
@@ -80,6 +81,17 @@
             <a href="{{ item.list_url }}" data-nav-item class="sidebar-sub-link {% if people_role == item.role and page_mode != 'add' %}is-current{% endif %}" {% if people_role == item.role and page_mode != 'add' %}aria-current="page"{% endif %}>{{ item.label }}</a>
             {% if item.can_add %}<a href="{{ item.add_url }}" data-nav-item class="sidebar-sub-link {% if people_role == item.role and page_mode == 'add' %}is-current{% endif %}" {% if people_role == item.role and page_mode == 'add' %}aria-current="page"{% endif %}>{{ item.add_label }}</a>{% endif %}
             {% endfor %}
+        </div>
+        {% endif %}
+        {% if lead_access.view %}
+        <button type="button" class="sidebar-link sidebar-group-toggle {% if page_section == 'lead' %}is-current{% endif %}" data-nav-toggle data-lead-toggle aria-controls="lead-submenu" aria-expanded="{% if page_section == 'lead' %}true{% else %}false{% endif %}">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M4 4h16l-6 7v6l-4 3v-9L4 4Z" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span>Lead</span>
+            <svg class="sidebar-chevron" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m9 5 7 7-7 7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <div id="lead-submenu" class="sidebar-submenu" {% if page_section != 'lead' %}hidden{% endif %}>
+            <a href="{% url 'people_pages:lead-list' %}" data-nav-item class="sidebar-sub-link {% if page_section == 'lead' and page_mode != 'add' %}is-current{% endif %}" {% if page_section == 'lead' and page_mode != 'add' %}aria-current="page"{% endif %}>Lead list</a>
+            {% if lead_access.add %}<a href="{% url 'people_pages:add-lead' %}" data-nav-item class="sidebar-sub-link {% if page_section == 'lead' and page_mode == 'add' %}is-current{% endif %}" {% if page_section == 'lead' and page_mode == 'add' %}aria-current="page"{% endif %}>Add lead</a>{% endif %}
         </div>
         {% endif %}
         {% if hrm_menu or hrm_attendance_menu or hrm_leave_menu or hrm_salary_menu or hrm_loan_menu %}
@@ -118,6 +130,16 @@
             {% if expense_access.categories %}<a href="{% url 'accounting_pages:expense-category-list' %}" data-nav-item class="sidebar-sub-link {% if expense_key == 'expense-category' %}is-current{% endif %}" {% if expense_key == 'expense-category' and page_mode == 'list' %}aria-current="page"{% endif %}>Expense categories</a>{% endif %}
         </div>
         {% endif %}
+        {% if income_access.incomes or income_access.categories %}
+        <button type="button" class="sidebar-link sidebar-group-toggle {% if page_section == 'income' %}is-current{% endif %}" data-nav-toggle aria-controls="income-submenu" aria-expanded="{% if page_section == 'income' %}true{% else %}false{% endif %}">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M4 6h16v13H4zM4 6V4h13M20 10h-5a2 2 0 0 0 0 4h5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span>Income</span><svg class="sidebar-chevron" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m9 5 7 7-7 7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <div id="income-submenu" class="sidebar-submenu" {% if page_section != 'income' %}hidden{% endif %}>
+            {% if income_access.incomes %}<a href="{% url 'accounting_pages:income-list' %}" data-nav-item class="sidebar-sub-link {% if income_key == 'income' %}is-current{% endif %}" {% if income_key == 'income' and page_mode == 'list' %}aria-current="page"{% endif %}>Income list</a>{% endif %}
+            {% if income_access.categories %}<a href="{% url 'accounting_pages:income-category-list' %}" data-nav-item class="sidebar-sub-link {% if income_key == 'income-category' %}is-current{% endif %}" {% if income_key == 'income-category' and page_mode == 'list' %}aria-current="page"{% endif %}>Income categories</a>{% endif %}
+        </div>
+        {% endif %}
         {% if finance_access.accounts or finance_access.transfers %}
         <button type="button" class="sidebar-link sidebar-group-toggle {% if page_section == 'accounting' %}is-current{% endif %}" data-nav-toggle aria-controls="accounting-submenu" aria-expanded="{% if page_section == 'accounting' %}true{% else %}false{% endif %}">
             <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="m3 9 9-5 9 5M4 10h16M6 11v6m6-6v6m6-6v6M3 19h18" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -126,7 +148,14 @@
         <div id="accounting-submenu" class="sidebar-submenu" {% if page_section != 'accounting' %}hidden{% endif %}>
             {% if finance_access.accounts %}<a href="{% url 'accounting_pages:financial-account-list' %}" data-nav-item class="sidebar-sub-link {% if finance_key == 'accounts' %}is-current{% endif %}">Financial accounts</a>{% endif %}
             {% if finance_access.cash_flow %}<a href="{% url 'accounting_pages:cash-flow-list' %}" data-nav-item class="sidebar-sub-link {% if finance_key == 'cash-flow' %}is-current{% endif %}" {% if finance_key == 'cash-flow' %}aria-current="page"{% endif %}>Cash flow</a>{% endif %}
-            {% if finance_access.transfers %}<a href="{% url 'accounting_pages:account-transfer-list' %}" data-nav-item class="sidebar-sub-link {% if finance_key == 'transfers' %}is-current{% endif %}">Account transfers</a>{% endif %}
+            {% if finance_access.ledger %}<a href="{% url 'accounting_pages:ledger' %}" data-nav-item class="sidebar-sub-link {% if finance_key == 'ledger' %}is-current{% endif %}" {% if finance_key == 'ledger' %}aria-current="page"{% endif %}>Ledger</a>{% endif %}
+            {% if finance_access.ledger %}
+            <a href="{% url 'accounting_pages:daybook' %}" data-nav-item class="sidebar-sub-link {% if finance_key == 'daybook' %}is-current{% endif %}">Daybook</a>
+            {% endif %}
+            {% if finance_access.transfers %}
+            <a href="{% url 'accounting_pages:account-transfer-list' %}" data-nav-item class="sidebar-sub-link {% if finance_key == 'account-transfer' %}is-current{% endif %}">Fund transfers</a>
+            <a href="{% url 'accounting_pages:money-transfer-list' %}" data-nav-item class="sidebar-sub-link {% if finance_key == 'money-transfer' %}is-current{% endif %}">Money transfers</a>
+            {% endif %}
         </div>
         {% endif %}
         {% if settings_access.trade_status %}

@@ -1,11 +1,19 @@
 from django.urls import path
 
-from .page_views import PartyAddPageView, PartyDetailPageView, PartyEditPageView, PartyListPageView
+from .page_views import (
+    LeadAddPageView, LeadDetailPageView, LeadEditPageView, LeadPageView,
+    PartyAddPageView, PartyDetailPageView, PartyEditPageView, PartyListPageView,
+)
 
 
 app_name = 'people_pages'
 
-urlpatterns = []
+urlpatterns = [
+    path('leads/', LeadPageView.as_view(), name='lead-list'),
+    path('leads/add/', LeadAddPageView.as_view(), name='add-lead'),
+    path('leads/<int:pk>/', LeadDetailPageView.as_view(), name='lead-detail'),
+    path('leads/<int:pk>/edit/', LeadEditPageView.as_view(), name='edit-lead'),
+]
 for role in ('supplier', 'customer'):
     urlpatterns += [
         path(f'{role}s/', PartyListPageView.as_view(party_role=role), name=f'{role}-list'),

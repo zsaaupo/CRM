@@ -1,27 +1,27 @@
 {% extends "layouts/dashboard.html" %}
 {% load static %}
 
-{% block title %}Expense #{{ expense_id }} | eManager{% endblock %}
+{% block title %}{{ resource.singular|capfirst }} #{{ record_id }} | eManager{% endblock %}
 
 {% block content %}
 <div class="workspace-content" data-record-detail data-api-url="{{ detail_api_url }}" data-title-field="id" data-login-url="{% url 'account_pages:login' %}">
     <div class="page-heading">
         <div>
-            <p class="page-eyebrow">Expenses</p>
-            <h1 class="page-title">Expense #<span data-record-title>{{ expense_id }}</span><span class="text-emerald-600">.</span></h1>
+            <p class="page-eyebrow">{{ section_label }}</p>
+            <h1 class="page-title">{{ resource.singular|capfirst }} #<span data-record-title>{{ record_id }}</span><span class="text-emerald-600">.</span></h1>
         </div>
         <div class="flex flex-wrap gap-3">
-            <a href="{{ list_url }}" class="secondary-button">Back to expenses <span aria-hidden="true">&rarr;</span></a>
-            {% if edit_url %}<a href="{{ edit_url }}" class="primary-button compact-primary" data-expense-edit hidden>Edit expense</a>{% endif %}
+            <a href="{{ list_url }}" class="secondary-button">Back to {{ resource.plural }} <span aria-hidden="true">&rarr;</span></a>
+            {% if edit_url %}<a href="{{ edit_url }}" class="primary-button compact-primary" data-expense-edit hidden>Edit {{ resource.singular }}</a>{% endif %}
         </div>
     </div>
 
     {% include 'includes/detail_status.html' %}
     <div data-record-content hidden>
         <section class="user-form-card mb-6" aria-labelledby="expense-information-heading">
-            <h2 id="expense-information-heading" class="section-title mb-6">Expense information</h2>
+            <h2 id="expense-information-heading" class="section-title mb-6">{{ resource.singular|capfirst }} information</h2>
             <dl class="profile-grid">
-                {% include 'includes/detail_field.html' with name='date' label='Expense date' only %}
+                {% include 'includes/detail_field.html' with name='date' label=resource.singular|capfirst|add:' date' only %}
                 {% include 'includes/detail_field.html' with name='category_name' label='Category' only %}
                 {% include 'includes/detail_field.html' with name='warehouse_name' label='Warehouse' only %}
                 {% include 'includes/detail_field.html' with name='is_completed' label='Completed' kind='boolean' only %}
@@ -42,7 +42,7 @@
 
         {% include 'includes/detail_audit.html' %}
     </div>
-    <noscript><p class="form-error">Enable JavaScript to load expense details.</p></noscript>
+    <noscript><p class="form-error">Enable JavaScript to load {{ resource.singular }} details.</p></noscript>
 </div>
 {% endblock %}
 

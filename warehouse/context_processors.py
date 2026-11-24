@@ -1,17 +1,23 @@
 from account.permissions import has_role_permissions
-from .scope import all_warehouse_access, has_warehouse_scope, warehouse_scope
+from rest_framework.exceptions import PermissionDenied
+from .activity import available_reports
+from .scope import all_warehouse_access, warehouse_scope
 
 
 def warehouse_navigation(request):
     user = request.user
-    scoped = has_warehouse_scope(user)
-    can_view = scoped and has_role_permissions(user, ('warehouse.view_warehouse',))
-    can_view_stock = scoped and has_role_permissions(user, ('warehouse.view_stock',))
+    try:
+        scope = warehouse_scope(user)
+    except PermissionDenied:
+        return {'warehouse_access': dict.fromkeys(('report', 'view', 'stock', 'transfers', 'add_transfer', 'add'), False)}
+    can_view = has_role_permissions(user, ('warehouse.view_warehouse',))
+    can_view_stock = has_role_permissions(user, ('warehouse.view_stock',))
     return {'warehouse_access': {
+        'report': bool(available_reports(scope)),
         'view': can_view,
         'stock': can_view_stock,
-        'transfers': scoped and has_role_permissions(user, ('warehouse.view_warehousetransfer',)),
-        'add_transfer': scoped and has_role_permissions(user, ('warehouse.view_warehousetransfer',
-                        'warehouse.add_warehousetransfer')) and all_warehouse_access(warehouse_scope(user)),
-        'add': can_view and has_role_permissions(user, ('warehouse.add_warehouse',)) and all_warehouse_access(warehouse_scope(user)),
+        'transfers': has_role_permissions(user, ('warehouse.view_warehousetransfer',)),
+        'add_transfer': all_warehouse_access(scope) and has_role_permissions(user, ('warehouse.view_warehousetransfer',
+                        'warehouse.add_warehousetransfer')),
+        'add': can_view and all_warehouse_access(scope) and has_role_permissions(user, ('warehouse.add_warehouse',)),
     }}

@@ -10,6 +10,7 @@ from django.views.decorators.cache import never_cache
 from rest_framework import serializers, status
 from rest_framework.generics import GenericAPIView
 from rest_framework.response import Response
+from rest_framework.utils.urls import replace_query_param
 from rest_framework.views import APIView
 
 from common.serializers import AUDIT_FIELDS, CatalogSerializer
@@ -22,11 +23,12 @@ from warehouse.scope import (
 
 from .models import (
     MIN_AMOUNT, AccountTransaction, AccountTransfer, Expense, ExpenseCategory, ExpensePayment, FinancialAccount,
-    SalesPayment,
+    Income, IncomeCategory, IncomePayment, SalesPayment, TransferType,
 )
 from .services import (
     ACCOUNT_VIEW, EXPENSE_COMPLETE, PAYMENT_VIEW, SALES_PAYMENT_VIEW, STATEMENT_VIEW, TRANSFER_VIEW, ExpenseCompleted,
-    accounts_with_balances, available_payment_accounts, complete_expense, lock_expense, lock_rows, paid_amount,
+    INCOME_PAYMENT_VIEW, IncomeCompleted, accounts_with_balances, available_payment_accounts, complete_income_expense,
+    lock_income_expense, lock_rows, paid_amount,
     payment_account_options, post_transfer,
 )
 from .serializers import PaymentAccountField
@@ -37,6 +39,11 @@ class ExpenseCategorySerializer(CatalogSerializer):
         model = ExpenseCategory
         fields = [*AUDIT_FIELDS, 'name', 'is_active']
         read_only_fields = AUDIT_FIELDS
+
+
+class IncomeCategorySerializer(ExpenseCategorySerializer):
+    class Meta(ExpenseCategorySerializer.Meta):
+        model = IncomeCategory
 
 
 class ExpenseCategoryResource:
@@ -53,6 +60,7 @@ class ExpenseCategoryDetailAPIView(ExpenseCategoryResource, BaseDetailAPIView):
 
 
 class ExpenseSerializer(WarehouseScopedSerializerMixin, CatalogSerializer):
+    completed_error = ExpenseCompleted
     category_name = serializers.CharField(source='category.name', read_only=True)
     warehouse_name = serializers.CharField(source='warehouse.name', read_only=True)
     currency = serializers.SerializerMethodField()
@@ -69,7 +77,7 @@ class ExpenseSerializer(WarehouseScopedSerializerMixin, CatalogSerializer):
 
     def validate(self, attrs):
         if self.instance and self.instance.is_completed:
-            raise ExpenseCompleted()
+            raise self.completed_error()
         return super().validate(attrs)
 
     def get_currency(self, expense):
@@ -92,8 +100,15 @@ class ExpenseSerializer(WarehouseScopedSerializerMixin, CatalogSerializer):
 
     def update(self, instance, validated_data):
         # The view locks the actor's warehouse assignment before this write.
-        self.instance = current = lock_expense(instance.pk, warehouse_scope(self.context['request'].user))
+        self.instance = current = lock_income_expense(type(instance), instance.pk, warehouse_scope(self.context['request'].user))
         return super().update(current, self.validate(validated_data))
+
+
+class IncomeSerializer(ExpenseSerializer):
+    completed_error = IncomeCompleted
+
+    class Meta(ExpenseSerializer.Meta):
+        model = Income
 
 
 class ExpenseFilterSerializer(serializers.Serializer):
@@ -120,17 +135,19 @@ class ExpensePagination(BasePagination):
         return response
 
 
-class ExpenseResource(WarehouseScopeAPIMixin):
-    queryset = Expense.objects.select_related('category', 'warehouse', 'payment_account').annotate(
-        has_payment_history=Exists(ExpensePayment.objects.filter(expense_id=OuterRef('pk'))),
-    ).prefetch_related(Prefetch(
-        'payments',
-        queryset=ExpensePayment.objects.only('expense_id').prefetch_related(Prefetch(
-            'transactions', queryset=AccountTransaction.objects.only('expense_payment_id', 'direction', 'amount'),
-            to_attr='ledger_rows',
-        )),
-        to_attr='ledger_payments',
+def income_expense_queryset(model, payment_model):
+    key = model._meta.model_name
+    payments = payment_model.objects.only(f'{key}_id').prefetch_related(Prefetch(
+        'transactions', queryset=AccountTransaction.objects.only(f'{key}_payment_id', 'direction', 'amount'),
+        to_attr='ledger_rows',
     ))
+    return model.objects.select_related('category', 'warehouse', 'payment_account').annotate(
+        has_payment_history=Exists(payment_model.objects.filter(**{f'{key}_id': OuterRef('pk')})),
+    ).prefetch_related(Prefetch('payments', queryset=payments, to_attr='ledger_payments'))
+
+
+class ExpenseResource(WarehouseScopeAPIMixin):
+    queryset = income_expense_queryset(Expense, ExpensePayment)
     serializer_class = ExpenseSerializer
 
 
@@ -157,7 +174,7 @@ class ExpenseDetailAPIView(ExpenseResource, BaseDetailAPIView):
     def perform_destroy(self, instance):
         scope = lock_warehouse_scope(self.request.user)
         self.check_permissions(self.request)
-        expense = lock_expense(instance.pk, scope)
+        expense = lock_income_expense(type(instance), instance.pk, scope)
         if expense.is_completed:
             raise ExpenseCompleted()
         super().perform_destroy(expense)
@@ -168,19 +185,28 @@ class ExpenseCompleteSerializer(serializers.Serializer):
     is_completed = serializers.ChoiceField(choices=[True])
 
 
+class IncomeCompleteSerializer(serializers.Serializer):
+    income_id = serializers.IntegerField(min_value=1, max_value=2**63 - 1)
+    is_completed = serializers.ChoiceField(choices=[True])
+
+
 @method_decorator(never_cache, name='dispatch')
 class ExpenseCompleteAPIView(WarehouseScopeAPIMixin, BaseAPIMixin, APIView):
     required_permissions = EXPENSE_COMPLETE
+    request_serializer = ExpenseCompleteSerializer
+    record_serializer = ExpenseSerializer
     http_method_names = ['post', 'options']
 
     def post(self, request):
-        data = ExpenseCompleteSerializer(data=request.data)
+        model = self.record_serializer.Meta.model
+        key = model._meta.model_name
+        data = self.request_serializer(data=request.data)
         data.is_valid(raise_exception=True)
-        expense, completed_now = complete_expense(request.user, data.validated_data['expense_id'])
+        record, completed_now = complete_income_expense(request.user, model, data.validated_data[f'{key}_id'])
         return Response({
-            'message': 'Expense completed.' if completed_now else 'Expense was already completed.',
+            'message': f'{key.capitalize()} completed.' if completed_now else f'{key.capitalize()} was already completed.',
             'completed_now': completed_now,
-            'expense': ExpenseSerializer(expense, context={'request': request}).data,
+            key: self.record_serializer(record, context={'request': request}).data,
         })
 
 
@@ -191,7 +217,8 @@ class ExpenseOptionsAPIView(ExpenseResource, BaseAPIMixin, GenericAPIView):
 
     @property
     def required_permissions(self):
-        return ('accounting.view_expense', 'accounting.change_expense') if self.edit else ('accounting.add_expense',)
+        key = self.queryset.model._meta.model_name
+        return (f'accounting.view_{key}', f'accounting.change_{key}') if self.edit else (f'accounting.add_{key}',)
 
     def get(self, request, pk=None):
         expense = get_object_or_404(self.get_queryset(), pk=pk) if self.edit else None
@@ -200,7 +227,8 @@ class ExpenseOptionsAPIView(ExpenseResource, BaseAPIMixin, GenericAPIView):
         if expense:
             category_filter |= Q(pk=expense.category_id)
             warehouse_filter |= Q(pk=expense.warehouse_id)
-        categories = ExpenseCategory.objects.filter(category_filter)
+        category_model = self.queryset.model._meta.get_field('category').related_model
+        categories = category_model.objects.filter(category_filter)
         warehouses = scoped_queryset(WareHouse.objects.all(), request.warehouse_scope, 'pk')
         warehouses = warehouses.filter(warehouse_filter).order_by('name', 'pk')
         return Response({
@@ -208,6 +236,40 @@ class ExpenseOptionsAPIView(ExpenseResource, BaseAPIMixin, GenericAPIView):
             'warehouse': [{'value': row.pk, 'label': row.name} for row in warehouses],
             'payment_account': payment_account_options(available_payment_accounts(request.warehouse_scope)),
         })
+
+
+class IncomeCategoryListCreateAPIView(ExpenseCategoryListCreateAPIView):
+    queryset = IncomeCategory.objects.all()
+    serializer_class = IncomeCategorySerializer
+    response_key = 'income_category'
+
+
+class IncomeCategoryDetailAPIView(ExpenseCategoryDetailAPIView):
+    queryset = IncomeCategory.objects.all()
+    serializer_class = IncomeCategorySerializer
+
+
+class IncomeResource:
+    queryset = income_expense_queryset(Income, IncomePayment)
+    serializer_class = IncomeSerializer
+
+
+class IncomeListCreateAPIView(IncomeResource, ExpenseListCreateAPIView):
+    response_key = 'income'
+
+
+class IncomeDetailAPIView(IncomeResource, ExpenseDetailAPIView):
+    pass
+
+
+class IncomeOptionsAPIView(IncomeResource, ExpenseOptionsAPIView):
+    pass
+
+
+class IncomeCompleteAPIView(ExpenseCompleteAPIView):
+    required_permissions = ('accounting.change_income',)
+    request_serializer = IncomeCompleteSerializer
+    record_serializer = IncomeSerializer
 
 
 class FinancialAccountSerializer(WarehouseScopedSerializerMixin, CatalogSerializer):
@@ -264,10 +326,12 @@ class AccountTransactionSerializer(serializers.ModelSerializer):
     class Meta:
         model = AccountTransaction
         fields = [*AUDIT_FIELDS, 'date', 'account', 'direction', 'direction_label', 'amount', 'balance_after',
-                  'currency', 'source', 'reference', 'transfer', 'expense_payment', 'sales_payment', 'purchase_payment']
+                  'currency', 'source', 'reference', 'transfer', 'expense_payment', 'income_payment', 'sales_payment', 'purchase_payment']
         read_only_fields = fields
 
     def get_source(self, row):
+        if row.income_payment_id:
+            return f'Income payment {row.income_payment.number}'
         if row.purchase_payment_id:
             return f'{row.purchase_payment.type_label} {row.purchase_payment.number}'
         if row.sales_payment_id:
@@ -275,18 +339,18 @@ class AccountTransactionSerializer(serializers.ModelSerializer):
         return f'Transfer {row.transfer.number}' if row.transfer_id else f'Expense payment {row.expense_payment.number}'
 
     def get_reference(self, row):
-        return (row.transfer or row.expense_payment or row.sales_payment or row.purchase_payment).reference
+        return (row.transfer or row.expense_payment or row.income_payment or row.sales_payment or row.purchase_payment).reference
 
 
 class AccountTransactionListAPIView(WarehouseScopeAPIMixin, BaseListAPIView):
     queryset = AccountTransaction.objects.select_related(
-        'account', 'transfer', 'expense_payment', 'sales_payment', 'purchase_payment',
+        'account', 'transfer', 'expense_payment', 'income_payment', 'sales_payment', 'purchase_payment',
     )
     serializer_class = AccountTransactionSerializer
     required_permissions = STATEMENT_VIEW
     warehouse_lookup = 'account__warehouse_id'
     ordering = ['-pk']
-    search_fields = ['transfer__reference', 'expense_payment__reference', 'sales_payment__reference',
+    search_fields = ['transfer__reference', 'expense_payment__reference', 'income_payment__reference', 'sales_payment__reference',
                      'purchase_payment__reference']
 
 
@@ -301,6 +365,72 @@ class AccountStatementAPIView(AccountTransactionListAPIView):
         response = super().list(request, *args, **kwargs)
         response.data['account'] = FinancialAccountSerializer(self.account).data
         return response
+
+
+class LedgerRequestSerializer(serializers.Serializer):
+    account = serializers.IntegerField(min_value=1, max_value=2**63 - 1)
+    start_date = serializers.DateField()
+    end_date = serializers.DateField()
+
+    def validate(self, data):
+        if data['start_date'] > data['end_date']:
+            raise serializers.ValidationError({'end_date': 'Choose an end date on or after the start date.'})
+        return data
+
+
+class LedgerEntrySerializer(AccountTransactionSerializer):
+    running_balance = serializers.CharField(read_only=True)
+
+    class Meta(AccountTransactionSerializer.Meta):
+        fields = ['id', 'date', 'source', 'reference', 'direction', 'amount', 'running_balance']
+        read_only_fields = fields
+
+    def get_source(self, row):
+        if row.transfer_id:
+            return f'{row.transfer.get_transfer_type_display()} {row.transfer.number}'
+        return super().get_source(row)
+
+
+@method_decorator(never_cache, name='dispatch')
+class LedgerAPIView(WarehouseScopeAPIMixin, BaseAPIMixin, GenericAPIView):
+    queryset = FinancialAccount.objects.all()
+    serializer_class = LedgerRequestSerializer
+    required_permissions = STATEMENT_VIEW
+
+    def get(self, request):
+        return Response({'accounts': list(self.get_queryset().values('id', 'name'))})
+
+    @transaction.atomic
+    def post(self, request):
+        filters = self.get_serializer(data=request.data)
+        filters.is_valid(raise_exception=True)
+        params = filters.validated_data
+        account = get_object_or_404(self.get_queryset(), pk=params['account'])
+        entries = account.transactions.all()
+        inflow = AccountTransaction.Direction.INFLOW
+        opening = account.opening_balance
+        prior = entries.filter(date__lt=params['start_date']).order_by().values_list('direction', 'amount')
+        for direction, amount in prior.iterator():
+            opening += amount if direction == inflow else -amount
+
+        rows = list(entries.filter(date__range=(params['start_date'], params['end_date']))
+                    .select_related('transfer', 'expense_payment', 'income_payment', 'sales_payment', 'purchase_payment')
+                    .order_by('date', 'pk'))
+        total_in = total_out = Decimal('0.0000')
+        for row in rows:
+            if row.direction == inflow:
+                total_in += row.amount
+            else:
+                total_out += row.amount
+            row.running_balance = opening + total_in - total_out
+
+        return Response({
+            'account': {'id': account.pk, 'name': account.name, 'currency': account.currency},
+            'start_date': params['start_date'], 'end_date': params['end_date'],
+            'opening_balance': format(opening, '.4f'), 'total_inflow': format(total_in, '.4f'),
+            'total_outflow': format(total_out, '.4f'), 'closing_balance': format(opening + total_in - total_out, '.4f'),
+            'results': LedgerEntrySerializer(rows, many=True).data,
+        })
 
 
 class CashFlowTransactionSerializer(AccountTransactionSerializer):
@@ -335,6 +465,7 @@ class PostingSerializer(serializers.Serializer):
 
 
 class TransferPostingSerializer(PostingSerializer):
+    transfer_type = serializers.ChoiceField(choices=TransferType.choices, default=TransferType.FUND_TRANSFER)
     source_account = serializers.IntegerField(min_value=1, max_value=2**63 - 1)
     destination_account = serializers.IntegerField(min_value=1, max_value=2**63 - 1)
 
@@ -348,8 +479,18 @@ class AccountTransferSerializer(serializers.ModelSerializer):
     class Meta:
         model = AccountTransfer
         fields = [*AUDIT_FIELDS, 'transfer_number', 'source_account', 'source_account_name', 'destination_account',
-                  'destination_account_name', 'currency', 'date', 'amount', 'reference']
+                  'destination_account_name', 'currency', 'date', 'amount', 'reference', 'transfer_type']
         read_only_fields = fields
+
+
+class TransferListFilterSerializer(serializers.Serializer):
+    transfer_type = serializers.CharField(required=False)
+
+    def validate_transfer_type(self, value):
+        try:
+            return TransferType(value.lower().replace(' ', '_'))
+        except ValueError:
+            raise serializers.ValidationError('Choose fund_transfer or money_transfer.') from None
 
 
 class AccountTransferListCreateAPIView(WarehouseScopeAPIMixin, BaseListCreateAPIView):
@@ -362,7 +503,21 @@ class AccountTransferListCreateAPIView(WarehouseScopeAPIMixin, BaseListCreateAPI
 
     def get_queryset(self):
         # Both accounts must be visible before disclosing the transfer details.
-        return scoped_queryset(super().get_queryset(), self.request.warehouse_scope, 'destination_account__warehouse_id')
+        queryset = scoped_queryset(super().get_queryset(), self.request.warehouse_scope, 'destination_account__warehouse_id')
+        params = self.request.query_params
+        filters = TransferListFilterSerializer(data=params if 'transfer_type' in params else self.request.data)
+        filters.is_valid(raise_exception=True)
+        self.transfer_type = filters.validated_data.get('transfer_type')
+        return queryset.filter(transfer_type=self.transfer_type) if self.transfer_type else queryset
+
+    def get_paginated_response(self, data):
+        response = super().get_paginated_response(data)
+        # A client following a pagination link need not resend the original GET body.
+        if self.transfer_type:
+            for key in ('next', 'previous'):
+                if response.data[key]:
+                    response.data[key] = replace_query_param(response.data[key], 'transfer_type', self.transfer_type)
+        return response
 
     def create(self, request, *args, **kwargs):
         data = TransferPostingSerializer(data=request.data)
@@ -402,6 +557,27 @@ class ExpensePaymentListAPIView(WarehouseScopeAPIMixin, BaseListAPIView):
         expense = get_object_or_404(scoped_queryset(Expense.objects.all(), self.request.warehouse_scope),
                                     pk=self.kwargs['expense_pk'])
         return super().get_queryset().filter(expense=expense)
+
+class IncomePaymentSerializer(PaymentSerializer):
+    class Meta:
+        model = IncomePayment
+        fields = [*AUDIT_FIELDS, 'name', 'income', *PaymentSerializer.payment_fields]
+        read_only_fields = fields
+
+
+class IncomePaymentListAPIView(WarehouseScopeAPIMixin, BaseListAPIView):
+    queryset = IncomePayment.objects.select_related('account')
+    serializer_class = IncomePaymentSerializer
+    warehouse_lookup = 'account__warehouse_id'
+    required_permissions = INCOME_PAYMENT_VIEW
+    search_fields = ['reference', 'account__name']
+    ordering = ['-pk']
+
+    def get_queryset(self):
+        income = get_object_or_404(scoped_queryset(Income.objects.all(), self.request.warehouse_scope),
+                                   pk=self.kwargs['income_pk'])
+        return super().get_queryset().filter(income=income)
+
 
 class SalesPaymentSerializer(PaymentSerializer):
     type_label = serializers.CharField()

@@ -1,0 +1,34 @@
+{% extends 'layouts/dashboard.html' %}
+{% load static %}
+{% block title %}{{ page_label }} | eManager{% endblock %}
+{% block content %}
+<div class="workspace-content" data-record-detail data-api-url="{{ detail_api_url }}" data-title-field="name" data-login-url="{% url 'account_pages:login' %}">
+    <div class="page-heading">
+        <div class="min-w-0 max-w-full"><p class="page-eyebrow">Lead</p><h1 class="page-title break-all"><span data-record-title>{{ page_label }}</span><span class="text-emerald-600">.</span></h1></div>
+        <div class="flex flex-wrap gap-3"><a href="{{ list_url }}" class="secondary-button">Back to leads <span aria-hidden="true">&rarr;</span></a>{% if edit_url %}<a href="{{ edit_url }}" class="primary-button compact-primary">Edit lead</a>{% endif %}</div>
+    </div>
+    {% include 'includes/detail_status.html' %}
+    <div data-record-content hidden>
+        <section class="user-form-card mb-6" aria-labelledby="lead-details-heading">
+            <h2 id="lead-details-heading" class="section-title mb-6">Lead details</h2>
+            <dl class="profile-grid">
+                {% include 'includes/detail_field.html' with name='name' label='Name' only %}
+                {% include 'includes/detail_field.html' with name='company' label='Company' only %}
+                {% include 'includes/detail_field.html' with name='job_title' label='Job title' only %}
+                {% include 'includes/detail_field.html' with name='email' label='Email' only %}
+                {% include 'includes/detail_field.html' with name='phone' label='Phone' only %}
+                {% include 'includes/detail_field.html' with name='source' label='Source' only %}
+                {% include 'includes/detail_field.html' with name='status_label' label='Status' only %}
+                {% include 'includes/detail_field.html' with name='expected_value' label='Expected value' only %}
+                {% include 'includes/detail_field.html' with name='assigned_to_name' label='Assigned to' only %}
+                {% include 'includes/detail_field.html' with name='follow_up_date' label='Follow-up date' only %}
+                {% include 'includes/detail_field.html' with name='expected_close_date' label='Expected close date' only %}
+                {% include 'includes/detail_field.html' with name='notes' label='Notes' full=True only %}
+            </dl>
+        </section>
+        {% include 'includes/detail_audit.html' %}
+    </div>
+    <noscript><p class="form-error">Enable JavaScript to load lead details.</p></noscript>
+</div>
+{% endblock %}
+{% block workspace_js %}<script type="module" src="{% static 'people/js/lead_detail.js' %}"></script>{% endblock %}

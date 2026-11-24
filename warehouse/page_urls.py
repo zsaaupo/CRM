@@ -1,7 +1,7 @@
 from django.urls import path
 
 from .page_views import (
-    StockDetailPageView, StockListPageView,
+    StockDetailPageView, StockListPageView, WarehouseReportPageView,
     WareHouseAddPageView, WareHouseEditPageView, WareHouseListPageView,
     TransferListPageView, TransferAddPageView, TransferEditPageView, TransferDetailPageView,
 )
@@ -10,6 +10,7 @@ from .page_views import (
 app_name = 'warehouse_pages'
 
 urlpatterns = [
+    path('report/', WarehouseReportPageView.as_view(), name='report'),
     path('transfers/', TransferListPageView.as_view(), name='transfer-list'),
     path('transfers/add/', TransferAddPageView.as_view(), name='add-transfer'),
     path('transfers/<int:pk>/edit/', TransferEditPageView.as_view(), name='edit-transfer'),

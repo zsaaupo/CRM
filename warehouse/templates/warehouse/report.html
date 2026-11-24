@@ -1,0 +1,39 @@
+{% extends "layouts/dashboard.html" %}
+{% load static %}
+{% block title %}Warehouse report | eManager{% endblock %}
+{% block content %}
+<div class="workspace-content">
+    <div class="page-heading"><div><p class="page-eyebrow">Warehouses</p><h1 class="page-title">Warehouse report<span class="text-emerald-600">.</span></h1></div></div>
+    <div class="user-form-card mb-6">
+        <div class="user-form-grid">
+            <div><label class="form-label" for="report-warehouse">Warehouse</label>
+                <select class="form-input" id="report-warehouse"{% if not choose_warehouse %} disabled{% endif %}>
+                    {% if choose_warehouse %}<option value="">Select a warehouse</option>{% endif %}
+                    {% for warehouse in warehouses %}<option value="{{ warehouse.pk }}">{{ warehouse.name }}</option>{% endfor %}
+                </select>
+            </div>
+            <div><label for="report-activity" class="form-label">Activity</label>
+                <select id="report-activity" class="form-input">{% for key, report in reports.items %}<option value="{{ key }}">{{ report.label }}</option>{% endfor %}</select>
+            </div>
+            <div><label for="report-start" class="form-label">Start date</label>
+                <input id="report-start" type="date" class="form-input">
+            </div>
+            <div><label for="report-end" class="form-label">End date</label>
+                <input id="report-end" type="date" class="form-input">
+            </div>
+        </div>
+    </div>
+    <section class="users-panel" aria-labelledby="report-title">
+        <div class="users-toolbar"><h2 class="section-title" id="report-title">Activity</h2></div>
+        <p class="users-list-status" id="report-status" role="status" aria-live="polite">Select a warehouse to view activity.</p>
+        <button type="button" class="secondary-button" id="report-retry" hidden>Try again</button>
+        <div class="users-table-scroll" id="report-table" hidden><table class="users-table"><thead><tr></tr></thead><tbody></tbody></table></div>
+        <div class="users-pagination" id="report-pages" hidden>
+            <button type="button" class="secondary-button" id="report-prev">Previous</button>
+            <button type="button" class="secondary-button" id="report-next">Next</button>
+        </div>
+    </section>
+    {{ reports|json_script:"activity-reports" }}
+</div>
+{% endblock %}
+{% block workspace_js %}<script type="module" src="{% static 'warehouse/js/report.js' %}"></script>{% endblock %}

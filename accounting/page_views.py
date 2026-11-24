@@ -11,7 +11,7 @@ from sale.returns import completed_orders
 from warehouse.models import WareHouse
 from warehouse.scope import all_warehouse_access, has_warehouse_scope, scoped_queryset, warehouse_scope
 
-from .models import AccountTransaction, AccountTransfer, Expense, ExpenseCategory, FinancialAccount, SalesPayment
+from .models import AccountTransaction, AccountTransfer, Expense, ExpenseCategory, FinancialAccount, Income, IncomeCategory, SalesPayment, TransferType
 from .services import SALES_PAYMENT_VIEW, STATEMENT_VIEW, TRANSFER_VIEW, accounts_with_balances, sales_payment_totals
 
 
@@ -26,16 +26,25 @@ EXPENSES = CatalogResource(
      ('paid_amount', 'Paid', 'price'), ('outstanding_amount', 'Outstanding', 'price'),
      ('payment_status', 'Payment status', 'text'), ('is_completed', 'Completed', 'boolean')),
 )
+INCOME_CATEGORIES = CatalogResource(
+    'income-category', 'income-categories', 'income category', 'income categories', IncomeCategory, CATEGORIES.columns,
+)
+INCOMES = CatalogResource(
+    'income', 'incomes', 'income', 'income records', Income, EXPENSES.columns,
+)
 ACCOUNTS = CatalogResource(
     'financial-account', 'financial-accounts', 'financial account', 'financial accounts', FinancialAccount,
     (('name', 'Name', 'text'), ('type_label', 'Type', 'text'), ('warehouse_name', 'Warehouse', 'text'),
      ('balance', 'Balance', 'price'), ('is_active', 'Status', 'status')),
 )
 TRANSFERS = CatalogResource(
-    'account-transfer', 'account-transfers', 'account transfer', 'account transfers', AccountTransfer,
+    'account-transfer', 'account-transfers', 'fund transfer', 'fund transfers', AccountTransfer,
     (('transfer_number', 'Transfer', 'text'), ('date', 'Date', 'text'), ('source_account_name', 'From account', 'text'),
      ('destination_account_name', 'To account', 'text'), ('amount', 'Amount', 'price'),
      ('reference', 'Reference', 'text')),
+)
+MONEY_TRANSFERS = CatalogResource(
+    'money-transfer', 'money-transfers', 'money transfer', 'money transfers', AccountTransfer, TRANSFERS.columns,
 )
 STATEMENT = CatalogResource(
     'account-statement', 'account-statement', 'entry', 'statement entries', AccountTransaction,
@@ -61,7 +70,7 @@ class AccountingPageView(ProtectedAccountPageView):
     def can(self, action):
         user = self.request.user
         permission = self.resource.permission(action)
-        if self.resource is not CATEGORIES:
+        if self.resource not in (CATEGORIES, INCOME_CATEGORIES):
             return has_role_permissions(user, (permission,))
         return user.has_perm(permission)
 
@@ -73,7 +82,7 @@ class AccountingPageView(ProtectedAccountPageView):
         return permissions
 
     def has_permission(self):
-        if self.resource is not CATEGORIES:
+        if self.resource not in (CATEGORIES, INCOME_CATEGORIES):
             return has_role_permissions(self.request.user, self.get_permission_required()) and has_warehouse_scope(self.request.user)
         return super().has_permission()
 
@@ -83,6 +92,8 @@ class AccountingPageView(ProtectedAccountPageView):
         context.update(resource=self.resource, page_mode=self.mode, list_url=reverse(f'accounting_pages:{key}-list'))
         if self.resource is ACCOUNTS:
             context.update(page_section='accounting', finance_key='accounts', section_label='Accounting')
+        elif self.resource in (INCOMES, INCOME_CATEGORIES):
+            context.update(page_section='income', income_key=key, section_label='Income')
         else:
             context.update(page_section='expense', expense_key=key, section_label='Expenses')
         return context
@@ -103,14 +114,16 @@ class AccountingListPageView(AccountingPageView):
             page_label=resource.plural.capitalize(), list_api_url=reverse(f'accounting:{resource.key}-list'),
             add_url=reverse(f'accounting_pages:add-{resource.key}'), can_add=self.can('add'), can_delete=can_delete,
             list_description={
+                INCOMES.key: 'Income by category and warehouse.',
+                INCOME_CATEGORIES.key: 'Categories used to organize income.',
                 EXPENSES.key: 'Expenses by category and warehouse.',
                 ACCOUNTS.key: 'Balances for cash, bank and mobile banking accounts.',
                 CATEGORIES.key: 'Categories used to organize expenses.',
             }[resource.key],
             columns=table_columns(resource), hide_list_hint=resource is ACCOUNTS,
         )
-        if resource is EXPENSES:
-            context['view_url_template'] = reverse('accounting_pages:expense-detail', args=[0])
+        if resource in (EXPENSES, INCOMES):
+            context['view_url_template'] = reverse(f'accounting_pages:{resource.key}-detail', args=[0])
         elif resource is ACCOUNTS and has_role_permissions(self.request.user, STATEMENT_VIEW):
             context['view_url_template'] = reverse('accounting_pages:account-statement', args=[0])
         if can_change or can_delete or 'view_url_template' in context:
@@ -122,16 +135,17 @@ class AccountingListPageView(AccountingPageView):
             context['edit_url_template'] = reverse(f'accounting_pages:edit-{resource.key}', args=[0])
         if can_delete:
             context['delete_url_template'] = reverse(f'accounting:{resource.key}-detail', args=[0])
-        if resource is EXPENSES:
+        if resource in (EXPENSES, INCOMES):
             scope = warehouse_scope(self.request.user)
             context.update(
-                filter_categories=ExpenseCategory.objects.all(),
+                filter_categories=resource.model._meta.get_field('category').related_model.objects.all(),
                 filter_warehouses=scoped_queryset(WareHouse.objects.order_by('name', 'pk'), scope, 'pk'),
                 edit_disabled_field='is_completed', delete_disabled_field='has_payment_history',
             )
             if can_change:
-                context.update(complete_api_url=reverse('accounting:expense-complete'), complete_id_field='expense_id',
-                               complete_result_key='expense', complete_label='expense')
+                context.update(complete_api_url=reverse(f'accounting:{resource.key}-complete'),
+                               complete_id_field=f'{resource.key}_id', complete_result_key=resource.key,
+                               complete_label=resource.singular)
         return context
 
 
@@ -143,14 +157,15 @@ class ExpenseDetailPageView(AccountingPageView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         scope = warehouse_scope(self.request.user)
-        expenses = scoped_queryset(Expense.objects.only('is_completed'), scope)
-        expense = get_object_or_404(expenses, pk=self.kwargs['pk'])
+        records = scoped_queryset(self.resource.model.objects.only('is_completed'), scope)
+        record = get_object_or_404(records, pk=self.kwargs['pk'])
+        key = self.resource.key
         context.update(
-            expense_id=expense.pk, page_label='Expense details',
-            detail_api_url=reverse('accounting:expense-detail', args=[expense.pk]),
+            record_id=record.pk, page_label=f'{key.capitalize()} details',
+            detail_api_url=reverse(f'accounting:{key}-detail', args=[record.pk]),
         )
-        if self.can('change') and not expense.is_completed:
-            context['edit_url'] = reverse('accounting_pages:edit-expense', args=[expense.pk])
+        if self.can('change') and not record.is_completed:
+            context['edit_url'] = reverse(f'accounting_pages:edit-{key}', args=[record.pk])
         return context
 
 
@@ -168,14 +183,18 @@ class AccountingFormPageView(AccountingPageView):
             fields_template=f'accounting/fields/{resource.key}.html', hide_catalog_hint=True,
             create_api_url=reverse(f'accounting:{resource.key}-list'),
         )
-        if resource is EXPENSES:
+        if resource in (EXPENSES, INCOMES):
             scope = warehouse_scope(self.request.user)
             restricted = not all_warehouse_access(scope)
             context.update(
+                fields_template='accounting/fields/expense.html',
+                account_label='Receive into account' if resource is INCOMES else 'Pay from account',
                 amount_label=f'Amount ({settings.INVENTORY_BASE_CURRENCY})',
                 assigned_warehouse=scope.warehouse_id if restricted else '',
-                warehouse_locked=restricted, options_api_url=reverse('accounting:expense-options'),
+                warehouse_locked=restricted, options_api_url=reverse(f'accounting:{resource.key}-options'),
             )
+        if resource is INCOME_CATEGORIES:
+            context['fields_template'] = 'accounting/fields/expense-category.html'
         if resource is ACCOUNTS:
             scope = warehouse_scope(self.request.user)
             context.update(
@@ -185,15 +204,15 @@ class AccountingFormPageView(AccountingPageView):
             )
         if editing:
             queryset = resource.model.objects.all()
-            if resource is not CATEGORIES:
+            if resource not in (CATEGORIES, INCOME_CATEGORIES):
                 queryset = scoped_queryset(queryset, scope)
             record = get_object_or_404(queryset, pk=self.kwargs['pk'])
             endpoint = reverse(f'accounting:{resource.key}-detail', args=[record.pk])
             context.update(form_method='PATCH', create_api_url=endpoint, detail_api_url=endpoint)
-            if resource is EXPENSES:
-                context['options_api_url'] = reverse('accounting:expense-edit-options', args=[record.pk])
+            if resource in (EXPENSES, INCOMES):
+                context['options_api_url'] = reverse(f'accounting:{resource.key}-edit-options', args=[record.pk])
                 context['readonly_field'] = 'is_completed'
-                context['readonly_message'] = 'This expense has been completed and is read-only.'
+                context['readonly_message'] = f'This {resource.singular} has been completed and is read-only.'
             if resource is ACCOUNTS:
                 context['financial_account'] = record
         return context
@@ -237,6 +256,12 @@ class FinanceListPageView(FinancePageView):
         return context
 
 
+class LedgerPageView(FinancePageView):
+    template_name = 'accounting/ledger.html'
+    permission_required = STATEMENT_VIEW
+    finance_key = 'ledger'
+
+
 class AccountStatementPageView(FinanceListPageView):
     resource = STATEMENT
     permission_required = STATEMENT_VIEW
@@ -273,13 +298,15 @@ class CashFlowListPageView(FinanceListPageView):
 class AccountTransferListPageView(FinanceListPageView):
     resource = TRANSFERS
     permission_required = TRANSFER_VIEW
-    finance_key = 'transfers'
+    transfer_type = TransferType.FUND_TRANSFER
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context.update(
-            list_api_url=reverse('accounting:account-transfer-list'), can_add=self.can('accounting.add_accounttransfer'),
-            add_url=reverse('accounting_pages:add-account-transfer'), add_label='New transfer',
+            finance_key=self.resource.key,
+            list_api_url=reverse('accounting:account-transfer-list', query={'transfer_type': self.transfer_type}),
+            can_add=self.can('accounting.add_accounttransfer'),
+            add_url=reverse(f'accounting_pages:add-{self.resource.key}'), add_label='New transfer',
             list_description='Funds moved between financial accounts.',
         )
         return context
@@ -317,16 +344,18 @@ class FinancePostingPageView(FinancePageView):
 
 class AccountTransferFormPageView(FinancePostingPageView):
     resource = TRANSFERS
-    finance_key = 'transfers'
+    transfer_type = TransferType.FUND_TRANSFER
     permission_required = (*TRANSFER_VIEW, 'accounting.add_accounttransfer')
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context.update(
             fields_accounts=self.accounts().filter(is_active=True),
-            form_heading='New account transfer', save_label='Post transfer',
+            finance_key=self.resource.key, fields_template='accounting/fields/account-transfer.html',
+            form_heading=f'New {self.resource.singular}', save_label='Post transfer',
+            transfer_type=self.transfer_type,
             form_description='Choose two accounts to move funds between them.',
             create_api_url=reverse('accounting:account-transfer-list'),
-            list_url=reverse('accounting_pages:account-transfer-list'),
+            list_url=reverse(f'accounting_pages:{self.resource.key}-list'),
         )
         return context
