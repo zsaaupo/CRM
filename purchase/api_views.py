@@ -3,7 +3,8 @@ from django.db import OperationalError
 from django.db.models import OuterRef, Subquery
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import never_cache
-from rest_framework.exceptions import PermissionDenied
+from rest_framework.exceptions import PermissionDenied, ValidationError
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.generics import GenericAPIView
@@ -223,3 +224,39 @@ class PurchaseOptionsAPIView(PurchaseConcurrencyMixin, WarehouseScopeAPIMixin, B
 
 class PurchaseEditOptionsAPIView(PurchaseOptionsAPIView):
     required_permissions = ('purchase.view_purchaseorder', 'purchase.change_purchaseorder', 'purchase.view_purchaseorderitem')
+
+
+@method_decorator(never_cache, name='dispatch')
+class PurchaseImportCSVAPIView(PurchaseConcurrencyMixin, WarehouseScopeAPIMixin, BaseAPIMixin, APIView):
+    required_permissions = ('purchase.add_purchaseorder', 'purchase.add_purchaseorderitem')
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
+    http_method_names = ['post', 'options']
+
+    def post(self, request):
+        from common.trade_csv import import_purchase_csv
+
+        wh_id = request.data.get('warehouse')
+        sup_id = request.data.get('supplier')
+        if not wh_id or not sup_id:
+            raise ValidationError({'detail': 'warehouse and supplier are required.'})
+        upload = request.FILES.get('file')
+        csv_text = upload if upload is not None else request.data.get('csv')
+        if csv_text is None:
+            raise ValidationError({'file': 'Upload a CSV file or pass "csv".'})
+        preview = str(request.data.get('preview', request.query_params.get('preview', ''))).lower() in ('1', 'true', 'yes')
+        res = import_purchase_csv(
+            request.user,
+            warehouse_id=int(wh_id),
+            supplier_id=int(sup_id),
+            csv_content=csv_text,
+            filename=upload.name if upload is not None else 'purchase.csv',
+            settlement_mode=request.data.get('settlement_mode') or 'deferred',
+            notes=request.data.get('notes') or '',
+            preview=preview,
+        )
+        if preview:
+            return Response(res)
+        return Response({
+            'id': res.pk,
+            'purchase_order': PurchaseOrderDetailSerializer(res, context={'request': request}).data,
+        }, status=201)

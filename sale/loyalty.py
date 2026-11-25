@@ -5,7 +5,7 @@ from decimal import Decimal
 from uuid import uuid4
 
 from django.db import IntegrityError, transaction
-from django.db.models import F, Sum
+from django.db.models import F, Q, Sum
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
@@ -292,10 +292,19 @@ def _reward_config():
         return None
 
 
-def _recompute_reward_points(customer_id: int) -> int:
-    total = CustomerPointLedger.objects.filter(customer_id=customer_id).aggregate(s=Sum('points_delta'))['s'] or 0
-    Party.all_objects.filter(pk=customer_id).update(reward_points=int(total))
-    return int(total)
+def _available_reward_points(customer_id: int, *, as_of=None) -> int:
+    today = as_of or timezone.localdate()
+    qs = CustomerPointLedger.objects.filter(customer_id=customer_id).filter(
+        Q(expires_at__isnull=True) | Q(expires_at__gte=today),
+    )
+    total = qs.aggregate(s=Sum('points_delta'))['s'] or 0
+    return max(0, int(total))
+
+
+def _recompute_reward_points(customer_id: int, *, as_of=None) -> int:
+    avail = _available_reward_points(customer_id, as_of=as_of)
+    Party.all_objects.filter(pk=customer_id).update(reward_points=avail)
+    return avail
 
 
 def maybe_earn_points_for_order(order, *, actor=None) -> int:
@@ -318,9 +327,12 @@ def maybe_earn_points_for_order(order, *, actor=None) -> int:
     if pts <= 0:
         return 0
     exp = None
-    dur = getattr(cfg, 'point_expiry_duration', None)
+    dur = getattr(cfg, 'point_expiry_duration_days', None)
+    if dur is None:
+        dur = getattr(cfg, 'point_expiry_duration', None)
     if dur:
-        exp = order.order_date + timedelta(days=int(dur) * (30 if getattr(cfg, 'point_expiry_unit', 'days') == 'months' else 1))
+        unit = getattr(cfg, 'point_expiry_unit', 'days')
+        exp = order.order_date + timedelta(days=int(dur) * (30 if unit == 'months' else 1))
     username = actor.get_username() if actor else 'system'
     CustomerPointLedger.objects.create(
         customer_id=order.customer_id,
@@ -334,6 +346,73 @@ def maybe_earn_points_for_order(order, *, actor=None) -> int:
         modified_by=username,
     )
     return _recompute_reward_points(order.customer_id)
+
+
+def redeem_points(
+    customer_id: int,
+    points: int,
+    *,
+    sales_order=None,
+    actor=None,
+    request_key=None,
+) -> dict:
+    pts = int(points or 0)
+    if pts <= 0:
+        raise ValidationError({'points': 'Redeem points must be positive.'})
+    cfg = _reward_config()
+    if cfg is None or not getattr(cfg, 'enable_reward_points', False):
+        raise ValidationError({'points': 'Reward points program is not enabled.'})
+    rk = str(request_key or uuid4())
+    with transaction.atomic():
+        existing = CustomerPointLedger.objects.filter(request_key=rk).first()
+        if existing is not None:
+            per_val = Decimal(existing.rule_snapshot.get('redeem_amount_per_point', cfg.redeem_amount_per_point))
+            redeemed = abs(int(existing.points_delta))
+            return {
+                'points_redeemed': redeemed,
+                'monetary_value': str(q_money(Decimal(redeemed) * per_val, digits=4)),
+                'remaining_points': _available_reward_points(customer_id),
+                'idempotent_replay': True,
+            }
+        Party.all_objects.filter(pk=customer_id).update(updated_at=F('updated_at'))
+        cust = Party.all_objects.select_for_update().filter(pk=customer_id, is_customer=True).first()
+        if cust is None:
+            raise ValidationError({'customer': 'Customer not found for reward points.'})
+        avail = _available_reward_points(cust.pk)
+        if pts > avail:
+            raise ValidationError({'points': f'Customer only has {avail} active reward points.'})
+        per_val = Decimal(getattr(cfg, 'redeem_amount_per_point', Decimal('1.0000')) or Decimal('1.0000'))
+        money_val = q_money(Decimal(pts) * per_val, digits=4)
+        username = actor.get_username() if actor else 'system'
+        CustomerPointLedger.objects.create(
+            customer=cust,
+            sales_order=sales_order,
+            points_delta=-pts,
+            reason=CustomerPointLedger.Reason.REDEEM,
+            rule_snapshot={'redeem_amount_per_point': str(per_val), 'monetary_value': str(money_val)},
+            request_key=rk,
+            create_by=username,
+            modified_by=username,
+        )
+        rem = _recompute_reward_points(cust.pk)
+        return {
+            'points_redeemed': pts,
+            'monetary_value': str(money_val),
+            'remaining_points': rem,
+            'idempotent_replay': False,
+        }
+
+
+def expire_reward_points(*, as_of=None, actor=None) -> int:
+    today = as_of or timezone.localdate()
+    expired_customers = set(
+        CustomerPointLedger.objects.filter(expires_at__lt=today, points_delta__gt=0).values_list('customer_id', flat=True)
+    )
+    updated = 0
+    for cid in expired_customers:
+        _recompute_reward_points(cid, as_of=today)
+        updated += 1
+    return updated
 
 
 def reverse_points_for_return(sales_return, *, actor=None) -> int:

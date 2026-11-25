@@ -315,3 +315,32 @@ button:focus-visible { outline: 2px solid #059669; outline-offset: 3px; }
     .welcome-panel { padding: 24px; }
     .profile-grid { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* Dark theme & RTL support (DASH-01, OPS-04) */
+.theme-dark body { background: #0c0a09; color: #e7e5e4; }
+.theme-dark .workspace-sidebar,
+.theme-dark .workspace-topbar,
+.theme-dark .overview-card,
+.theme-dark .user-form-card,
+.theme-dark .users-card,
+.theme-dark .user-dropdown { background: #1c1917; border-color: #292524; color: #e7e5e4; }
+.theme-dark .form-input { background: #0c0a09; border-color: #44403c; color: #f5f5f4; }
+.theme-dark .users-table th { background: #292524; color: #a8a29e; }
+.theme-dark .users-table td { border-color: #292524; color: #d6d3d1; }
+[dir="rtl"] .workspace-sidebar { left: auto; right: 0; border-right: 0; border-left: 1px solid #eceae7; }
+@media (min-width: 960px) {
+    [dir="rtl"] .workspace-topbar,
+    [dir="rtl"] .workspace-main { margin-left: 0; margin-right: 264px; }
+}
+
+/* M2-M6 ERP interactive panels */
+.erp-toolbar-btn { display: inline-flex; align-items: center; gap: 6px; border: 1px solid #e7e5e4; border-radius: 10px; background: #fff; padding: 6px 11px; font-size: 12px; font-weight: 500; color: #44403c; cursor: pointer; text-decoration: none; }
+.erp-toolbar-btn:hover { background: #f5f5f4; color: #1c1917; }
+.theme-dark .erp-toolbar-btn { background: #292524; border-color: #44403c; color: #e7e5e4; }
+.erp-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: #059669; color: #fff; font-size: 10px; font-weight: 600; }
+.pos-layout { display: grid; gap: 20px; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); }
+@media (max-width: 1024px) { .pos-layout { grid-template-columns: minmax(0, 1fr); } }
+.erp-card { border: 1px solid #e7e5e4; border-radius: 16px; background: #fff; padding: 20px; }
+.theme-dark .erp-card { background: #1c1917; border-color: #292524; }
+.erp-tab-btn { border: 1px solid #e7e5e4; border-radius: 9px; padding: 6px 12px; font-size: 12px; font-weight: 500; cursor: pointer; background: #fafaf9; color: #44403c; }
+.erp-tab-btn.is-active { background: #059669; border-color: #059669; color: #fff; }

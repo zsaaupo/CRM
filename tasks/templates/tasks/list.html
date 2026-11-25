@@ -1,21 +1,134 @@
-{% extends 'layouts/base.html' %}
-{% block title %}{{ page_label }} — eManager{% endblock %}
+{% extends "layouts/dashboard.html" %}
 {% block content %}
-<div class="p-6 max-w-6xl mx-auto">
-    <h1 class="text-2xl font-semibold text-stone-900">{{ page_label }}</h1>
-    <div class="mt-3 flex gap-4 text-sm text-stone-600">
-        <span>Total: {{ task_counters.total }}</span>
-        <span>Responsibility: {{ task_counters.responsibility }}</span>
-        <span>Created: {{ task_counters.created }}</span>
-        <span>Not Seen: {{ task_counters.not_seen }}</span>
-        <span>Completed Today: {{ task_counters.completed_today }}</span>
+<div class="workspace-content" id="tasks-app" data-view-mode="{{ view_mode|default:'all' }}" data-csrf="{{ csrf_token }}">
+  <div class="mb-6 flex flex-wrap items-center justify-between gap-4">
+    <div>
+      <h1 class="text-2xl font-semibold text-stone-900">{{ page_label }}</h1>
+      <div class="mt-2 flex flex-wrap gap-3 text-xs text-stone-600">
+        <span>Total: <strong>{{ task_counters.total }}</strong></span>
+        <span>Responsibility: <strong>{{ task_counters.responsibility }}</strong></span>
+        <span>Created: <strong>{{ task_counters.created }}</strong></span>
+        <span>Not Seen: <strong>{{ task_counters.not_seen }}</strong></span>
+        <span>Completed Today: <strong>{{ task_counters.completed_today }}</strong></span>
+      </div>
     </div>
-    {% if task %}
-    <div class="mt-6 rounded-xl border border-stone-200 bg-white p-5">
-        <h2 class="text-lg font-medium">{{ task.title }}</h2>
-        <p class="mt-1 text-sm text-stone-600">{{ task.description }}</p>
-        <p class="mt-2 text-xs text-stone-500">Status: {{ task.get_status_display }} | Priority: {{ task.get_priority_display }}</p>
+    <div class="flex gap-2">
+      <a href="{% url 'tasks_pages:list' %}" class="erp-toolbar-btn">All</a>
+      <a href="{% url 'tasks_pages:responsibility' %}" class="erp-toolbar-btn">Responsibility</a>
+      <a href="{% url 'tasks_pages:groups' %}" class="erp-toolbar-btn">Groups</a>
+      <a href="{% url 'tasks_pages:reports' %}" class="erp-toolbar-btn">Reports</a>
     </div>
-    {% endif %}
+  </div>
+
+  {% if view_mode == 'groups' %}
+  <div class="grid gap-6 lg:grid-cols-3">
+    <section class="erp-card">
+      <h2 class="text-base font-semibold mb-3">Create Task Group</h2>
+      <form id="tg-form" class="space-y-3 text-sm">
+        <input name="name" class="form-input" placeholder="Group name" required>
+        <input name="description" class="form-input" placeholder="Description">
+        <button type="submit" class="primary-button w-full justify-center">Add Group</button>
+      </form>
+    </section>
+    <section class="erp-card lg:col-span-2 users-table-scroll">
+      <table class="users-table"><thead><tr><th>Name</th><th>Description</th></tr></thead><tbody id="tg-tbody"></tbody></table>
+    </section>
+  </div>
+  {% elif view_mode == 'reports' %}
+  <section class="erp-card">
+    <h2 class="text-base font-semibold mb-3">Task Analytics</h2>
+    <div id="task-report-box" class="grid gap-3 sm:grid-cols-4 text-sm"></div>
+  </section>
+  {% else %}
+  <div class="grid gap-6 lg:grid-cols-3">
+    <section class="erp-card">
+      <h2 class="text-base font-semibold mb-3">New Task</h2>
+      <form id="task-form" class="space-y-3 text-sm">
+        <input name="title" class="form-input" placeholder="Task title" required>
+        <textarea name="description" class="form-input" rows="3" placeholder="Description"></textarea>
+        <select name="priority" class="form-input">
+          <option value="low">Low</option><option value="medium" selected>Medium</option><option value="high">High</option><option value="urgent">Urgent</option>
+        </select>
+        <input name="due_date" type="date" class="form-input">
+        <button type="submit" class="primary-button w-full justify-center">Create Task</button>
+        <p id="task-msg" class="text-xs text-stone-500"></p>
+      </form>
+    </section>
+    <section class="erp-card lg:col-span-2 users-table-scroll">
+      <table class="users-table">
+        <thead><tr><th>Title</th><th>Priority</th><th>Status</th><th>Action</th></tr></thead>
+        <tbody id="task-tbody"></tbody>
+      </table>
+    </section>
+  </div>
+  {% endif %}
 </div>
+{% endblock %}
+
+{% block workspace_js %}
+<script type="module">
+import { getJSON, patchJSON, postJSON } from "/static/js/api.js";
+const root = document.getElementById("tasks-app");
+const mode = root.dataset.viewMode;
+const csrf = root.dataset.csrf;
+
+async function init() {
+    if (mode === "groups") {
+        const res = await getJSON("/tasks/api/groups/");
+        document.getElementById("tg-tbody").innerHTML = (res.results || []).map((g) => `<tr><td>${g.name}</td><td>${g.description || ''}</td></tr>`).join("") || '<tr><td colspan="2">No groups.</td></tr>';
+        document.getElementById("tg-form")?.addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const fd = new FormData(e.currentTarget);
+            await postJSON("/tasks/api/groups/", { name: fd.get("name"), description: fd.get("description") || "" }, csrf);
+            e.currentTarget.reset();
+            init();
+        });
+        return;
+    }
+    if (mode === "reports") {
+        const res = await getJSON("/tasks/api/reports/");
+        document.getElementById("task-report-box").innerHTML = (res.by_status || []).map((s) => `<div class="overview-card"><div class="text-xs text-stone-500">${s.status}</div><div class="text-xl font-semibold">${s.count}</div></div>`).join("");
+        return;
+    }
+    const q = mode === "responsibility" ? "?box=responsibility" : "";
+    const res = await getJSON(`/tasks/api/tasks/${q}`);
+    document.getElementById("task-tbody").innerHTML = (res.results || []).map((t) => `
+      <tr>
+        <td><a href="/tasks/${t.id}/" class="font-medium text-emerald-800 hover:underline">${t.title}</a></td>
+        <td>${t.priority}</td>
+        <td><span class="user-status-badge ${t.status === 'completed' ? 'is-active' : 'is-inactive'}">${t.status}</span></td>
+        <td class="flex gap-1">
+          <button type="button" class="erp-toolbar-btn" data-seen-id="${t.id}">Seen</button>
+          ${t.status !== 'completed' ? `<button type="button" class="erp-toolbar-btn" data-done-id="${t.id}">Complete</button>` : ''}
+        </td>
+      </tr>
+    `).join("") || '<tr><td colspan="4">No tasks.</td></tr>';
+
+    document.querySelectorAll("[data-seen-id]").forEach((btn) => btn.addEventListener("click", async () => {
+        await postJSON(`/tasks/api/tasks/${btn.dataset.seenId}/seen/`, {}, csrf);
+        init();
+    }));
+    document.querySelectorAll("[data-done-id]").forEach((btn) => btn.addEventListener("click", async () => {
+        try {
+            await patchJSON(`/tasks/api/tasks/${btn.dataset.doneId}/`, { status: "completed" }, csrf);
+            init();
+        } catch (err) {
+            document.getElementById("task-msg").textContent = err.message;
+        }
+    }));
+}
+
+document.getElementById("task-form")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    await postJSON("/tasks/api/tasks/", {
+        title: fd.get("title"), description: fd.get("description") || "",
+        priority: fd.get("priority"), due_date: fd.get("due_date") || null,
+    }, csrf);
+    e.currentTarget.reset();
+    init();
+});
+
+init();
+</script>
 {% endblock %}

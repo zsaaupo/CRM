@@ -25,7 +25,7 @@ from inventory.models import Product, ProductCategory
 from inventory.pricing import resolve_alert_threshold
 from people.models import Biller, CustomerGroup, Party
 from purchase.models import PurchaseOrder, PurchaseReturn
-from sale.models import Challan, SalesOrder, SalesReturn
+from sale.models import Challan, SalesOrder, SalesQuotation, SalesReturn
 from tasks.services import build_task_reports
 from warehouse.models import Stock, StockBatch
 from warehouse.scope import all_warehouse_access, check_warehouse, scoped_queryset, warehouse_scope
@@ -104,6 +104,12 @@ REPORT_REQUIRED_PERMS = {
 }
 
 
+REPORT_CATALOG = [
+    {'slug': slug, 'label': slug.replace('-', ' ').title()}
+    for slug in REPORT_REQUIRED_PERMS
+]
+
+
 def _local_date(dt_or_date, fallback=None) -> date | None:
     if dt_or_date is None:
         return fallback
@@ -161,7 +167,7 @@ def _posted_sales(scope, flt: ReportFilter) -> list[SalesOrder]:
     if flt.date_from or flt.date_to:
         out = []
         for so in qs:
-            d = _local_date(so.completed_at, so.order_date)
+            d = _local_date(so.fulfilled_at, so.order_date)
             if _in_range(d, flt):
                 if flt.user_id and so.create_by and str(flt.user_id) != so.create_by:
                     pass
@@ -181,7 +187,7 @@ def _posted_purchases(scope, flt: ReportFilter) -> list[PurchaseOrder]:
         qs = qs.filter(supplier_id=flt.supplier_id)
     out = []
     for po in qs:
-        d = _local_date(po.received_at, po.order_date)
+        d = _local_date(getattr(po, 'received_at', None), po.order_date)
         if _in_range(d, flt):
             out.append(po)
     return out
@@ -214,8 +220,7 @@ def _completed_purchase_returns(scope, flt: ReportFilter) -> list[PurchaseReturn
 def _sale_line_net_ex_tax_base(so: SalesOrder, item) -> Decimal:
     """Line net ex-tax, after allocated order discount, in base currency (D-20, D-21, D-55)."""
     rate = Decimal(so.exchange_rate or 1)
-    tax = Decimal(item.tax_amount or 0)
-    ex_tax = Decimal(item.line_net) - tax if getattr(item, 'tax_method', 'exclusive') == 'inclusive' else Decimal(item.line_net)
+    ex_tax = Decimal(item.net_amount)
     ex_tax -= Decimal(getattr(item, 'allocated_order_discount', 0) or 0)
     return convert_to_base(ex_tax, rate, digits=4)
 
@@ -367,7 +372,8 @@ def run_report(slug: str, flt: ReportFilter, actor) -> ReportResult:
                 st['sku'] = it.product.sku
                 st['name'] = it.product.name
                 st['purchased_qty'] += Decimal(it.quantity)
-                st['purchased_amt'] += convert_to_base(Decimal(it.line_net), rate, digits=4)
+                po_net = Decimal(it.quantity) * Decimal(it.unit_price) - Decimal(it.discount_amount or 0)
+                st['purchased_amt'] += convert_to_base(po_net, rate, digits=4)
         for so in sales:
             for it in so.items.all():
                 st = stats[it.product_id]
@@ -463,7 +469,7 @@ def run_report(slug: str, flt: ReportFilter, actor) -> ReportResult:
                 buckets[cur.isoformat()]
                 cur += timedelta(days=1)
         for doc in docs:
-            d = _local_date(doc.completed_at if is_sale else doc.received_at, doc.order_date)
+            d = _local_date(doc.fulfilled_at if is_sale else getattr(doc, 'received_at', None), doc.order_date)
             key = d.strftime('%Y-%m') if is_monthly else d.isoformat()
             amt = convert_to_base(Decimal(doc.grand_total), Decimal(doc.exchange_rate or 1), digits=4)
             buckets[key]['count'] += 1
@@ -483,7 +489,7 @@ def run_report(slug: str, flt: ReportFilter, actor) -> ReportResult:
             tot_grand += bal.recognized_total
             rows.append({
                 'id': so.pk, 'order_number': so.order_number,
-                'date': _local_date(so.completed_at, so.order_date).isoformat(),
+                'date': _local_date(so.fulfilled_at, so.order_date).isoformat(),
                 'warehouse': so.warehouse.name,
                 'customer': so.customer.name if so.customer_id else 'Walk-in',
                 'biller': so.biller_name_snapshot or (so.biller.name if so.biller_id else ''),
@@ -508,7 +514,7 @@ def run_report(slug: str, flt: ReportFilter, actor) -> ReportResult:
             tot_grand += bal.recognized_total
             rows.append({
                 'id': po.pk, 'order_number': po.order_number,
-                'date': _local_date(po.received_at, po.order_date).isoformat(),
+                'date': _local_date(getattr(po, 'received_at', None), po.order_date).isoformat(),
                 'warehouse': po.warehouse.name, 'supplier': po.supplier.name,
                 'grand_total': str(bal.recognized_total), 'paid': str(bal.net_paid), 'due': str(bal.open_due),
             })
@@ -760,10 +766,108 @@ def build_dashboard_payload(actor, *, warehouse_id: int | None = None, preset: s
     if warehouse_id is not None:
         check_warehouse(scope, warehouse_id, hide=True)
 
-    flt = ReportFilter(date_from=start_date, date_to=end_date, warehouse_id=warehouse_id, page_size=500)
-    summary = _compute_summary(scope, flt) if (actor.is_superuser or actor.has_perm('sale.view_salesorder')) else {}
+    can_sales = actor.is_superuser or actor.has_perm('sale.view_salesorder')
+    can_purchases = actor.is_superuser or actor.has_perm('purchase.view_purchaseorder')
+    can_accounts = actor.is_superuser or actor.has_perm('accounting.view_financialaccount')
+    can_quotes = actor.is_superuser or actor.has_perm('sale.view_salesquotation')
 
-    best = run_report('best-seller', ReportFilter(date_from=start_date, date_to=end_date, warehouse_id=warehouse_id, page_size=5), actor).rows if (actor.is_superuser or actor.has_perm('sale.view_salesorder')) else []
+    flt = ReportFilter(date_from=start_date, date_to=end_date, warehouse_id=warehouse_id, page_size=500)
+    summary = _compute_summary(scope, flt) if can_sales else {}
+
+    best = (
+        run_report('best-seller', ReportFilter(date_from=start_date, date_to=end_date, warehouse_id=warehouse_id, page_size=5), actor).rows
+        if can_sales else []
+    )
+    year_start = date(today.year, 1, 1)
+    best_year = (
+        run_report('best-seller', ReportFilter(date_from=year_start, date_to=today, warehouse_id=warehouse_id, page_size=5), actor).rows
+        if can_sales else []
+    )
+
+    cash_flow = []
+    if can_accounts:
+        accts = available_payment_accounts(scope).filter(currency=settings.INVENTORY_BASE_CURRENCY)
+        if warehouse_id is not None:
+            accts = accts.filter(warehouse_id=warehouse_id)
+        cf_map = defaultdict(lambda: {'received': ZERO, 'sent': ZERO})
+        for tx in AccountTransaction.objects.filter(account__in=accts, date__gte=year_start, date__lte=today):
+            ym = f'{tx.date.year:04d}-{tx.date.month:02d}'
+            if tx.direction == AccountTransaction.Direction.INFLOW:
+                cf_map[ym]['received'] += Decimal(tx.amount)
+            else:
+                cf_map[ym]['sent'] += Decimal(tx.amount)
+        cash_flow = [
+            {'month': m, 'received': str(q_money(v['received'], digits=4)), 'sent': str(q_money(v['sent'], digits=4))}
+            for m, v in sorted(cf_map.items())
+        ]
+
+    yearly = []
+    if can_sales or can_purchases:
+        y_flt = ReportFilter(date_from=year_start, date_to=today, warehouse_id=warehouse_id, page_size=500)
+        y_sales = _posted_sales(scope, y_flt) if can_sales else []
+        y_purch = _posted_purchases(scope, y_flt) if can_purchases else []
+        ym_sold = defaultdict(lambda: ZERO)
+        ym_purch = defaultdict(lambda: ZERO)
+        for so in y_sales:
+            d = _local_date(so.fulfilled_at, so.order_date) or today
+            ym_sold[f'{d.year:04d}-{d.month:02d}'] += convert_to_base(Decimal(so.grand_total), Decimal(so.exchange_rate or 1), digits=4)
+        for po in y_purch:
+            d = _local_date(getattr(po, 'received_at', None), po.order_date) or today
+            ym_purch[f'{d.year:04d}-{d.month:02d}'] += convert_to_base(Decimal(po.grand_total), Decimal(po.exchange_rate or 1), digits=4)
+        for m in range(1, 13):
+            key = f'{today.year:04d}-{m:02d}'
+            yearly.append({
+                'month': key,
+                'purchased': str(q_money(ym_purch[key], digits=4)),
+                'sold': str(q_money(ym_sold[key], digits=4)),
+            })
+
+    recent_sales = []
+    if can_sales:
+        qs_s = scoped_queryset(SalesOrder.objects.select_related('customer'), scope, lookup='warehouse_id')
+        if warehouse_id is not None:
+            qs_s = qs_s.filter(warehouse_id=warehouse_id)
+        for so in qs_s.order_by('-pk')[:5]:
+            recent_sales.append({
+                'id': so.pk, 'order_number': so.order_number,
+                'customer': so.customer.name if so.customer_id else 'Walk-in',
+                'grand_total': str(so.grand_total), 'payment_status': so.payment_status,
+            })
+
+    recent_purchases = []
+    if can_purchases:
+        qs_p = scoped_queryset(PurchaseOrder.objects.select_related('supplier'), scope, lookup='warehouse_id')
+        if warehouse_id is not None:
+            qs_p = qs_p.filter(warehouse_id=warehouse_id)
+        for po in qs_p.order_by('-pk')[:5]:
+            recent_purchases.append({
+                'id': po.pk, 'order_number': po.order_number,
+                'supplier': po.supplier.name if po.supplier_id else '',
+                'grand_total': str(po.grand_total), 'payment_status': po.payment_status,
+            })
+
+    recent_quotations = []
+    if can_quotes:
+        qs_q = scoped_queryset(SalesQuotation.objects.select_related('customer'), scope, lookup='warehouse_id')
+        if warehouse_id is not None:
+            qs_q = qs_q.filter(warehouse_id=warehouse_id)
+        for q in qs_q.order_by('-pk')[:5]:
+            recent_quotations.append({
+                'id': q.pk, 'quotation_number': q.quotation_number,
+                'customer': q.customer.name if q.customer_id else '',
+                'status': q.status, 'grand_total': str(q.grand_total),
+            })
+
+    recent_payments = []
+    if can_accounts:
+        sp_qs = scoped_queryset(SalesPayment.objects.select_related('sales_order'), scope, lookup='sales_order__warehouse_id')
+        if warehouse_id is not None:
+            sp_qs = sp_qs.filter(sales_order__warehouse_id=warehouse_id)
+        for sp in sp_qs.order_by('-pk')[:5]:
+            recent_payments.append({
+                'id': sp.pk, 'ref': f'SP-{sp.pk}', 'date': sp.date.isoformat(),
+                'method': sp.method, 'amount': str(sp.amount),
+            })
 
     quick_actions = []
     for perm, label, url_name in [
@@ -785,6 +889,24 @@ def build_dashboard_payload(actor, *, warehouse_id: int | None = None, preset: s
             'profit': summary.get('operating_result', '0.0000'),
         },
         'summary': summary,
+        'cash_flow': cash_flow,
+        'monthly_breakdown': {
+            'purchase': summary.get('purchase_amount', '0.0000'),
+            'revenue': summary.get('net_sales', '0.0000'),
+            'expense': summary.get('expenses', '0.0000'),
+        },
+        'yearly': yearly,
+        'recent': {
+            'sales': recent_sales,
+            'purchases': recent_purchases,
+            'quotations': recent_quotations,
+            'payments': recent_payments,
+        },
         'best_sellers': best,
+        'best_seller_panels': {
+            'monthly': best,
+            'yearly_qty': sorted(best_year, key=lambda r: Decimal(r['net_qty']), reverse=True)[:5],
+            'yearly_value': sorted(best_year, key=lambda r: Decimal(r['net_value']), reverse=True)[:5],
+        },
         'quick_actions': quick_actions,
     }

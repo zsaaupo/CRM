@@ -6,7 +6,7 @@ from rest_framework.exceptions import NotFound
 
 from accounting.serializers import PaymentAccountField
 from common.models import SettlementMode, TradeStatus
-from common.serializers import AUDIT_FIELDS, CatalogSerializer
+from common.serializers import AUDIT_FIELDS, CatalogSerializer, CustomFieldMixin
 from inventory.models import Currency
 from people.models import Party
 from warehouse.scope import WarehouseScopedSerializerMixin
@@ -14,7 +14,8 @@ from .models import SalesOrder, SalesOrderItem
 from .services import lock_order, require_item_permission
 
 
-class SalesOrderSerializer(WarehouseScopedSerializerMixin, CatalogSerializer):
+class SalesOrderSerializer(CustomFieldMixin, WarehouseScopedSerializerMixin, CatalogSerializer):
+    custom_field_entity = 'sale'
     warehouse_name = serializers.CharField(source='warehouse.name', read_only=True, default=None)
     customer = serializers.PrimaryKeyRelatedField(
         queryset=Party.objects.filter(is_customer=True), required=False, allow_null=True,
@@ -40,7 +41,7 @@ class SalesOrderSerializer(WarehouseScopedSerializerMixin, CatalogSerializer):
             'biller', 'biller_name_snapshot', 'attachment', 'staff_note', 'sale_note',
             'customer_reference',
             'billing_address', 'shipping_address', 'shipping_cost', 'notes', 'confirmed_at', 'fulfilled_at', 'is_completed',
-            'subtotal', 'tax_total', 'grand_total', *AUDIT_FIELDS[1:],
+            'custom_fields', 'subtotal', 'tax_total', 'grand_total', *AUDIT_FIELDS[1:],
         ]
         read_only_fields = [*AUDIT_FIELDS, 'order_number', 'confirmed_at', 'fulfilled_at', 'is_completed',
                             'payment_status', 'recognized_total_base', 'order_discount_amount', 'order_tax_amount',

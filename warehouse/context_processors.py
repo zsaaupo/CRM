@@ -9,7 +9,7 @@ def warehouse_navigation(request):
     try:
         scope = warehouse_scope(user)
     except PermissionDenied:
-        return {'warehouse_access': dict.fromkeys(('report', 'view', 'stock', 'transfers', 'add_transfer', 'add'), False)}
+        return {'warehouse_access': dict.fromkeys(('report', 'view', 'stock', 'transfers', 'add_transfer', 'add', 'adjustments', 'stock_counts'), False)}
     can_view = has_role_permissions(user, ('warehouse.view_warehouse',))
     can_view_stock = has_role_permissions(user, ('warehouse.view_stock',))
     return {'warehouse_access': {
@@ -20,4 +20,6 @@ def warehouse_navigation(request):
         'add_transfer': all_warehouse_access(scope) and has_role_permissions(user, ('warehouse.view_warehousetransfer',
                         'warehouse.add_warehousetransfer')),
         'add': can_view and all_warehouse_access(scope) and has_role_permissions(user, ('warehouse.add_warehouse',)),
+        'adjustments': has_role_permissions(user, ('warehouse.post_adjustment',)),
+        'stock_counts': has_role_permissions(user, ('warehouse.manage_stock_count',)),
     }}

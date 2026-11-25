@@ -2,7 +2,7 @@ from decimal import Decimal
 from rest_framework import serializers
 from rest_framework.validators import UniqueValidator
 
-from common.serializers import AUDIT_FIELDS, CatalogSerializer
+from common.serializers import AUDIT_FIELDS, CatalogSerializer, CustomFieldMixin
 from warehouse.models import WareHouse
 from .models import Biller, BillerWarehouse, CustomerGroup, Lead, Party
 
@@ -26,7 +26,8 @@ class LeadSerializer(CatalogSerializer):
         return user
 
 
-class PartySerializer(CatalogSerializer):
+class PartySerializer(CustomFieldMixin, CatalogSerializer):
+    custom_field_entity = 'customer'
     image = serializers.ImageField(required=False, allow_null=True)
     code = serializers.CharField(max_length=40, validators=[
         UniqueValidator(queryset=Party.all_objects.all(), lookup='iexact'),
@@ -89,7 +90,7 @@ class PartySerializer(CatalogSerializer):
             'total_due', 'purchase_due', 'return_due', 'user',
             'contact_person', 'email', 'phone', 'alternate_phone', 'website', 'tax_number', 'address',
             'city', 'state', 'postal_code', 'country', 'notes', 'is_active',
-            'is_deleted', 'deleted_at', 'deleted_by', *AUDIT_FIELDS[1:],
+            'custom_fields', 'is_deleted', 'deleted_at', 'deleted_by', *AUDIT_FIELDS[1:],
         ]
         read_only_fields = [
             *AUDIT_FIELDS, 'deposited_balance', 'reward_points', 'total_due', 'purchase_due',
@@ -104,7 +105,8 @@ class CustomerGroupSerializer(CatalogSerializer):
         read_only_fields = AUDIT_FIELDS
 
 
-class BillerSerializer(CatalogSerializer):
+class BillerSerializer(CustomFieldMixin, CatalogSerializer):
+    custom_field_entity = 'biller'
     image = serializers.ImageField(required=False, allow_null=True)
     warehouses = serializers.PrimaryKeyRelatedField(
         many=True, queryset=WareHouse.objects.filter(is_active=True), write_only=True, required=False,
@@ -116,7 +118,7 @@ class BillerSerializer(CatalogSerializer):
         fields = [
             'id', 'name', 'company_name', 'image', 'vat_number', 'email', 'phone', 'address',
             'city', 'state', 'postal_code', 'country', 'is_active', 'user',
-            'warehouses', 'warehouse_ids', 'is_deleted', 'deleted_at', 'deleted_by', *AUDIT_FIELDS[1:],
+            'warehouses', 'warehouse_ids', 'custom_fields', 'is_deleted', 'deleted_at', 'deleted_by', *AUDIT_FIELDS[1:],
         ]
         read_only_fields = [*AUDIT_FIELDS, 'warehouse_ids', 'is_deleted', 'deleted_at', 'deleted_by']
 

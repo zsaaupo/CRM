@@ -25,7 +25,7 @@ from people.models import Party
 from purchase.models import PurchaseOrder, PurchaseOrderItem
 from purchase.services import receive_purchase
 from sale.models import SalesOrder, SalesOrderItem, SalesReturn, SalesReturnItem
-from sale.returns import complete_sales_return
+from sale.returns import complete_return
 from sale.services import complete_sale
 from warehouse.models import RoleWarehouseAccess, Stock, StockMovement, WareHouse
 from warehouse.services import post_stock_movement
@@ -49,8 +49,8 @@ class M6AcceptanceTests(TestCase):
         RoleWarehouseAccess.objects.create(role=cls.role_a, all_warehouses=False, warehouse=cls.wh_a)
         cls.user_a = User.objects.create_user(username='m6_branch_a', password='pass')
         cls.user_a.groups.add(cls.role_a)
-        cls.user_a.user_permissions.add(
-            *Permission.objects.filter(codename__in=['view_salesorder', 'view_financialaccount', 'view_auditlog']),
+        cls.role_a.permissions.add(
+            *Permission.objects.filter(codename__in=['view_salesorder', 'view_purchaseorder', 'view_financialaccount', 'view_auditlog']),
         )
 
         cls.pcs = UnitOfMeasure.objects.create(name='Piece', code='PCS-M6')
@@ -85,12 +85,12 @@ class M6AcceptanceTests(TestCase):
             date=date(2026, 11, 10), category=inc_cat, warehouse=self.wh_a,
             amount=Decimal('250.0000'), payment_account=acc1, note='Misc inc', reference='REF-I1',
         )
-        complete_income_expense(inc, self.su, request_key=uuid.uuid4())
+        complete_income_expense(self.su, Income, inc.pk)
         exp = Expense.objects.create(
             date=date(2026, 11, 11), category=exp_cat, warehouse=self.wh_a,
             amount=Decimal('90.0000'), payment_account=acc1, note='Misc exp', reference='REF-E1',
         )
-        complete_income_expense(exp, self.su, request_key=uuid.uuid4())
+        complete_income_expense(self.su, Expense, exp.pk)
 
         client = self._auth()
         bal_res = client.get(reverse('accounting:account-balances')).data
@@ -143,25 +143,28 @@ class M6AcceptanceTests(TestCase):
         # F-RPT-1: Sell 2 @100 (cost 60 each), credit (deferred), return 1 @100 restoring cost 60
         so1 = SalesOrder.objects.create(
             customer=self.cust, warehouse=self.wh_a, order_date=date(2026, 11, 15),
-            currency=self.bdt, settlement_mode='deferred',
+            currency=self.bdt, exchange_rate=Decimal('1'), settlement_mode='deferred',
         )
         it1 = SalesOrderItem.objects.create(
-            sales_order=so1, product=self.prod, quantity=Decimal('2'), unit=self.pcs, unit_price=Decimal('100.0000'),
+            sales_order=so1, line_number=1, product=self.prod, quantity=Decimal('2'), unit=self.pcs, unit_price=Decimal('100.0000'),
         )
-        complete_sale(so1, None, self.su, settlement_mode='deferred')
+        complete_sale(self.su, so1.pk, settlement_mode='deferred')
         SalesOrder.objects.filter(pk=so1.pk).update(
-            completed_at=datetime(2026, 11, 15, 17, 50, tzinfo=ZoneInfo('Asia/Dhaka')),  # local date 2026-11-15
+            fulfilled_at=datetime(2026, 11, 15, 17, 50, tzinfo=ZoneInfo('Asia/Dhaka')),  # local date 2026-11-15
         )
         sret = SalesReturn.objects.create(sales_order=so1, return_date=date(2026, 11, 15))
         SalesReturnItem.objects.create(sales_return=sret, sales_order_item=it1, quantity=Decimal('1'))
-        complete_sales_return(sret, None, self.su)
+        complete_return(self.su, sret.pk)
+        SalesReturn.objects.filter(pk=sret.pk).update(
+            completed_at=datetime(2026, 11, 15, 18, 0, tzinfo=ZoneInfo('Asia/Dhaka')),
+        )
 
         inc_cat = IncomeCategory.objects.create(name='Other RPT')
         exp_cat = ExpenseCategory.objects.create(name='OpEx RPT')
         inc = Income.objects.create(date=date(2026, 11, 15), category=inc_cat, warehouse=self.wh_a, amount=Decimal('5'), payment_account=acc_cash)
-        complete_income_expense(inc, self.su, request_key=uuid.uuid4())
+        complete_income_expense(self.su, Income, inc.pk)
         exp = Expense.objects.create(date=date(2026, 11, 15), category=exp_cat, warehouse=self.wh_a, amount=Decimal('10'), payment_account=acc_cash)
-        complete_income_expense(exp, self.su, request_key=uuid.uuid4())
+        complete_income_expense(self.su, Expense, exp.pk)
 
         client = self._auth()
         rep = client.get(
@@ -177,18 +180,18 @@ class M6AcceptanceTests(TestCase):
         # F-RPT-2: 2-line sale + 3 payments counts sale amount ONCE, dashboard == report
         so2 = SalesOrder.objects.create(
             customer=self.cust, warehouse=self.wh_a, order_date=date(2026, 11, 16),
-            currency=self.bdt, settlement_mode='explicit',
+            currency=self.bdt, exchange_rate=Decimal('1'), settlement_mode='explicit',
         )
-        SalesOrderItem.objects.create(sales_order=so2, product=self.prod, quantity=Decimal('1'), unit=self.pcs, unit_price=Decimal('100.0000'))
-        SalesOrderItem.objects.create(sales_order=so2, product=self.prod, quantity=Decimal('2'), unit=self.pcs, unit_price=Decimal('100.0000'))
-        complete_sale(so2, None, self.su, settlement_mode='explicit', tenders=[
+        SalesOrderItem.objects.create(sales_order=so2, line_number=1, product=self.prod, quantity=Decimal('1'), unit=self.pcs, unit_price=Decimal('100.0000'))
+        SalesOrderItem.objects.create(sales_order=so2, line_number=2, product=self.prod, quantity=Decimal('2'), unit=self.pcs, unit_price=Decimal('100.0000'))
+        complete_sale(self.su, so2.pk, settlement_mode='explicit', tenders=[
             {'method': 'cash', 'account_id': acc_cash.pk, 'amount': Decimal('100')},
             {'method': 'bank_transfer', 'account_id': acc_bank.pk, 'amount': Decimal('100')},
             {'method': 'cash', 'account_id': acc_cash.pk, 'amount': Decimal('100')},
         ])
         # Local midnight test: 2026-11-16 00:05 Asia/Dhaka = 2026-11-15 18:05 UTC -> must land in 2026-11-16!
         SalesOrder.objects.filter(pk=so2.pk).update(
-            completed_at=datetime(2026, 11, 16, 0, 5, tzinfo=ZoneInfo('Asia/Dhaka')),
+            fulfilled_at=datetime(2026, 11, 16, 0, 5, tzinfo=ZoneInfo('Asia/Dhaka')),
         )
 
         rpt_16 = client.get(
@@ -265,9 +268,9 @@ class M6AcceptanceTests(TestCase):
         )
         so = SalesOrder.objects.create(
             customer=self.cust, warehouse=self.wh_a, order_date=date(2026, 11, 18),
-            currency=self.bdt, settlement_mode='deferred',
+            currency=self.bdt, exchange_rate=Decimal('1'), settlement_mode='deferred',
         )
-        SalesOrderItem.objects.create(sales_order=so, product=self.prod, quantity=Decimal('1'), unit=self.pcs, unit_price=Decimal('100'))
+        SalesOrderItem.objects.create(sales_order=so, line_number=1, product=self.prod, quantity=Decimal('1'), unit=self.pcs, unit_price=Decimal('100'))
         with self.settings(TIME_ZONE='Asia/Dhaka'):
             from django.db import transaction
             with transaction.atomic():
@@ -277,7 +280,7 @@ class M6AcceptanceTests(TestCase):
                     unit_cost_base=Decimal('60.0000'), reference_type='opening', reference_id=999,
                     posting_key='open-gw-999', actor=self.su,
                 )
-            complete_sale(so, None, self.su, settlement_mode='deferred')
+            complete_sale(self.su, so.pk, settlement_mode='deferred')
 
         client.post(reverse('ops_settings:gateway-list'), {'provider': 'sslcommerz', 'enabled': True, 'mode': 'sandbox', 'secret': 's3cr3t'}, format='json')
         init = client.post(reverse('ops_settings:gateway-initiate'), {'provider': 'sslcommerz', 'order': so.pk, 'amount': '100', 'account': acc.pk}, format='json').data

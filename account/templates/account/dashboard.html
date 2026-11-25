@@ -1,28 +1,167 @@
 {% extends "layouts/dashboard.html" %}
 
-{% block title %}Dashboard | eManager{% endblock %}
+{% block title %}Dashboard | {{ general_setting.system_title|default:"eManager" }}{% endblock %}
 {% block content %}
-<div class="workspace-content">
-    <div class="mb-9 flex flex-wrap items-end justify-between gap-4">
-        <div><p class="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-stone-400">Your overview</p><h1 class="text-3xl font-semibold tracking-tight text-stone-950 sm:text-4xl">Welcome back, {{ first_name }}<span class="text-emerald-600">.</span></h1><p class="mt-3 text-sm leading-6 text-stone-500">A clear view of your account. A little room to focus.</p></div>
-        <div class="date-pill"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 11h18" stroke-linecap="round"/></svg>{{ today|date:"D, j M Y" }}</div>
+<div class="workspace-content" id="erp-dashboard" data-api-url="{{ dashboard_api_url }}">
+    <div class="mb-7 flex flex-wrap items-end justify-between gap-4">
+        <div class="flex items-center gap-3">
+            {% include "includes/avatar.html" with image=profile.image initials=user_initials avatar_class="avatar-large" only %}
+            <div>
+                <p class="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-stone-400">Operating Overview</p>
+                <h1 class="text-3xl font-semibold tracking-tight text-stone-950">Welcome back, {{ first_name }}<span class="text-emerald-600">.</span></h1>
+                <p class="mt-1 text-sm text-stone-500">Live KPIs, cash flow, best sellers, and recent transactions scoped to your access.</p>
+            </div>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+            <button type="button" class="erp-tab-btn" data-preset="today">Today</button>
+            <button type="button" class="erp-tab-btn" data-preset="7d">7 Days</button>
+            <button type="button" class="erp-tab-btn is-active" data-preset="month">This Month</button>
+            <button type="button" class="erp-tab-btn" data-preset="year">This Year</button>
+            <input type="date" id="dash-start" class="erp-toolbar-btn">
+            <input type="date" id="dash-end" class="erp-toolbar-btn">
+            <button type="button" id="dash-apply" class="erp-toolbar-btn">Apply</button>
+        </div>
     </div>
 
-    <div class="grid gap-4 sm:grid-cols-3 lg:gap-5">
-        <section class="overview-card"><div class="mb-5 flex items-center justify-between"><h2 class="text-xs font-medium text-stone-500">Account status</h2><span class="metric-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="m12 3 8 4v5c0 5-8 9-8 9s-8-4-8-9V7l8-4Z" stroke-linejoin="round"/><path d="m8 12 3 3 5-6" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div><p class="flex items-center gap-2.5 text-2xl font-semibold tracking-tight"><span class="status-dot" aria-hidden="true"></span>Active</p><p class="mt-2 text-xs leading-5 text-stone-400">You’re signed in and ready to go.</p></section>
-        <section class="overview-card"><div class="mb-5 flex items-center justify-between"><h2 class="text-xs font-medium text-stone-500">Member since</h2><span class="metric-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M8 3v4M16 3v4M4 11h16" stroke-linecap="round"/></svg></span></div><p class="text-2xl font-semibold tracking-tight">{{ request.user.date_joined|date:"j M Y" }}</p><p class="mt-2 text-xs leading-5 text-stone-400">The start of your eManager journey.</p></section>
-        <section class="overview-card"><div class="mb-5 flex items-center justify-between"><h2 class="text-xs font-medium text-stone-500">Last sign-in</h2><span class="metric-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2" stroke-linecap="round"/></svg></span></div><p class="text-2xl font-semibold tracking-tight">{% if request.user.last_login %}{{ request.user.last_login|date:"g:i A" }}{% else %}—{% endif %}</p><p class="mt-2 text-xs leading-5 text-stone-400">{% if request.user.last_login %}{{ request.user.last_login|date:"j F Y" }}{% else %}Your current session{% endif %}</p></section>
+    <div id="dash-quick-actions" class="mb-6 flex flex-wrap gap-2"></div>
+
+    <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <section class="overview-card"><h2 class="text-xs font-medium text-stone-500">Net Revenue</h2><p id="kpi-revenue" class="mt-2 text-2xl font-semibold">—</p></section>
+        <section class="overview-card"><h2 class="text-xs font-medium text-stone-500">Sale Amount</h2><p id="kpi-sale" class="mt-2 text-2xl font-semibold">—</p></section>
+        <section class="overview-card"><h2 class="text-xs font-medium text-stone-500">Purchase Amount</h2><p id="kpi-purchase" class="mt-2 text-2xl font-semibold">—</p></section>
+        <section class="overview-card"><h2 class="text-xs font-medium text-stone-500">Operating Profit</h2><p id="kpi-profit" class="mt-2 text-2xl font-semibold">—</p></section>
     </div>
 
-    <div class="mt-6 grid gap-6 xl:grid-cols-[1.5fr_1fr]">
-        <section class="welcome-panel">
-            <span class="mb-7 inline-flex w-fit rounded-full border border-emerald-200 bg-white/80 px-3 py-1 text-[11px] font-medium text-emerald-800">Made for a clearer day</span>
-            <div class="welcome-illustration" aria-hidden="true"><div class="illustration-window"><span></span><span></span><span></span><div class="illustration-line long"></div><div class="illustration-line"></div><div class="illustration-grid"><i></i><i></i><i></i></div></div><span class="illustration-check"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m5 12 4 4L19 6" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div>
-            <h2 class="mt-7 max-w-sm text-2xl font-semibold tracking-tight text-stone-950">Your workspace, in focus.</h2><p class="mt-3 max-w-sm text-sm leading-6 text-stone-600">A simple place to settle in, review your details, and get on with what matters.</p>
-            <a href="{% url 'account_pages:profile' %}" class="mt-7 inline-flex w-fit items-center gap-2 text-sm font-semibold text-emerald-800 hover:text-emerald-950">View your profile <span aria-hidden="true">→</span></a>
+    <div class="mt-6 grid gap-6 lg:grid-cols-3">
+        <section class="erp-card lg:col-span-2">
+            <div class="flex items-center justify-between mb-3">
+                <h2 class="text-base font-semibold">Cash Flow &amp; Monthly Breakdown</h2>
+                <span id="dash-period-label" class="text-xs text-stone-500"></span>
+            </div>
+            <div class="grid grid-cols-3 gap-3 mb-4 text-sm">
+                <div class="rounded-lg bg-stone-50 p-3"><div class="text-xs text-stone-500">Revenue</div><div id="mb-revenue" class="font-semibold">—</div></div>
+                <div class="rounded-lg bg-stone-50 p-3"><div class="text-xs text-stone-500">Purchase</div><div id="mb-purchase" class="font-semibold">—</div></div>
+                <div class="rounded-lg bg-stone-50 p-3"><div class="text-xs text-stone-500">Expense</div><div id="mb-expense" class="font-semibold">—</div></div>
+            </div>
+            <div class="users-table-scroll">
+                <table class="users-table">
+                    <thead><tr><th>Month</th><th>Received</th><th>Sent</th><th>Purchased</th><th>Sold</th></tr></thead>
+                    <tbody id="dash-yearly-body"></tbody>
+                </table>
+            </div>
         </section>
-        <section class="rounded-2xl border border-stone-200 bg-white p-6 sm:p-7"><div class="flex items-center justify-between"><h2 class="text-base font-semibold tracking-tight">Account details</h2><span class="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold text-emerald-700">SIGNED IN</span></div><div class="my-7 flex items-center gap-3">{% include "includes/avatar.html" with image=profile.image initials=user_initials avatar_class="avatar-large" only %}<div class="min-w-0"><p class="truncate text-sm font-semibold">{{ display_name }}</p><p class="mt-1 break-all text-xs text-stone-500">{{ profile_email }}</p></div></div><dl class="space-y-5 text-sm"><div class="flex items-center justify-between gap-4"><dt class="text-stone-500">Phone</dt><dd class="text-right font-medium">{{ profile.phone_number|default:"Not provided" }}</dd></div><div class="flex items-center justify-between gap-4"><dt class="text-stone-500">Designation</dt><dd class="text-right font-medium">{{ profile.designation|default:"Not provided" }}</dd></div><div class="flex items-center justify-between gap-4"><dt class="text-stone-500">Country</dt><dd class="text-right font-medium">{{ profile.country|default:"Not provided" }}</dd></div></dl><a href="{% url 'account_pages:profile' %}" class="mt-7 block border-t border-stone-100 pt-5 text-sm font-medium text-stone-700 hover:text-emerald-700">See full profile <span class="float-right" aria-hidden="true">↗</span></a></section>
+
+        <section class="erp-card">
+            <h2 class="text-base font-semibold mb-3">Best Sellers (Top 5)</h2>
+            <div class="flex gap-2 mb-3">
+                <button type="button" class="erp-tab-btn is-active" data-best-tab="monthly">Monthly</button>
+                <button type="button" class="erp-tab-btn" data-best-tab="yearly_qty">Yearly Qty</button>
+                <button type="button" class="erp-tab-btn" data-best-tab="yearly_value">Yearly Value</button>
+            </div>
+            <div id="dash-best-list" class="space-y-2 text-sm text-stone-700"></div>
+        </section>
     </div>
-    <p class="mt-9 text-xs text-stone-400">A little more clarity, every day. <span class="ml-1">eManager.</span></p>
+
+    <section class="erp-card mt-6">
+        <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
+            <h2 class="text-base font-semibold">Recent Activity</h2>
+            <div class="flex gap-2">
+                <button type="button" class="erp-tab-btn is-active" data-recent-tab="sales">Sales</button>
+                <button type="button" class="erp-tab-btn" data-recent-tab="purchases">Purchases</button>
+                <button type="button" class="erp-tab-btn" data-recent-tab="quotations">Quotations</button>
+                <button type="button" class="erp-tab-btn" data-recent-tab="payments">Payments</button>
+            </div>
+        </div>
+        <div class="users-table-scroll">
+            <table class="users-table">
+                <thead id="dash-recent-head"></thead>
+                <tbody id="dash-recent-body"></tbody>
+            </table>
+        </div>
+    </section>
 </div>
+{% endblock %}
+
+{% block workspace_js %}
+<script type="module">
+import { getJSON } from "/static/js/api.js";
+
+const root = document.getElementById("erp-dashboard");
+let lastData = null;
+let bestTab = "monthly";
+let recentTab = "sales";
+
+async function loadDashboard(params = "preset=month") {
+    const data = await getJSON(`${root.dataset.apiUrl}?${params}`);
+    lastData = data;
+    document.getElementById("dash-period-label").textContent = `${data.period.start_date} to ${data.period.end_date}`;
+    document.getElementById("kpi-revenue").textContent = data.kpis.revenue;
+    document.getElementById("kpi-sale").textContent = data.kpis.sale_amount;
+    document.getElementById("kpi-purchase").textContent = data.kpis.purchase_amount;
+    document.getElementById("kpi-profit").textContent = data.kpis.profit;
+    document.getElementById("mb-revenue").textContent = data.monthly_breakdown?.revenue ?? "0.0000";
+    document.getElementById("mb-purchase").textContent = data.monthly_breakdown?.purchase ?? "0.0000";
+    document.getElementById("mb-expense").textContent = data.monthly_breakdown?.expense ?? "0.0000";
+
+    const qa = document.getElementById("dash-quick-actions");
+    const routeMap = {
+        "people_pages:add-lead": "{% url 'people_pages:add-lead' %}",
+        "sale_pages:create-sale": "{% url 'sale_pages:create-sale' %}",
+        "purchase_pages:create-purchase": "{% url 'purchase_pages:create-purchase' %}",
+        "inventory_pages:add-product": "{% url 'inventory_pages:add-product' %}",
+        "people_pages:add-party": "{% url 'people_pages:add-customer' %}",
+    };
+    qa.innerHTML = (data.quick_actions || []).map((a) => `<a href="${routeMap[a.url_name] || '#'}" class="erp-toolbar-btn">${a.label}</a>`).join("");
+
+    const cfByMonth = Object.fromEntries((data.cash_flow || []).map((r) => [r.month, r]));
+    document.getElementById("dash-yearly-body").innerHTML = (data.yearly || []).map((r) => {
+        const cf = cfByMonth[r.month] || { received: "0.0000", sent: "0.0000" };
+        return `<tr><td>${r.month}</td><td>${cf.received}</td><td>${cf.sent}</td><td>${r.purchased}</td><td>${r.sold}</td></tr>`;
+    }).join("");
+
+    renderBest();
+    renderRecent();
+}
+
+function renderBest() {
+    const rows = lastData?.best_seller_panels?.[bestTab] || lastData?.best_sellers || [];
+    const el = document.getElementById("dash-best-list");
+    el.innerHTML = rows.length ? rows.map((r) => `<div class="flex justify-between border-b border-stone-100 pb-1"><span>${r.sku} — ${r.name}</span><strong>${r.net_value ?? r.revenue ?? '0'} (${r.net_qty ?? r.quantity ?? '0'})</strong></div>`).join("") : '<p class="text-stone-400">No items in this period.</p>';
+}
+
+function renderRecent() {
+    const rows = lastData?.recent?.[recentTab] || [];
+    const head = document.getElementById("dash-recent-head");
+    const body = document.getElementById("dash-recent-body");
+    if (!rows.length) { head.innerHTML = ""; body.innerHTML = '<tr><td class="text-stone-400">No recent records.</td></tr>'; return; }
+    const keys = Object.keys(rows[0]);
+    head.innerHTML = `<tr>${keys.map((k) => `<th>${k}</th>`).join("")}</tr>`;
+    body.innerHTML = rows.map((r) => `<tr>${keys.map((k) => `<td>${r[k] ?? ""}</td>`).join("")}</tr>`).join("");
+}
+
+document.querySelectorAll("[data-preset]").forEach((btn) => btn.addEventListener("click", () => {
+    document.querySelectorAll("[data-preset]").forEach((b) => b.classList.remove("is-active"));
+    btn.classList.add("is-active");
+    loadDashboard(`preset=${btn.dataset.preset}`);
+}));
+document.getElementById("dash-apply").addEventListener("click", () => {
+    const s = document.getElementById("dash-start").value;
+    const e = document.getElementById("dash-end").value;
+    if (s && e) loadDashboard(`start_date=${s}&end_date=${e}`);
+});
+document.querySelectorAll("[data-best-tab]").forEach((btn) => btn.addEventListener("click", () => {
+    document.querySelectorAll("[data-best-tab]").forEach((b) => b.classList.remove("is-active"));
+    btn.classList.add("is-active");
+    bestTab = btn.dataset.bestTab;
+    renderBest();
+}));
+document.querySelectorAll("[data-recent-tab]").forEach((btn) => btn.addEventListener("click", () => {
+    document.querySelectorAll("[data-recent-tab]").forEach((b) => b.classList.remove("is-active"));
+    btn.classList.add("is-active");
+    recentTab = btn.dataset.recentTab;
+    renderRecent();
+}));
+
+loadDashboard();
+</script>
 {% endblock %}

@@ -107,6 +107,13 @@ def document_context(kind, record, *, items=None):
         subtotal, tax, grand_total = record.calculate_totals()
         document['totals'] = [('Subtotal after discounts', money(subtotal)), ('Tax', money(tax)),
                               ('Shipping', money(record.shipping_cost)), ('Grand total', money(grand_total))]
+        from common.ops_services import get_custom_fields_for_object
+        cf_rows = get_custom_fields_for_object(kind, record.pk, show_in_invoice=True) if kind in ('sale', 'purchase') else []
+        for cf in cf_rows:
+            val = cf.get('value')
+            if val not in (None, ''):
+                document['metadata'].append((cf['label'], str(val)))
+        document['custom_fields'] = cf_rows
     for item in items:
         row = {'number': item.line_number, 'sku': item.product.sku, 'name': item.product.name,
                'unit': item.unit.code, 'quantity': quantity(item.quantity)}

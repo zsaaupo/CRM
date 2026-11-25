@@ -8,7 +8,7 @@ from rest_framework.exceptions import NotFound, PermissionDenied
 
 from accounting.serializers import PaymentAccountField
 from common.models import SettlementMode, TradeStatus
-from common.serializers import AUDIT_FIELDS, CatalogSerializer
+from common.serializers import AUDIT_FIELDS, CatalogSerializer, CustomFieldMixin
 from inventory.models import Currency
 from people.models import Party
 from warehouse.scope import WarehouseScopedSerializerMixin
@@ -17,7 +17,8 @@ from .models import PurchaseOrder, PurchaseOrderItem
 from .services import PurchaseBusy, lock_editable_purchase
 
 
-class PurchaseOrderSerializer(WarehouseScopedSerializerMixin, CatalogSerializer):
+class PurchaseOrderSerializer(CustomFieldMixin, WarehouseScopedSerializerMixin, CatalogSerializer):
+    custom_field_entity = 'purchase'
     warehouse_name = serializers.CharField(source='warehouse.name', read_only=True, default=None)
     supplier = serializers.PrimaryKeyRelatedField(
         queryset=Party.objects.filter(is_supplier=True), required=False, allow_null=True,
@@ -56,7 +57,7 @@ class PurchaseOrderSerializer(WarehouseScopedSerializerMixin, CatalogSerializer)
             'order_discount_type', 'order_discount_value', 'order_discount_amount',
             'order_tax_rule', 'order_tax_rate', 'order_tax_amount', 'attachment', 'staff_note',
             'is_received', 'supplier_reference', 'shipping_cost', 'notes',
-            'subtotal', 'tax_total', 'grand_total', *AUDIT_FIELDS[1:],
+            'custom_fields', 'subtotal', 'tax_total', 'grand_total', *AUDIT_FIELDS[1:],
         ]
         read_only_fields = [*AUDIT_FIELDS, 'order_number', 'is_received', 'receipt_state', 'payment_status',
                             'recognized_total_base', 'order_discount_amount', 'order_tax_amount',

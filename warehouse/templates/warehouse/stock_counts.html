@@ -1,7 +1,94 @@
 {% extends "layouts/dashboard.html" %}
 {% block content %}
-<section class="card">
-  <h1>{{ page_label }}</h1>
-  <p>Snapshot, count CSV upload, and finalize physical stock counts via <code>{{ api_url }}</code>.</p>
-</section>
+<div class="workspace-content" id="counts-app" data-api-url="{{ api_url }}" data-csrf="{{ csrf_token }}">
+  <div class="mb-6">
+    <h1 class="text-2xl font-semibold text-stone-900">{{ page_label }}</h1>
+    <p class="text-sm text-stone-500">Snapshot expected stock, export initial CSV, upload counted CSV, and finalize adjustments.</p>
+  </div>
+
+  <div class="grid gap-6 lg:grid-cols-3">
+    <section class="erp-card">
+      <h2 class="text-base font-semibold mb-3">Start Stock Count</h2>
+      <form id="sc-form" class="space-y-3 text-sm">
+        <div><label class="form-label">Warehouse ID</label><input type="number" name="warehouse" class="form-input" required min="1"></div>
+        <div><label class="form-label">Count Type</label>
+          <select name="count_type" class="form-input"><option value="full">Full Warehouse</option><option value="partial">Partial</option></select>
+        </div>
+        <div><label class="form-label">Notes</label><input type="text" name="notes" class="form-input"></div>
+        <button type="submit" class="primary-button w-full justify-center">Create Count Snapshot</button>
+        <p id="sc-msg" class="text-xs text-stone-500"></p>
+      </form>
+      <hr class="my-4 border-stone-200">
+      <h3 class="text-sm font-semibold mb-2">Upload Final CSV</h3>
+      <form id="sc-upload-form" class="space-y-2 text-sm">
+        <input type="number" name="count_id" class="form-input" placeholder="Stock Count ID" required min="1">
+        <input type="file" name="file" accept=".csv" class="form-input" required>
+        <button type="submit" class="erp-toolbar-btn w-full justify-center">Upload Final File</button>
+      </form>
+    </section>
+
+    <section class="erp-card lg:col-span-2">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-base font-semibold">Stock Counts</h2>
+        <label class="text-xs flex items-center gap-1"><input type="checkbox" id="sc-reconcile" checked> Reconcile intervening movements</label>
+      </div>
+      <div class="users-table-scroll">
+        <table class="users-table">
+          <thead><tr><th>Ref</th><th>Warehouse</th><th>Type</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody id="sc-tbody"></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+</div>
+{% endblock %}
+
+{% block workspace_js %}
+<script type="module">
+import { getJSON, postFormData, postJSON } from "/static/js/api.js";
+const root = document.getElementById("counts-app");
+const api = root.dataset.apiUrl;
+const csrf = root.dataset.csrf;
+
+async function loadCounts() {
+    const data = await getJSON(api);
+    const rows = data.results || data || [];
+    document.getElementById("sc-tbody").innerHTML = rows.length ? rows.map((r) => `
+      <tr>
+        <td><strong>${r.reference_number || r.id}</strong> (ID: ${r.id})</td>
+        <td>${r.warehouse_name || r.warehouse}</td>
+        <td>${r.count_type}</td>
+        <td><span class="user-status-badge ${r.status === 'finalized' ? 'is-active' : 'is-inactive'}">${r.status}</span></td>
+        <td class="flex gap-2">
+          <a href="/warehouse/api/stock-counts/${r.id}/initial-file/" class="erp-toolbar-btn">Initial CSV</a>
+          ${r.status !== 'finalized' ? `<button type="button" class="erp-toolbar-btn" data-fin-id="${r.id}">Finalize</button>` : 'Done'}
+        </td>
+      </tr>
+    `).join("") : '<tr><td colspan="5">No stock counts yet.</td></tr>';
+    document.querySelectorAll("[data-fin-id]").forEach((btn) => btn.addEventListener("click", async () => {
+        const reconcile = document.getElementById("sc-reconcile").checked;
+        try {
+            await postJSON(`/warehouse/api/stock-counts/${btn.dataset.finId}/finalize/`, { reconcile_intervening: reconcile }, csrf);
+            loadCounts();
+        } catch (err) {
+            document.getElementById("sc-msg").textContent = err.message;
+        }
+    }));
+}
+
+document.getElementById("sc-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    await postJSON(api, { warehouse: Number(fd.get("warehouse")), count_type: fd.get("count_type"), notes: fd.get("notes") || "" }, csrf);
+    loadCounts();
+});
+document.getElementById("sc-upload-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    await postFormData(`/warehouse/api/stock-counts/${fd.get("count_id")}/final-file/`, fd, csrf);
+    document.getElementById("sc-msg").textContent = "Final CSV uploaded.";
+    loadCounts();
+});
+loadCounts();
+</script>
 {% endblock %}

@@ -133,6 +133,48 @@ def process_outbox_messages(*, max_attempts: int = 5, transport=None) -> dict:
     return {'processed': len(due), 'sent': sent, 'failed': failed}
 
 
+ACTIVE_CF_CACHE_KEY = 'common:custom_fields_by_entity:v1'
+
+
+def invalidate_custom_fields_cache():
+    from django.core.cache import cache
+    cache.delete(ACTIVE_CF_CACHE_KEY)
+
+
+def get_custom_fields_for_object(
+    entity: str,
+    object_id: int,
+    *,
+    show_in_invoice: bool | None = None,
+    show_in_table: bool | None = None,
+    include_admin: bool = True,
+) -> list[dict]:
+    qs = CustomField.objects.filter(entity=entity, is_active=True).order_by('pk')
+    if show_in_invoice is not None:
+        qs = qs.filter(show_in_invoice=show_in_invoice)
+    if show_in_table is not None:
+        qs = qs.filter(show_in_table=show_in_table)
+    if not include_admin:
+        qs = qs.filter(admin_only=False)
+    cf_list = list(qs)
+    if not cf_list:
+        return []
+    vals = {
+        v.field_id: v.value
+        for v in CustomFieldValue.objects.filter(field__in=cf_list, object_id=object_id)
+    }
+    return [
+        {
+            'key': cf.key,
+            'label': cf.label,
+            'value': vals.get(cf.pk, cf.default),
+            'type': cf.field_type,
+        }
+        for cf in cf_list
+        if cf.pk in vals or cf.default is not None
+    ]
+
+
 def validate_and_save_custom_fields(entity: str, object_id: int, values: dict, *, is_create: bool = False) -> dict:
     fields = {f.key: f for f in CustomField.objects.filter(entity=entity, is_active=True)}
     saved = {}
@@ -230,7 +272,7 @@ def verify_and_settle_gateway_callback(actor, *, provider_ref: str, signature: s
         return {
             'attempt_id': attempt.pk,
             'status': attempt.status,
-            'payment_ids': res.payment_ids,
+            'payment_ids': res.get('payment_ids', []) if isinstance(res, dict) else getattr(res, 'payment_ids', []),
             'idempotent_replay': False,
         }
 
@@ -256,8 +298,33 @@ def run_database_backup(actor) -> dict:
             shutil.copy2(src, dest)
         else:
             dest.write_bytes(b'')
+    elif 'postgresql' in engine:
+        import subprocess
+        pg_dump = shutil.which('pg_dump')
+        if not pg_dump:
+            raise ValidationError({'engine': 'pg_dump executable was not found in PATH for PostgreSQL backup.'})
+        dest = target_dir / f'emanager_backup_{ts}.sql'
+        env = os.environ.copy()
+        if db_conf.get('PASSWORD'):
+            env['PGPASSWORD'] = str(db_conf['PASSWORD'])
+        cmd = [pg_dump, '-f', str(dest)]
+        if db_conf.get('HOST'):
+            cmd += ['-h', str(db_conf['HOST'])]
+        if db_conf.get('PORT'):
+            cmd += ['-p', str(db_conf['PORT'])]
+        if db_conf.get('USER'):
+            cmd += ['-U', str(db_conf['USER'])]
+        cmd.append(str(db_conf['NAME']))
+        subprocess.run(cmd, env=env, check=True)
     else:
-        raise ValidationError({'engine': 'Automated backup helper currently supports SQLite directly; use pg_dump in ops.'})
+        raise ValidationError({'engine': f'Unsupported database engine for backup: {engine}.'})
+
+    retention_days = int(cfg.retention_days or 0)
+    if retention_days > 0:
+        cutoff = timezone.now().timestamp() - (retention_days * 86400)
+        for stale in target_dir.glob('emanager_backup_*'):
+            if stale != dest and stale.stat().st_mtime < cutoff:
+                stale.unlink(missing_ok=True)
 
     log_audit_event(actor, AuditLog.Action.EXPORT, cfg, changes={'backup_file': dest.name}, module='settings')
     return {'file': str(dest), 'created_at': timezone.now().isoformat()}

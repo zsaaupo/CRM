@@ -6,7 +6,7 @@ from .m3_api import (
     CourierDetailAPIView, CourierListCreateAPIView, DeliveryDetailAPIView, DeliveryListCreateAPIView,
     DiscountDetailAPIView, DiscountListCreateAPIView, DiscountPlanDetailAPIView, DiscountPlanListCreateAPIView,
     GiftCardDetailAPIView, GiftCardListCreateAPIView, GiftCardRechargeAPIView,
-    PackingSlipDetailAPIView, PackingSlipListCreateAPIView, PosCheckoutAPIView,
+    LoyaltyRedeemAPIView, PackingSlipDetailAPIView, PackingSlipListCreateAPIView, PosCheckoutAPIView,
     PosDraftDetailAPIView, PosDraftListCreateAPIView, PosProductsGridAPIView,
     RecentSalesOrdersAPIView, RegisterCloseAPIView, RegisterMovementCreateAPIView,
     RegisterOpenAPIView, RegisterSummaryAPIView, SalesWhatsAppLinkAPIView,
@@ -14,7 +14,7 @@ from .m3_api import (
 
 from .api_views import (
     QuotationActionAPIView, QuotationDetailAPIView, QuotationListCreateAPIView, QuotationOptionsAPIView,
-    SaleDuplicateAPIView, SalesOrderDetailAPIView, SalesOrderItemDetailAPIView, SalesOrderItemListAPIView,
+    SaleDuplicateAPIView, SalesImportCSVAPIView, SalesOrderDetailAPIView, SalesOrderItemDetailAPIView, SalesOrderItemListAPIView,
     SalesOrderItemListCreateAPIView, SalesOrderItemUpdateAPIView, SalesOrderListAPIView,
     SalesEditOptionsAPIView, SalesOptionsAPIView, SalesOrderListCreateAPIView, SalesOrderUpdateAPIView, SaleCompleteAPIView,
 )
@@ -47,6 +47,7 @@ urlpatterns = [
     path('gift-cards/', GiftCardListCreateAPIView.as_view(), name='gift-card-list'),
     path('gift-cards/<int:pk>/', GiftCardDetailAPIView.as_view(), name='gift-card-detail'),
     path('gift-cards/<int:pk>/recharge/', GiftCardRechargeAPIView.as_view(), name='gift-card-recharge'),
+    path('loyalty/redeem/', LoyaltyRedeemAPIView.as_view(), name='loyalty-redeem'),
     path('couriers/', CourierListCreateAPIView.as_view(), name='courier-list'),
     path('couriers/<int:pk>/', CourierDetailAPIView.as_view(), name='courier-detail'),
     path('deliveries/', DeliveryListCreateAPIView.as_view(), name='delivery-list'),
@@ -58,6 +59,7 @@ urlpatterns = [
     path('challans/<int:pk>/dispatch/', ChallanDispatchAPIView.as_view(), name='challan-dispatch'),
     path('challans/<int:pk>/close/', ChallanCloseAPIView.as_view(), name='challan-close'),
     path('sales-orders/complete/', SaleCompleteAPIView.as_view(), name='sales-order-complete'),
+    path('sales-orders/import-csv/', SalesImportCSVAPIView.as_view(), name='sales-order-import-csv'),
     path('sales-orders/edit-options/', SalesEditOptionsAPIView.as_view(), name='sales-edit-options'),
     path('sales-orders/options/', SalesOptionsAPIView.as_view(), name='sale-options'),
     path('sales-orders/', SalesOrderListCreateAPIView.as_view(), name='sales-order-list'),

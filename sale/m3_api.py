@@ -18,7 +18,7 @@ from common.view import BaseAPIMixin, BaseDetailAPIView, BaseListCreateAPIView
 from inventory.models import Product
 from warehouse.models import Stock
 from warehouse.scope import WarehouseScopeAPIMixin, check_warehouse, scoped_queryset, warehouse_scope
-from .loyalty import issue_gift_card, recharge_gift_card, validate_coupon
+from .loyalty import issue_gift_card, recharge_gift_card, redeem_points, validate_coupon
 from .models import (
     CashRegisterSession, Challan, Coupon, Courier, Delivery, Discount, DiscountPlan,
     GiftCard, PackingSlip, PosDraft, RegisterMovement, SalesOrder,
@@ -553,3 +553,25 @@ class SalesWhatsAppLinkAPIView(WarehouseScopeAPIMixin, BaseAPIMixin, APIView):
         scope = warehouse_scope(request.user)
         order = get_object_or_404(scoped_queryset(SalesOrder.objects.select_related('customer'), scope), pk=pk)
         return Response({'whatsapp_url': whatsapp_link(order)})
+
+
+class LoyaltyRedeemAPIView(BaseAPIMixin, APIView):
+    required_permissions = ('sale.use_pos',)
+    http_method_names = ['post', 'options']
+
+    def post(self, request):
+        customer_id = request.data.get('customer')
+        points = request.data.get('points')
+        if not customer_id or points is None:
+            raise ValidationError({'detail': 'customer and points are required.'})
+        sales_order = None
+        if request.data.get('sales_order'):
+            sales_order = get_object_or_404(SalesOrder, pk=request.data['sales_order'])
+        res = redeem_points(
+            int(customer_id),
+            int(points),
+            sales_order=sales_order,
+            actor=request.user,
+            request_key=request.data.get('request_key'),
+        )
+        return Response(res)

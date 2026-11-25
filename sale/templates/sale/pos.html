@@ -1,29 +1,198 @@
 {% extends "layouts/dashboard.html" %}
 {% block content %}
-<div class="pos-layout">
-  <section class="pos-left">
-    <h1>{{ page_label }}</h1>
-    <div id="pos-header">
-      <button type="button" id="open-register-btn" data-url="{{ register_open_url }}">Open Register</button>
-      <input type="text" id="pos-barcode-input" placeholder="Scan barcode or SKU">
-    </div>
-    <table id="pos-cart">
-      <thead><tr><th>Product</th><th>Price</th><th>Qty</th><th>SubTotal</th></tr></thead>
-      <tbody></tbody>
-    </table>
-    <div id="pos-summary">
-      <span>Coupon</span> <input type="text" id="pos-coupon" placeholder="Coupon code">
-    </div>
-    <div id="pos-tenders">
-      <button type="button" data-method="cash">Cash</button>
-      <button type="button" data-method="card">Card</button>
-      <button type="button" data-method="cheque">Cheque</button>
-      <button type="button" data-method="gift_card">Gift Card</button>
-      <button type="button" data-method="deposit">Deposit</button>
-      <button type="button" id="pos-draft-btn" data-url="{{ drafts_api_url }}">Draft</button>
-      <button type="button" id="pos-recent-btn" data-url="{{ recent_orders_url }}">Recent Transaction</button>
-    </div>
-  </section>
-  <section class="pos-right" id="pos-product-grid" data-url="{{ products_api_url }}"></section>
+<div class="workspace-content" id="pos-app"
+     data-checkout-url="{{ checkout_api_url }}"
+     data-products-url="{{ products_api_url }}"
+     data-register-open-url="{{ register_open_url }}"
+     data-drafts-url="{{ drafts_api_url }}"
+     data-recent-url="{{ recent_orders_url }}"
+     data-csrf="{{ csrf_token }}">
+  <div class="pos-layout">
+    <section class="pos-left erp-card space-y-4">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <h1 class="text-xl font-semibold">{{ page_label }}</h1>
+        <div class="flex flex-wrap items-center gap-2 text-xs">
+          <input type="number" id="pos-warehouse" class="form-input w-28" placeholder="WH ID" value="1" min="1">
+          <input type="number" id="pos-opening-cash" class="form-input w-28" placeholder="Open cash" value="0">
+          <button type="button" id="open-register-btn" class="erp-toolbar-btn">Open Register</button>
+          <button type="button" id="close-register-btn" class="erp-toolbar-btn" hidden>Close Register</button>
+        </div>
+      </div>
+      <div id="register-status" class="text-xs text-stone-500">Register ID: <span id="register-id-label">Not opened</span></div>
+
+      <div class="grid gap-2 sm:grid-cols-3 text-sm">
+        <input type="number" id="pos-customer" class="form-input" placeholder="Customer ID (optional)">
+        <input type="number" id="pos-biller" class="form-input" placeholder="Biller ID (optional)">
+        <input type="text" id="pos-barcode-input" class="form-input" placeholder="Search SKU / Barcode / Name">
+      </div>
+
+      <div class="users-table-scroll">
+        <table id="pos-cart" class="users-table">
+          <thead><tr><th>Product</th><th>Price</th><th>Qty</th><th>Total</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <div id="pos-summary" class="grid gap-2 sm:grid-cols-3 text-sm">
+        <div class="flex gap-1"><input type="text" id="pos-coupon" class="form-input" placeholder="Coupon code"><button type="button" id="pos-apply-coupon" class="erp-toolbar-btn">Apply</button></div>
+        <input type="number" id="pos-redeem-pts" class="form-input" placeholder="Redeem pts" min="0">
+        <div class="flex items-center justify-end font-semibold text-base">Total: <span id="pos-total" class="ml-2">0.00</span></div>
+      </div>
+
+      <div class="grid gap-2 sm:grid-cols-3 text-sm">
+        <select id="pos-method" class="form-input">
+          <option value="cash">Cash</option><option value="card">Card</option><option value="mobile_banking">Mobile Banking</option>
+          <option value="cheque">Cheque</option><option value="gift_card">Gift Card</option><option value="deposit">Deposit</option>
+        </select>
+        <input type="number" id="pos-account" class="form-input" placeholder="Account ID" min="1">
+        <input type="number" step="0.01" id="pos-tender-amt" class="form-input" placeholder="Paid amount">
+      </div>
+
+      <div id="pos-tenders" class="flex flex-wrap gap-2">
+        <button type="button" id="pos-checkout-btn" class="primary-button">Complete &amp; Print</button>
+        <button type="button" id="pos-draft-btn" class="erp-toolbar-btn">Save Draft</button>
+        <button type="button" id="pos-recent-btn" class="erp-toolbar-btn">Recent Transactions</button>
+      </div>
+      <div id="pos-msg" class="text-xs text-stone-600"></div>
+      <div id="pos-recent-panel" class="text-xs space-y-1" hidden></div>
+    </section>
+
+    <section class="pos-right erp-card">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-base font-semibold">Products</h2>
+        <button type="button" id="pos-load-products" class="erp-toolbar-btn">Load Grid</button>
+      </div>
+      <div id="pos-product-grid" class="grid gap-3 sm:grid-cols-2"></div>
+    </section>
+  </div>
 </div>
+{% endblock %}
+
+{% block workspace_js %}
+<script type="module">
+import { getJSON, postJSON } from "/static/js/api.js";
+const app = document.getElementById("pos-app");
+const csrf = app.dataset.csrf;
+let sessionId = null;
+const cart = [];
+
+function renderCart() {
+    const tbody = document.querySelector("#pos-cart tbody");
+    let total = 0;
+    tbody.innerHTML = cart.map((item, idx) => {
+        const lineTot = Number(item.price) * Number(item.quantity);
+        total += lineTot;
+        return `<tr>
+          <td>${item.name}</td><td>${item.price}</td>
+          <td><input type="number" min="1" value="${item.quantity}" data-cart-qty="${idx}" class="form-input w-20"></td>
+          <td>${lineTot.toFixed(2)}</td>
+          <td><button type="button" data-cart-rm="${idx}" class="erp-toolbar-btn">×</button></td>
+        </tr>`;
+    }).join("") || '<tr><td colspan="5">Cart is empty.</td></tr>';
+    document.getElementById("pos-total").textContent = total.toFixed(2);
+    document.getElementById("pos-tender-amt").value = total.toFixed(2);
+    document.querySelectorAll("[data-cart-qty]").forEach((inp) => inp.addEventListener("change", () => {
+        cart[Number(inp.dataset.cartQty)].quantity = Number(inp.value || 1);
+        renderCart();
+    }));
+    document.querySelectorAll("[data-cart-rm]").forEach((btn) => btn.addEventListener("click", () => {
+        cart.splice(Number(btn.dataset.cartRm), 1);
+        renderCart();
+    }));
+}
+
+async function loadProducts() {
+    const wh = document.getElementById("pos-warehouse").value || 1;
+    const q = document.getElementById("pos-barcode-input").value.trim();
+    const res = await getJSON(`${app.dataset.productsUrl}?warehouse=${wh}&q=${encodeURIComponent(q)}`);
+    const grid = document.getElementById("pos-product-grid");
+    grid.innerHTML = (res.results || []).map((p) => `
+      <button type="button" class="overview-card text-left hover:border-emerald-500" data-add-prod='${JSON.stringify({ id: p.id, name: p.name, price: p.sale_price, unit: p.unit })}'>
+        <div class="font-semibold text-sm">${p.name}</div>
+        <div class="text-xs text-stone-500">${p.sku} · Stock: ${p.stock_qty}</div>
+        <div class="mt-1 text-emerald-700 font-semibold">${p.sale_price}</div>
+      </button>
+    `).join("") || '<p class="text-xs text-stone-400">No products matched.</p>';
+    grid.querySelectorAll("[data-add-prod]").forEach((btn) => btn.addEventListener("click", () => {
+        const p = JSON.parse(btn.dataset.addProd);
+        const existing = cart.find((c) => c.product === p.id);
+        if (existing) existing.quantity += 1;
+        else cart.push({ product: p.id, name: p.name, unit: p.unit, price: p.price, quantity: 1 });
+        renderCart();
+    }));
+}
+
+document.getElementById("open-register-btn").addEventListener("click", async () => {
+    const wh = Number(document.getElementById("pos-warehouse").value || 1);
+    const cash = document.getElementById("pos-opening-cash").value || 0;
+    const r = await postJSON(app.dataset.registerOpenUrl, { warehouse: wh, opening_cash: cash, request_key: crypto.randomUUID() }, csrf);
+    sessionId = r.id;
+    document.getElementById("register-id-label").textContent = String(sessionId);
+    document.getElementById("close-register-btn").hidden = false;
+    loadProducts();
+});
+
+document.getElementById("close-register-btn").addEventListener("click", async () => {
+    if (!sessionId) return;
+    const counted = window.prompt("Counted closing cash:", document.getElementById("pos-tender-amt").value || "0");
+    if (counted === null) return;
+    await postJSON(`/sale/api/registers/${sessionId}/close/`, { counted_cash: counted, request_key: crypto.randomUUID() }, csrf);
+    document.getElementById("register-id-label").textContent = "Closed";
+    sessionId = null;
+    document.getElementById("close-register-btn").hidden = true;
+});
+
+document.getElementById("pos-checkout-btn").addEventListener("click", async () => {
+    const msg = document.getElementById("pos-msg");
+    try {
+        const payload = {
+            warehouse: Number(document.getElementById("pos-warehouse").value || 1),
+            customer: document.getElementById("pos-customer").value ? Number(document.getElementById("pos-customer").value) : null,
+            biller: document.getElementById("pos-biller").value ? Number(document.getElementById("pos-biller").value) : null,
+            coupon_code: document.getElementById("pos-coupon").value.trim() || undefined,
+            redeem_points: Number(document.getElementById("pos-redeem-pts").value || 0) || undefined,
+            lines: cart.map((c) => ({ product: c.product, unit: c.unit, quantity: c.quantity })),
+            tenders: [{
+                method: document.getElementById("pos-method").value,
+                account: document.getElementById("pos-account").value ? Number(document.getElementById("pos-account").value) : undefined,
+                amount: document.getElementById("pos-tender-amt").value || document.getElementById("pos-total").textContent,
+            }],
+            request_key: crypto.randomUUID(),
+        };
+        const res = await postJSON(app.dataset.checkoutUrl, payload, csrf);
+        msg.innerHTML = `Completed <strong>${res.invoice_no}</strong> — <a href="${res.print_url}" target="_blank" class="underline text-emerald-700">Print Receipt</a>`;
+        cart.length = 0;
+        renderCart();
+        loadProducts();
+    } catch (err) {
+        msg.textContent = err.message || "Checkout failed.";
+    }
+});
+
+document.getElementById("pos-draft-btn").addEventListener("click", async () => {
+    await postJSON(app.dataset.draftsUrl, {
+        warehouse: Number(document.getElementById("pos-warehouse").value || 1),
+        customer: document.getElementById("pos-customer").value ? Number(document.getElementById("pos-customer").value) : null,
+        cart,
+    }, csrf);
+    document.getElementById("pos-msg").textContent = "Draft saved.";
+});
+
+document.getElementById("pos-recent-btn").addEventListener("click", async () => {
+    const panel = document.getElementById("pos-recent-panel");
+    const res = await getJSON(app.dataset.recentUrl);
+    panel.hidden = false;
+    panel.innerHTML = (res.results || []).map((r) => `<div>${r.order_number} · ${r.grand_total} (${r.payment_status})</div>`).join("") || "No recent sales.";
+});
+
+document.getElementById("pos-apply-coupon").addEventListener("click", async () => {
+    const code = document.getElementById("pos-coupon").value.trim();
+    const res = await postJSON("/sale/api/coupons/validate/", { code, order_subtotal: document.getElementById("pos-total").textContent }, csrf);
+    document.getElementById("pos-msg").textContent = `Coupon valid: discount ${res.discount}`;
+});
+
+document.getElementById("pos-load-products").addEventListener("click", loadProducts);
+document.getElementById("pos-barcode-input").addEventListener("input", loadProducts);
+renderCart();
+</script>
 {% endblock %}

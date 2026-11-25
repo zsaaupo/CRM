@@ -60,6 +60,7 @@ class MFG01Tests(TestCase):
             default_warehouse=cls.wh_a,
         )
 
+        invalidate_general_cache()
         gs = get_general()
         gs.enable_in_house_production = True
         gs.save(update_fields=['enable_in_house_production'])

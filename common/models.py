@@ -154,6 +154,8 @@ class GeneralSetting(TimeStampedModel):
 
     def save(self, *args, **kwargs):
         self.pk = 1
+        if 'update_fields' in kwargs and not GeneralSetting.objects.filter(pk=1).exists():
+            kwargs.pop('update_fields')
         super().save(*args, **kwargs)
         from .settings_store import invalidate_general_cache
         invalidate_general_cache()

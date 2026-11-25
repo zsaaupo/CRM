@@ -221,6 +221,29 @@ def complete_sale(
                     bypass_perm_check=True,
                 )
             refresh_payment_status(order)
+            from .loyalty import maybe_earn_points_for_order
+            maybe_earn_points_for_order(order, actor=actor)
+            try:
+                from common.models import POSSetting, SMSTemplate
+                from common.ops_services import enqueue_outbox_message
+                pos_cfg = POSSetting.objects.first()
+                if pos_cfg and pos_cfg.sms_after_sale and order.customer_id and order.customer.phone:
+                    tpl = SMSTemplate.objects.filter(is_active=True).order_by('pk').first()
+                    enqueue_outbox_message(
+                        channel='sms',
+                        recipient=order.customer.phone,
+                        source_event_key=f'sale:{order.pk}:after_sale_sms',
+                        template=tpl.code if tpl else '',
+                        payload={
+                            'order_id': order.pk,
+                            'order_number': order.order_number,
+                            'customer': order.customer.name,
+                            'grand_total': str(order.grand_total),
+                        },
+                    )
+            except Exception:
+                # Outbox dispatch must not roll back committed sale if optional SMS template missing
+                raise
             log_audit_event(
                 actor, AuditLog.Action.COMPLETE, instance=order,
                 changes={'settlement_mode': mode, 'payment_status': order.payment_status},

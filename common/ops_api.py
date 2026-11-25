@@ -75,12 +75,54 @@ class TaskSettingSerializer(serializers.ModelSerializer):
         fields = ['block_close_with_open_subtasks']
 
 
+class MailSettingSerializer(serializers.ModelSerializer):
+    password = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    has_password = serializers.SerializerMethodField()
+
+    class Meta:
+        model = MailSetting
+        fields = ['host', 'port', 'username', 'from_email', 'use_tls', 'is_active', 'password', 'has_password']
+
+    def get_has_password(self, obj):
+        return bool(obj.password_encrypted)
+
+    def validate(self, attrs):
+        if 'password' in attrs:
+            attrs['password_encrypted'] = attrs.pop('password')
+        return attrs
+
+
+class SMSSettingSerializer(serializers.ModelSerializer):
+    api_key = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    has_api_key = serializers.SerializerMethodField()
+
+    class Meta:
+        model = SMSSetting
+        fields = ['provider', 'sender_id', 'is_active', 'api_key', 'has_api_key']
+
+    def get_has_api_key(self, obj):
+        return bool(obj.api_key_encrypted)
+
+    def validate(self, attrs):
+        if 'api_key' in attrs:
+            attrs['api_key_encrypted'] = attrs.pop('api_key')
+        return attrs
+
+
+class SMSTemplateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SMSTemplate
+        fields = ['id', 'code', 'name', 'body', 'is_active']
+
+
 SINGLETON_SERIALIZERS = {
     'general': (GeneralSetting, GeneralSettingSerializer),
     'pos': (POSSetting, POSSettingSerializer),
     'hrm': (HRMSetting, HRMSettingSerializer),
     'reward': (RewardSetting, RewardSettingSerializer),
     'task': (TaskSetting, TaskSettingSerializer),
+    'mail': (MailSetting, MailSettingSerializer),
+    'sms': (SMSSetting, SMSSettingSerializer),
 }
 
 
@@ -178,6 +220,44 @@ class CustomFieldListCreateAPIView(BaseListCreateAPIView):
     serializer_class = CustomFieldSerializer
     queryset = CustomField.objects.all()
     response_key = 'custom_field'
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        entity = self.request.query_params.get('entity')
+        if entity:
+            qs = qs.filter(entity=entity)
+        return qs
+
+
+class SMSTemplateListCreateAPIView(BaseListCreateAPIView):
+    serializer_class = SMSTemplateSerializer
+    queryset = SMSTemplate.objects.all()
+    response_key = 'sms_template'
+
+
+class LanguageSwitchAPIView(BaseAPIMixin, APIView):
+    permission_classes = [IsAuthenticated]
+    http_method_names = ['post', 'options']
+
+    def post(self, request):
+        from django.conf import settings
+        from django.utils import translation
+        code = (request.data.get('code') or request.data.get('language') or '').strip()
+        if not code:
+            raise ValidationError({'code': 'Language code is required.'})
+        lang = Language.objects.filter(code__iexact=code, is_active=True).first()
+        valid_codes = {c for c, _ in getattr(settings, 'LANGUAGES', [])}
+        if lang is None and code.lower() not in valid_codes:
+            raise ValidationError({'code': f'Unsupported or inactive language "{code}".'})
+        chosen = lang.code if lang else code.lower()
+        translation.activate(chosen)
+        request.session['_language'] = chosen
+        resp = Response({
+            'language': chosen,
+            'is_rtl': bool(lang.is_rtl) if lang else chosen == 'ar',
+        })
+        resp.set_cookie(settings.LANGUAGE_COOKIE_NAME, chosen)
+        return resp
 
 
 class RestaurantTableSerializer(serializers.ModelSerializer):

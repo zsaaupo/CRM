@@ -1,8 +1,70 @@
-{% extends 'layouts/base.html' %}
-{% block title %}{{ page_label }} — eManager{% endblock %}
+{% extends "layouts/dashboard.html" %}
 {% block content %}
-<div class="p-6 max-w-6xl mx-auto">
-    <h1 class="text-2xl font-semibold text-stone-900">{{ page_label }}</h1>
-    <p class="mt-2 text-sm text-stone-600">API endpoint: <code>{{ api_url }}</code></p>
+<div class="workspace-content" id="analytics-app" data-api-url="{{ api_url }}">
+  <div class="mb-6 flex flex-wrap items-center justify-between gap-4">
+    <div>
+      <h1 class="text-2xl font-semibold text-stone-900">{{ page_label }}</h1>
+      <p class="text-sm text-stone-500">Scoped analytics report with CSV, XLSX, PDF export, and print support.</p>
+    </div>
+    <div class="flex flex-wrap gap-2">
+      <a href="{{ api_url }}?export=csv" class="erp-toolbar-btn">CSV</a>
+      <a href="{{ api_url }}?export=xlsx" class="erp-toolbar-btn">XLSX</a>
+      <a href="{{ api_url }}?export=pdf" class="erp-toolbar-btn">PDF</a>
+      <button type="button" onclick="window.print()" class="erp-toolbar-btn">Print</button>
+    </div>
+  </div>
+
+  <div class="mb-5 flex flex-wrap gap-2">
+    {% for r in report_catalog %}
+    <a href="{% url 'report_pages:analytics' r.slug %}" class="erp-tab-btn {% if r.slug == report_slug %}is-active{% endif %}">{{ r.label }}</a>
+    {% endfor %}
+  </div>
+
+  <section class="erp-card mb-5">
+    <form id="rpt-filter" class="flex flex-wrap items-end gap-3 text-sm">
+      <div><label class="form-label">From</label><input type="date" name="date_from" class="form-input"></div>
+      <div><label class="form-label">To</label><input type="date" name="date_to" class="form-input"></div>
+      <div><label class="form-label">Warehouse ID</label><input type="number" name="warehouse_id" class="form-input" placeholder="All"></div>
+      <button type="submit" class="primary-button">Run Report</button>
+    </form>
+  </section>
+
+  <section class="erp-card">
+    <div id="rpt-totals" class="mb-4 flex flex-wrap gap-4 text-sm font-medium text-stone-700"></div>
+    <div class="users-table-scroll">
+      <table class="users-table">
+        <thead id="rpt-head"></thead>
+        <tbody id="rpt-body"></tbody>
+      </table>
+    </div>
+  </section>
 </div>
+{% endblock %}
+
+{% block workspace_js %}
+<script type="module">
+import { getJSON } from "/static/js/api.js";
+const root = document.getElementById("analytics-app");
+const baseApi = root.dataset.apiUrl;
+
+async function run(query = "") {
+    const data = await getJSON(query ? `${baseApi}?${query}` : baseApi);
+    const cols = data.columns || [];
+    const rows = data.rows || [];
+    const totals = data.totals || {};
+    document.getElementById("rpt-totals").innerHTML = Object.entries(totals).map(([k, v]) => `<span>${k}: <strong>${v}</strong></span>`).join("");
+    document.getElementById("rpt-head").innerHTML = `<tr>${cols.map((c) => `<th>${c.label}</th>`).join("")}</tr>`;
+    document.getElementById("rpt-body").innerHTML = rows.length
+        ? rows.map((r) => `<tr>${cols.map((c) => `<td>${r[c.key] ?? ""}</td>`).join("")}</tr>`).join("")
+        : `<tr><td colspan="${Math.max(cols.length, 1)}">No matching rows.</td></tr>`;
+}
+
+document.getElementById("rpt-filter").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const params = new URLSearchParams();
+    for (const [k, v] of new FormData(e.currentTarget).entries()) if (v) params.set(k, v);
+    run(params.toString());
+});
+run();
+</script>
 {% endblock %}

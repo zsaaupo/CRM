@@ -10,6 +10,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
+        ('common', '0002_productstatus_tradestatus'),
         ('inventory', '0005_alter_product_status_delete_status'),
         ('warehouse', '0008_stock_average_cost_stock_oversold_quantity_and_more'),
     ]

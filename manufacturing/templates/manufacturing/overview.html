@@ -1,7 +1,145 @@
 {% extends "layouts/dashboard.html" %}
 {% block content %}
-<section class="card">
-  <h1>{{ page_label }}</h1>
-  <p>Drafts leave stock unchanged; posting production consumes raw materials and creates finished stock without any supplier payable.</p>
-</section>
+<div class="workspace-content" id="mfg-app"
+     data-raw-url="{{ raw_materials_url }}"
+     data-bom-url="{{ boms_url }}"
+     data-prod-url="{{ production_url }}"
+     data-csrf="{{ csrf_token }}">
+  <div class="mb-6 flex flex-wrap items-center justify-between gap-4">
+    <div>
+      <h1 class="text-2xl font-semibold text-stone-900">{{ page_label }}</h1>
+      <p class="text-sm text-stone-500">Manage raw materials, approve BOMs with wastage/multiple rules, and post production orders atomically.</p>
+    </div>
+    <div class="flex gap-2">
+      <button type="button" class="erp-tab-btn is-active" data-mfg-tab="raw">Raw Materials</button>
+      <button type="button" class="erp-tab-btn" data-mfg-tab="bom">BOMs</button>
+      <button type="button" class="erp-tab-btn" data-mfg-tab="order">Production Orders</button>
+    </div>
+  </div>
+
+  <div id="panel-raw" class="grid gap-6 lg:grid-cols-3">
+    <section class="erp-card">
+      <h2 class="text-base font-semibold mb-3">Add Raw Material</h2>
+      <form id="raw-form" class="space-y-3 text-sm">
+        <input name="sku" class="form-input" placeholder="SKU (e.g. RM-01)" required>
+        <input name="name" class="form-input" placeholder="Name" required>
+        <input name="unit" type="number" class="form-input" placeholder="Unit ID" required min="1">
+        <input name="cost_price" type="number" step="0.0001" class="form-input" placeholder="Cost price" required>
+        <button type="submit" class="primary-button w-full justify-center">Create Raw Material</button>
+      </form>
+    </section>
+    <section class="erp-card lg:col-span-2 users-table-scroll">
+      <table class="users-table">
+        <thead><tr><th>SKU</th><th>Name</th><th>Cost</th></tr></thead>
+        <tbody id="raw-tbody"></tbody>
+      </table>
+    </section>
+  </div>
+
+  <div id="panel-bom" class="grid gap-6 lg:grid-cols-3" hidden>
+    <section class="erp-card">
+      <h2 class="text-base font-semibold mb-3">BOM Actions</h2>
+      <p class="text-xs text-stone-500 mb-3">Approve draft BOMs directly before running production orders.</p>
+      <p id="bom-msg" class="text-xs text-emerald-700"></p>
+    </section>
+    <section class="erp-card lg:col-span-2 users-table-scroll">
+      <table class="users-table">
+        <thead><tr><th>ID</th><th>Product</th><th>Output Qty</th><th>Status</th><th>Action</th></tr></thead>
+        <tbody id="bom-tbody"></tbody>
+      </table>
+    </section>
+  </div>
+
+  <div id="panel-order" class="grid gap-6 lg:grid-cols-3" hidden>
+    <section class="erp-card">
+      <h2 class="text-base font-semibold mb-3">New Production Order</h2>
+      <form id="prod-form" class="space-y-3 text-sm">
+        <input name="bom" type="number" class="form-input" placeholder="BOM ID" required min="1">
+        <input name="warehouse" type="number" class="form-input" placeholder="Warehouse ID" required min="1">
+        <input name="planned_qty" type="number" step="0.0001" class="form-input" placeholder="Planned output qty" required>
+        <input name="labor_cost" type="number" step="0.01" class="form-input" placeholder="Labor cost" value="0">
+        <input name="overhead_cost" type="number" step="0.01" class="form-input" placeholder="Overhead cost" value="0">
+        <button type="submit" class="primary-button w-full justify-center">Create Draft Order</button>
+      </form>
+      <p id="prod-msg" class="mt-2 text-xs text-stone-500"></p>
+    </section>
+    <section class="erp-card lg:col-span-2 users-table-scroll">
+      <table class="users-table">
+        <thead><tr><th>Ref</th><th>BOM</th><th>Planned</th><th>Status</th><th>Actions</th></tr></thead>
+        <tbody id="prod-tbody"></tbody>
+      </table>
+    </section>
+  </div>
+</div>
+{% endblock %}
+
+{% block workspace_js %}
+<script type="module">
+import { getJSON, postJSON } from "/static/js/api.js";
+const root = document.getElementById("mfg-app");
+const csrf = root.dataset.csrf;
+
+async function refreshAll() {
+    const [raws, boms, orders] = await Promise.all([
+        getJSON(root.dataset.rawUrl),
+        getJSON(root.dataset.bomUrl),
+        getJSON(root.dataset.prodUrl),
+    ]);
+    document.getElementById("raw-tbody").innerHTML = (raws.results || []).map((r) => `<tr><td>${r.sku}</td><td>${r.name}</td><td>${r.cost_price}</td></tr>`).join("") || '<tr><td colspan="3">None</td></tr>';
+    document.getElementById("bom-tbody").innerHTML = (boms.results || []).map((b) => `
+      <tr>
+        <td>${b.id}</td><td>${b.finished_product_name || b.finished_product}</td><td>${b.base_output_quantity}</td>
+        <td><span class="user-status-badge ${b.status === 'approved' ? 'is-active' : 'is-inactive'}">${b.status}</span></td>
+        <td>${b.status === 'draft' ? `<button type="button" class="erp-toolbar-btn" data-approve-bom="${b.id}">Approve</button>` : 'Ready'}</td>
+      </tr>
+    `).join("") || '<tr><td colspan="5">None</td></tr>';
+    document.getElementById("prod-tbody").innerHTML = (orders.results || []).map((o) => `
+      <tr>
+        <td>${o.order_number || o.id}</td><td>${o.bom}</td><td>${o.planned_quantity}</td>
+        <td><span class="user-status-badge ${o.status === 'posted' ? 'is-active' : 'is-inactive'}">${o.status}</span></td>
+        <td>${o.status === 'draft' ? `<button type="button" class="erp-toolbar-btn" data-post-prod="${o.id}">Post</button>` : o.status}</td>
+      </tr>
+    `).join("") || '<tr><td colspan="5">None</td></tr>';
+
+    document.querySelectorAll("[data-approve-bom]").forEach((btn) => btn.addEventListener("click", async () => {
+        await postJSON(`/manufacturing/api/boms/${btn.dataset.approveBom}/approve/`, {}, csrf);
+        refreshAll();
+    }));
+    document.querySelectorAll("[data-post-prod]").forEach((btn) => btn.addEventListener("click", async () => {
+        try {
+            await postJSON(`/manufacturing/api/production-orders/${btn.dataset.postProd}/post/`, { request_key: crypto.randomUUID() }, csrf);
+            refreshAll();
+        } catch (err) {
+            document.getElementById("prod-msg").textContent = err.message;
+        }
+    }));
+}
+
+document.querySelectorAll("[data-mfg-tab]").forEach((btn) => btn.addEventListener("click", () => {
+    document.querySelectorAll("[data-mfg-tab]").forEach((b) => b.classList.remove("is-active"));
+    btn.classList.add("is-active");
+    ["raw", "bom", "order"].forEach((t) => { document.getElementById(`panel-${t}`).hidden = t !== btn.dataset.mfgTab; });
+}));
+
+document.getElementById("raw-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    await postJSON(root.dataset.rawUrl, { sku: fd.get("sku"), name: fd.get("name"), unit: Number(fd.get("unit")), cost_price: fd.get("cost_price") }, csrf);
+    e.currentTarget.reset();
+    refreshAll();
+});
+
+document.getElementById("prod-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    await postJSON(root.dataset.prodUrl, {
+        bom: Number(fd.get("bom")), warehouse: Number(fd.get("warehouse")),
+        planned_quantity: fd.get("planned_qty"), labor_cost: fd.get("labor_cost"), overhead_cost: fd.get("overhead_cost"),
+    }, csrf);
+    e.currentTarget.reset();
+    refreshAll();
+});
+
+refreshAll();
+</script>
 {% endblock %}

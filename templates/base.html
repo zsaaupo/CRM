@@ -1,11 +1,14 @@
 {% load static %}
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ active_language|default:'en' }}"{% if is_rtl %} dir="rtl"{% endif %}>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="color-scheme" content="light">
-    <title>{% block title %}eManager{% endblock %}</title>
+    <meta name="color-scheme" content="light dark">
+    <title>{% block title %}{{ general_setting.system_title|default:"eManager" }}{% endblock %}</title>
+    <script>
+      if (localStorage.getItem('em_theme') === 'dark') document.documentElement.classList.add('theme-dark');
+    </script>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <link rel="stylesheet" href="{% static 'css/custom.css' %}">
     {% block extra_css %}{% endblock %}

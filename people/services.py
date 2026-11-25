@@ -1,5 +1,6 @@
 from django.contrib.auth import get_user_model
 from django.db import transaction
+from django.utils.crypto import get_random_string
 from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
 
 from account.permissions import has_role_permissions
@@ -24,7 +25,7 @@ def create_customer_user(actor, party_id: int, *, username: str | None = None, p
         user = User.objects.create_user(
             username=uname,
             email=party.email or '',
-            password=password or User.objects.make_random_password(),
+            password=password or get_random_string(16),
             is_active=True,
         )
         party.user = user

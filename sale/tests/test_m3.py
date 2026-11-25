@@ -17,7 +17,7 @@ from rest_framework.test import APIClient
 
 from accounting.models import AccountTransaction, DepositEntry, FinancialAccount, PaymentMethod, SalesPayment
 from common.models import GeneralSetting, ProductStatus, SettlementMode, TradeStatus
-from common.settings_store import invalidate_general_cache
+from common.settings_store import get_general, invalidate_general_cache
 from inventory.models import Currency, Product, ProductType, UnitOfMeasure
 from people.models import Biller, BillerWarehouse, Party
 from purchase.models import PurchaseOrder
@@ -273,7 +273,8 @@ class M3FunctionalTests(TestCase):
         client = APIClient()
         client.force_login(self.admin)
 
-        gs = GeneralSetting.objects.get(pk=1)
+        invalidate_general_cache()
+        gs = get_general()
         gs.enable_packing_slip = True
         gs.save()
         invalidate_general_cache()

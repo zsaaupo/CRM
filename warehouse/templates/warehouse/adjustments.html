@@ -1,7 +1,88 @@
 {% extends "layouts/dashboard.html" %}
 {% block content %}
-<section class="card">
-  <h1>{{ page_label }}</h1>
-  <p>Draft and post stock adjustments via <code>{{ api_url }}</code>.</p>
-</section>
+<div class="workspace-content" id="adjustments-app" data-api-url="{{ api_url }}" data-csrf="{{ csrf_token }}">
+  <div class="mb-6 flex flex-wrap items-center justify-between gap-4">
+    <div>
+      <h1 class="text-2xl font-semibold text-stone-900">{{ page_label }}</h1>
+      <p class="text-sm text-stone-500">Create draft stock adjustments and post atomically to the stock ledger.</p>
+    </div>
+  </div>
+
+  <div class="grid gap-6 lg:grid-cols-3">
+    <section class="erp-card">
+      <h2 class="text-base font-semibold mb-3">New Adjustment</h2>
+      <form id="adj-form" class="space-y-3 text-sm">
+        <div><label class="form-label">Warehouse ID</label><input type="number" name="warehouse" class="form-input" required min="1"></div>
+        <div><label class="form-label">Product ID</label><input type="number" name="product" class="form-input" required min="1"></div>
+        <div><label class="form-label">Direction</label>
+          <select name="direction" class="form-input"><option value="add">Addition (+)</option><option value="sub">Subtraction (-)</option></select>
+        </div>
+        <div><label class="form-label">Quantity (base unit)</label><input type="number" step="0.0001" name="quantity" class="form-input" required min="0.0001"></div>
+        <div><label class="form-label">Reason / Note</label><input type="text" name="reason" class="form-input" placeholder="Cycle count correction"></div>
+        <button type="submit" class="primary-button w-full justify-center">Create Draft</button>
+        <p id="adj-msg" class="text-xs text-stone-500"></p>
+      </form>
+    </section>
+
+    <section class="erp-card lg:col-span-2">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-base font-semibold">Adjustments</h2>
+        <button type="button" id="adj-refresh" class="erp-toolbar-btn">Refresh</button>
+      </div>
+      <div class="users-table-scroll">
+        <table class="users-table">
+          <thead><tr><th>Ref</th><th>Warehouse</th><th>Status</th><th>Lines</th><th>Action</th></tr></thead>
+          <tbody id="adj-tbody"></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+</div>
+{% endblock %}
+
+{% block workspace_js %}
+<script type="module">
+import { getJSON, postJSON } from "/static/js/api.js";
+const root = document.getElementById("adjustments-app");
+const api = root.dataset.apiUrl;
+const csrf = root.dataset.csrf;
+
+async function loadList() {
+    const data = await getJSON(api);
+    const rows = data.results || data || [];
+    document.getElementById("adj-tbody").innerHTML = rows.length ? rows.map((r) => `
+      <tr>
+        <td><strong>${r.reference_number || r.id}</strong></td>
+        <td>${r.warehouse_name || r.warehouse}</td>
+        <td><span class="user-status-badge ${r.status === 'posted' ? 'is-active' : 'is-inactive'}">${r.status}</span></td>
+        <td>${(r.lines || []).length}</td>
+        <td>${r.status !== 'posted' ? `<button type="button" class="erp-toolbar-btn" data-post-id="${r.id}">Post</button>` : 'Posted'}</td>
+      </tr>
+    `).join("") : '<tr><td colspan="5">No adjustments yet.</td></tr>';
+    document.querySelectorAll("[data-post-id]").forEach((btn) => btn.addEventListener("click", async () => {
+        await postJSON(`/warehouse/api/adjustments/${btn.dataset.postId}/post/`, {}, csrf);
+        loadList();
+    }));
+}
+
+document.getElementById("adj-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    const msg = document.getElementById("adj-msg");
+    try {
+        await postJSON(api, {
+            warehouse: Number(fd.get("warehouse")),
+            note: fd.get("reason") || "",
+            lines: [{ product: Number(fd.get("product")), direction: fd.get("direction"), quantity: fd.get("quantity") }],
+        }, csrf);
+        msg.textContent = "Draft created.";
+        e.currentTarget.reset();
+        loadList();
+    } catch (err) {
+        msg.textContent = err.message || "Failed to create adjustment.";
+    }
+});
+document.getElementById("adj-refresh").addEventListener("click", loadList);
+loadList();
+</script>
 {% endblock %}

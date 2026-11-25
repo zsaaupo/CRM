@@ -1,7 +1,7 @@
 from django.urls import path
 
 from .api_views import (
-    PurchaseDuplicateAPIView, PurchaseOrderDetailAPIView, PurchaseOrderItemDetailAPIView, PurchaseOrderItemListAPIView,
+    PurchaseDuplicateAPIView, PurchaseImportCSVAPIView, PurchaseOrderDetailAPIView, PurchaseOrderItemDetailAPIView, PurchaseOrderItemListAPIView,
     PurchaseOrderItemListCreateAPIView, PurchaseOrderItemUpdateAPIView, PurchaseOrderListAPIView,
     PurchaseOptionsAPIView, PurchaseEditOptionsAPIView, PurchaseOrderListCreateAPIView, PurchaseOrderUpdateAPIView,
     PurchaseReceiptCreateAPIView, PurchaseReceiveAPIView,
@@ -18,6 +18,7 @@ urlpatterns = [
     path('purchase-orders/options/', PurchaseOptionsAPIView.as_view(), name='purchase-options'),
     path('purchase-orders/edit-options/', PurchaseEditOptionsAPIView.as_view(), name='purchase-edit-options'),
     path('purchase-orders/receive/', PurchaseReceiveAPIView.as_view(), name='purchase-order-receive'),
+    path('purchase-orders/import-csv/', PurchaseImportCSVAPIView.as_view(), name='purchase-order-import-csv'),
     path('purchase-orders/', PurchaseOrderListCreateAPIView.as_view(), name='purchase-order-list'),
     path('purchase-orders/list/', PurchaseOrderListAPIView.as_view(), name='purchase-order-list-view'),
     path('purchase-orders/<int:pk>/', PurchaseOrderDetailAPIView.as_view(), name='purchase-order-detail'),

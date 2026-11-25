@@ -1,8 +1,119 @@
-{% extends 'layouts/base.html' %}
-{% block title %}{{ page_label }} — eManager{% endblock %}
+{% extends "layouts/dashboard.html" %}
 {% block content %}
-<div class="p-6 max-w-6xl mx-auto">
-    <h1 class="text-2xl font-semibold text-stone-900">{{ page_label }}</h1>
-    <p class="mt-2 text-sm text-stone-600">API endpoint: <code>{{ api_url }}</code></p>
+<div class="workspace-content" id="ops-app" data-key="{{ settings_key }}" data-api-url="{{ api_url }}" data-csrf="{{ csrf_token }}">
+  <div class="mb-6 flex flex-wrap items-center justify-between gap-4">
+    <div>
+      <h1 class="text-2xl font-semibold text-stone-900">{{ page_label }}</h1>
+      <p class="text-sm text-stone-500">Permission-gated, audited operator controls and system logs.</p>
+    </div>
+    {% if settings_key == 'audit-logs' %}
+    <a href="{{ api_url }}?export=csv" class="erp-toolbar-btn">Export Audit CSV</a>
+    {% endif %}
+  </div>
+
+  {% if settings_key == 'audit-logs' %}
+  <section class="erp-card">
+    <form id="audit-filter" class="flex flex-wrap gap-3 mb-4 text-sm">
+      <input name="module" class="form-input max-w-40" placeholder="Module (sale, pos...)">
+      <input name="action" class="form-input max-w-40" placeholder="Action (complete...)">
+      <input name="search" class="form-input max-w-52" placeholder="Search object...">
+      <button type="submit" class="primary-button">Filter</button>
+    </form>
+    <div class="users-table-scroll">
+      <table class="users-table">
+        <thead><tr><th>Timestamp</th><th>Actor</th><th>Module</th><th>Action</th><th>Record</th><th>Changes</th></tr></thead>
+        <tbody id="audit-tbody"></tbody>
+      </table>
+    </div>
+  </section>
+  {% else %}
+  <div class="mb-4 flex flex-wrap gap-2">
+    <button type="button" class="erp-tab-btn is-active" data-ops-tab="general">General</button>
+    <button type="button" class="erp-tab-btn" data-ops-tab="pos">POS</button>
+    <button type="button" class="erp-tab-btn" data-ops-tab="hrm">HRM</button>
+    <button type="button" class="erp-tab-btn" data-ops-tab="reward">Reward Points</button>
+    <button type="button" class="erp-tab-btn" data-ops-tab="task">Task</button>
+    <button type="button" class="erp-tab-btn" data-ops-tab="mail">Mail</button>
+    <button type="button" class="erp-tab-btn" data-ops-tab="sms">SMS</button>
+  </div>
+  <section class="erp-card">
+    <form id="ops-json-form" class="space-y-4 text-sm">
+      <div id="ops-fields" class="grid gap-4 sm:grid-cols-2"></div>
+      <div class="flex gap-3">
+        <button type="submit" class="primary-button">Save Settings</button>
+        <button type="button" id="ops-backup-btn" class="erp-toolbar-btn">Run DB Backup</button>
+        <button type="button" id="ops-outbox-btn" class="erp-toolbar-btn">Process Outbox</button>
+      </div>
+      <p id="ops-msg" class="text-xs text-stone-600"></p>
+    </form>
+  </section>
+  {% endif %}
 </div>
+{% endblock %}
+
+{% block workspace_js %}
+<script type="module">
+import { getJSON, patchJSON, postJSON } from "/static/js/api.js";
+const root = document.getElementById("ops-app");
+const key = root.dataset.key;
+const csrf = root.dataset.csrf;
+let currentSection = "general";
+
+if (key === "audit-logs") {
+    const loadLogs = async (q = "") => {
+        const data = await getJSON(q ? `/settings/api/audit-logs/?${q}` : "/settings/api/audit-logs/");
+        document.getElementById("audit-tbody").innerHTML = (data.results || []).map((r) => `
+          <tr>
+            <td>${r.created_at}</td><td>${r.actor || 'system'}</td><td>${r.module}</td><td>${r.action}</td>
+            <td>${r.model_name} #${r.object_id}</td><td><code>${JSON.stringify(r.changes)}</code></td>
+          </tr>
+        `).join("") || '<tr><td colspan="6">No audit events.</td></tr>';
+    };
+    document.getElementById("audit-filter").addEventListener("submit", (e) => {
+        e.preventDefault();
+        const p = new URLSearchParams();
+        for (const [k, v] of new FormData(e.currentTarget).entries()) if (v) p.set(k, v);
+        loadLogs(p.toString());
+    });
+    loadLogs();
+} else {
+    const loadSection = async (sec) => {
+        currentSection = sec;
+        const data = await getJSON(`/settings/api/${sec}/`);
+        document.getElementById("ops-fields").innerHTML = Object.entries(data).map(([k, v]) => {
+            if (typeof v === "boolean") {
+                return `<label class="flex items-center gap-2"><input type="checkbox" name="${k}" ${v ? "checked" : ""}> <span>${k}</span></label>`;
+            }
+            return `<div><label class="form-label">${k}</label><input class="form-input" name="${k}" value="${v ?? ""}"></div>`;
+        }).join("");
+    };
+    document.querySelectorAll("[data-ops-tab]").forEach((btn) => btn.addEventListener("click", () => {
+        document.querySelectorAll("[data-ops-tab]").forEach((b) => b.classList.remove("is-active"));
+        btn.classList.add("is-active");
+        loadSection(btn.dataset.opsTab);
+    }));
+    document.getElementById("ops-json-form").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const payload = {};
+        for (const el of e.currentTarget.querySelectorAll("[name]")) {
+            payload[el.name] = el.type === "checkbox" ? el.checked : (el.value === "" ? null : el.value);
+        }
+        try {
+            await patchJSON(`/settings/api/${currentSection}/`, payload, csrf);
+            document.getElementById("ops-msg").textContent = "Saved and audited.";
+        } catch (err) {
+            document.getElementById("ops-msg").textContent = err.message;
+        }
+    });
+    document.getElementById("ops-backup-btn").addEventListener("click", async () => {
+        try { const r = await postJSON("/settings/api/backup/", {}, csrf); document.getElementById("ops-msg").textContent = `Backup: ${r.file}`; }
+        catch (err) { document.getElementById("ops-msg").textContent = err.message; }
+    });
+    document.getElementById("ops-outbox-btn").addEventListener("click", async () => {
+        try { const r = await postJSON("/settings/api/outbox/process/", {}, csrf); document.getElementById("ops-msg").textContent = `Outbox: sent=${r.sent}, failed=${r.failed}`; }
+        catch (err) { document.getElementById("ops-msg").textContent = err.message; }
+    });
+    loadSection("general");
+}
+</script>
 {% endblock %}

@@ -18,7 +18,7 @@ from hrm.leave_policies import (
 )
 from hrm.models import (
     Attendance, Department, Designation, Employee, EmployeeCompensation, EmployeeLoan,
-    EmployeePromotion, EmployeeScheduleAssignment, LatePolicy, LeaveBalance, LeavePolicy,
+    EmployeePromotion, EmployeeScheduleAssignment, EmployeeStatus, EmploymentType, LatePolicy, LeaveBalance, LeavePolicy,
     LeaveRequest, LeaveType, LoanInstallment, ManualPayrollVoucher, Notice, PayrollMonthPolicy,
     PayrollPeriod, PayrollRun, Payslip, SalaryAdvance, SalaryComponent, SalaryIncrement,
     SalaryPayment, SalaryStructure, SalaryStructureLine, WorkSchedule, WorkingCalendar,
@@ -319,6 +319,8 @@ class HRMWorkforceTests(TestCase):
 
 class LeaveConcurrencyTests(TransactionTestCase):
     def test_two_concurrent_approvals_cannot_overspend_balance(self):
+        EmploymentType.objects.get_or_create(code='full-time', defaults={'name': 'Full-time'})
+        EmployeeStatus.objects.get_or_create(code='active', defaults={'name': 'Active'})
         u_app = User.objects.create_user(username='conc_app')
         u_rev1 = User.objects.create_user(username='conc_rev1', is_superuser=True)
         u_rev2 = User.objects.create_user(username='conc_rev2', is_superuser=True)

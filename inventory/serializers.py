@@ -4,7 +4,7 @@ from decimal import Decimal
 from django.conf import settings
 from rest_framework import serializers
 
-from common.serializers import AUDIT_FIELDS, CatalogSerializer
+from common.serializers import AUDIT_FIELDS, CatalogSerializer, CustomFieldMixin
 from .models import (
     Brand, Currency, Product, ProductCategory, ProductComboItem,
     ProductType, TaxRule, UnitOfMeasure, WarehouseProductPrice,
@@ -97,7 +97,8 @@ class CurrencySerializer(ProductLookupSerializer):
         read_only_fields = AUDIT_FIELDS
 
 
-class ProductSerializer(CatalogSerializer):
+class ProductSerializer(CustomFieldMixin, CatalogSerializer):
+    custom_field_entity = 'product'
     currency = serializers.SlugRelatedField(slug_field='code', queryset=Currency.objects.all())
     product_type = serializers.SlugRelatedField(slug_field='code', queryset=ProductType.objects.all(), required=False)
     status = serializers.SlugRelatedField(slug_field='code', queryset=ProductStatus.objects.all(), required=False)
@@ -113,7 +114,7 @@ class ProductSerializer(CatalogSerializer):
             'minimum_sale_price', 'Whole_sale_price', 'product_tax', 'tax_rule', 'tax_method',
             'alert_quantity', 'daily_sale_objective', 'is_featured', 'has_batch_expiry',
             'has_imei_serial', 'is_promo', 'promo_price', 'promo_start_date', 'promo_end_date',
-            'is_returnable', *AUDIT_FIELDS[1:],
+            'is_returnable', 'custom_fields', *AUDIT_FIELDS[1:],
         ]
         read_only_fields = [*AUDIT_FIELDS, 'public_id']
 

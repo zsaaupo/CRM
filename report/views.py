@@ -255,7 +255,7 @@ class AnalyticsReportAPIView(_APIView):
             resp['Content-Disposition'] = f'attachment; filename="{slug}.csv"'
             return resp
         if fmt == 'xlsx':
-            data = build_xlsx_bytes(slug, headers, rows)
+            data = build_xlsx_bytes(headers, rows, sheet_name=slug)
             resp = HttpResponse(data, content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
             resp['Content-Disposition'] = f'attachment; filename="{slug}.xlsx"'
             return resp

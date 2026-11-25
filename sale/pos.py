@@ -21,7 +21,7 @@ from inventory.pricing import resolve_unit_price
 from people.models import Biller, Party
 from warehouse.models import WareHouse
 from warehouse.scope import check_warehouse, lock_warehouse_scope, scoped_queryset, warehouse_scope
-from .loyalty import redeem_coupon
+from .loyalty import redeem_coupon, redeem_points
 from .models import CashRegisterSession, PosDraft, RegisterMovement, SalesOrder, SalesOrderItem
 from .services import complete_sale
 
@@ -307,6 +307,20 @@ def pos_checkout(actor, payload: dict, request_key) -> tuple[dict, bool]:
                     order.order_discount_value = Decimal(order.order_discount_value) + c_disc
                 order.save(update_fields=['coupon_code', 'coupon_discount_amount', 'order_discount_value', 'updated_at'])
 
+            redeemed_info = None
+            redeem_pts = int(payload.get('redeem_points') or 0)
+            if redeem_pts > 0:
+                if customer is None:
+                    raise ValidationError({'customer': 'Select a customer to redeem reward points.'})
+                redeemed_info = redeem_points(
+                    customer.pk, redeem_pts, sales_order=order, actor=actor,
+                    request_key=f'redeem:pos:{request_key}',
+                )
+                r_amt = Decimal(redeemed_info['monetary_value'])
+                if order.order_discount_type == DiscountType.FLAT:
+                    order.order_discount_value = Decimal(order.order_discount_value) + r_amt
+                    order.save(update_fields=['order_discount_value', 'updated_at'])
+
             tenders = payload.get('tenders') or []
             complete_sale(
                 actor, order.pk,
@@ -329,6 +343,8 @@ def pos_checkout(actor, payload: dict, request_key) -> tuple[dict, bool]:
                 'drawer_impact': summary,
                 'print_url': f'/report/api/pos/{order.pk}/receipt/',
             }
+            if redeemed_info:
+                res['redeemed_points'] = redeemed_info
             return IdempotentResult('pos_checkout', order.pk, res, value=res)
 
     return run_idempotent(request_key, f'pos_checkout:{actor.pk}', payload, _do)
