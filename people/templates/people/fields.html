@@ -4,7 +4,11 @@
 {% if page_mode == 'edit' %}
 <div class="user-form-full" data-current-image hidden><p class="form-label">Current picture</p><img data-current-image-preview alt="Current {{ resource.singular }} picture" class="max-h-32 max-w-full rounded-lg object-contain"><p class="mt-2 text-xs text-stone-500">Choose a new image above to replace this picture.</p></div>
 {% endif %}
-{% if people_role == 'supplier' %}
+{% if people_role == 'biller' %}
+    {% include 'inventory/includes/field.html' with name='is_biller' label='Biller' field_type='checkbox' checked=True locked=True hint='Billers cannot also be customers or suppliers.' only %}
+    {% include 'inventory/includes/field.html' with name='is_customer' label='Customer' field_type='checkbox' locked=True only %}
+    {% include 'inventory/includes/field.html' with name='is_supplier' label='Supplier' field_type='checkbox' locked=True only %}
+{% elif people_role == 'supplier' %}
     {% include 'inventory/includes/field.html' with name='is_supplier' label='Supplier' field_type='checkbox' checked=True locked=True hint='This party is listed as a supplier.' only %}
     {% include 'inventory/includes/field.html' with name='is_customer' label='Also a customer' field_type='checkbox' only %}
 {% else %}

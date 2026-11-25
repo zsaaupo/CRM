@@ -15,10 +15,10 @@ class LeadAdmin(AuditedAdmin):
 
 @admin.register(Party)
 class PartyAdmin(admin.ModelAdmin):
-    list_display = ['code', 'name', 'is_customer', 'is_supplier', 'phone', 'email', 'is_active',
+    list_display = ['code', 'name', 'is_customer', 'is_supplier', 'is_biller', 'phone', 'email', 'is_active',
                     'is_deleted', 'deleted_at', 'deleted_by']
     search_fields = ['code', 'name', 'contact_person', 'phone', 'email']
-    list_filter = ['is_deleted', 'is_customer', 'is_supplier', 'is_active']
+    list_filter = ['is_deleted', 'is_customer', 'is_supplier', 'is_biller', 'is_active']
     readonly_fields = ['created_at', 'updated_at', 'create_by', 'modified_by',
                        'is_deleted', 'deleted_at', 'deleted_by']
 

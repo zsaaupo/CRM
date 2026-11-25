@@ -94,8 +94,8 @@ class PartyPageView(ProtectedAccountPageView):
         return permissions
 
     def get_context_data(self, **kwargs):
-        if self.party_role not in ('supplier', 'customer'):
-            raise ImproperlyConfigured('Declare a supplier or customer page role.')
+        if self.party_role not in ('supplier', 'customer', 'biller'):
+            raise ImproperlyConfigured('Declare a supplier, customer, or biller page role.')
         context = super().get_context_data(**kwargs)
         role = self.party_role
         user = self.request.user

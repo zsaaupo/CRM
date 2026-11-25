@@ -59,13 +59,14 @@ class Lead(TimeStampedModel):
 
 
 class Party(TimeStampedModel):
-    """One contact can be a customer, a supplier, or both."""
+    """One contact can be a customer, a supplier, both, or an exclusive biller."""
 
     code = models.CharField(max_length=40, unique=True)
     name = models.CharField(max_length=200)
     image = models.ImageField(upload_to='people_picture/', blank=True)
     is_customer = models.BooleanField(default=False)
     is_supplier = models.BooleanField(default=False)
+    is_biller = models.BooleanField(default=False)
     contact_person = models.CharField(max_length=150, blank=True)
     email = models.EmailField(blank=True)
     phone = models.CharField(max_length=32, blank=True)
@@ -93,8 +94,13 @@ class Party(TimeStampedModel):
         base_manager_name = 'all_objects'
         constraints = [
             models.UniqueConstraint(Lower(Trim('code')), name='people_party_code_ci_unique'),
-            models.CheckConstraint(condition=Q(is_customer=True) | Q(is_supplier=True),
-                                   name='people_party_requires_role'),
+            models.CheckConstraint(
+                condition=(
+                    Q(is_biller=True, is_customer=False, is_supplier=False)
+                    | (Q(is_biller=False) & (Q(is_customer=True) | Q(is_supplier=True)))
+                ),
+                name='people_party_requires_role',
+            ),
         ]
 
     def clean(self):
@@ -107,8 +113,10 @@ class Party(TimeStampedModel):
                 setattr(self, field, value.upper() if field == 'code' else value)
                 if not value:
                     errors[field] = 'This field cannot be blank.'
-        if not self.is_customer and not self.is_supplier:
-            errors['__all__'] = 'A party must be a customer, a supplier, or both.'
+        if self.is_biller and (self.is_customer or self.is_supplier):
+            errors['__all__'] = 'A biller cannot also be a customer or supplier.'
+        elif not self.is_biller and not self.is_customer and not self.is_supplier:
+            errors['__all__'] = 'A party must be a customer, a supplier, or a biller.'
         if errors:
             raise ValidationError(errors)
 
