@@ -206,8 +206,10 @@ unauthorized API/page requests return 403.
 | URL | Methods | Purpose |
 | --- | --- | --- |
 | `/warehouse/api/stocks/list/` | GET, HEAD, OPTIONS | Read stock balances |
+| `/warehouse/api/stocks/chart/` | GET, HEAD, OPTIONS | Stock value summaries by product category |
 | `/warehouse/api/stocks/<id>/` | GET, HEAD, OPTIONS | Read one stock record |
 | `/warehouse/stocks/` | GET | Stock list page |
+| `/warehouse/stocks/chart/` | GET | Stock chart page |
 | `/warehouse/stocks/<id>/` | GET | Stock details page |
 
 The list reuses the current table design, search and 20-row pagination. It shows
@@ -227,6 +229,28 @@ Read records include the stock ID, warehouse/product IDs, warehouse name/code,
 product name/SKU, six-decimal quantity, unit name/code and audit fields. Related
 labels are loaded in the stock query. Purchase receipts update the existing
 Stock balance, so the next list/detail request shows the new quantity.
+
+The stock chart API also requires `warehouse.view_stock` and the user's
+warehouse scope. Without `?warehouse=<id>`, it returns a specific-warehouse
+role's assigned branch or aggregates all branches for an all-warehouse role.
+All-warehouse users may select one branch with that filter; out-of-scope
+branches return 404 and invalid IDs return 400.
+
+The response contains base-currency totals for stock at catalog selling price
+(`quantity × sale_price`), estimated cost (`quantity × cost_price`), and
+estimated profit (selling value minus cost). Product currency exchange rates
+convert values to `INVENTORY_BASE_CURRENCY`. Stock in currencies
+without a configured rate is excluded and listed in
+`missing_exchange_rate_currencies`. These are current catalog-price estimates,
+not FIFO or weighted-average valuations of received purchase costs. Estimated
+profit excludes tax and operating costs. `total_items` counts distinct products
+with positive stock; `total_quantity` adds their quantities, and
+`quantity_unit_count` reports how many different product units are represented.
+The page shows total items and quantity above one pie with slices for stock value
+by price, stock value by cost and estimated profit. Since a pie cannot represent
+a zero or negative profit slice, it is omitted and called out in a warning.
+All-warehouse users can switch between All branches and individual branches in
+the page dropdown.
 
 Warehouse assignments are configured from Roles → Manage permissions. There is
 no separate warehouse-assignment navbar entry or page. The options endpoint

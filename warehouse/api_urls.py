@@ -2,7 +2,7 @@ from django.urls import path
 from .activity import REPORTS
 
 from .api_views import (
-    StockDetailAPIView, StockListAPIView,
+    StockChartAPIView, StockDetailAPIView, StockListAPIView,
     RoleWarehouseAccessDetailAPIView, RoleWarehouseAccessListAPIView,
     RoleWarehouseAccessListCreateAPIView, RoleWarehouseAccessUpdateAPIView,
     RoleWarehouseAccessOptionsAPIView,
@@ -31,6 +31,7 @@ urlpatterns = [
     path('role-warehouse-access/<int:pk>/', RoleWarehouseAccessDetailAPIView.as_view(), name='role-warehouse-access-detail'),
     path('role-warehouse-access/<int:pk>/update/', RoleWarehouseAccessUpdateAPIView.as_view(), name='role-warehouse-access-update'),
     path('stocks/list/', StockListAPIView.as_view(), name='stock-list'),
+    path('stocks/chart/', StockChartAPIView.as_view(), name='stock-chart'),
     path('stocks/<int:pk>/', StockDetailAPIView.as_view(), name='stock-detail'),
     path('warehouses/', WareHouseListCreateAPIView.as_view(), name='warehouse-list'),
     path('warehouses/list/', WareHouseListAPIView.as_view(), name='warehouse-list-view'),

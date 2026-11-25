@@ -8,7 +8,7 @@ from django.urls import reverse
 from rest_framework.test import APIClient
 
 from accounting.models import FinancialAccount
-from inventory.models import Product, UnitOfMeasure
+from inventory.models import Currency, Product, ProductCategory, UnitOfMeasure
 from purchase.models import PurchaseOrder, PurchaseOrderItem
 from warehouse.api_views import StockListAPIView
 from warehouse.models import Stock, WareHouse
@@ -28,8 +28,10 @@ class StockReadTests(TestCase):
         self.client = APIClient()
         self.client.force_login(self.user)
         self.list_api = reverse('warehouse:stock-list')
+        self.chart_api = reverse('warehouse:stock-chart')
         self.detail_api = reverse('warehouse:stock-detail', args=[self.stock.pk])
         self.list_page = reverse('warehouse_pages:stock-list')
+        self.chart_page = reverse('warehouse_pages:stock-chart')
         self.detail_page = reverse('warehouse_pages:stock-detail', args=[self.stock.pk])
 
     def grant(self, *permissions):
@@ -38,18 +40,73 @@ class StockReadTests(TestCase):
             self.role.permissions.add(Permission.objects.get(content_type__app_label=app, codename=codename))
 
     def test_stock_view_permission_is_required_independently_of_warehouse_access(self):
-        for url in [self.list_api, self.detail_api]:
+        for url in [self.list_api, self.chart_api, self.detail_api]:
             self.assertEqual(APIClient().get(url).status_code, 403)
             self.assertEqual(self.client.get(url).status_code, 403)
-        for url in [self.list_page, self.detail_page]:
+        for url in [self.list_page, self.chart_page, self.detail_page]:
             self.assertRedirects(Client().get(url), reverse('account_pages:login'))
             self.assertEqual(self.client.get(url).status_code, 403)
         self.grant('warehouse.view_warehouse')
         self.assertNotContains(self.client.get(reverse('dashboard')), '>Stock list</a>')
         self.assertEqual(self.client.get(self.list_api).status_code, 403)
         self.grant('warehouse.view_stock')
-        for url in [self.list_api, self.detail_api, self.list_page, self.detail_page]:
+        for url in [self.list_api, self.chart_api, self.detail_api, self.list_page, self.chart_page, self.detail_page]:
             self.assertEqual(self.client.get(url).status_code, 200)
+
+    def test_chart_values_currency_conversion_branch_filter_and_missing_rates(self):
+        self.grant('warehouse.view_stock')
+        category = ProductCategory.objects.create(name='Devices', code='DEVICES')
+        self.product.category = category
+        self.product.cost_price = '10'
+        self.product.sale_price = '15'
+        self.product.save(update_fields=['category', 'cost_price', 'sale_price'])
+        self.stock.quantity = '2'
+        self.stock.save(update_fields=['quantity'])
+
+        drinks = ProductCategory.objects.create(name='Drinks', code='DRINKS')
+        usd = Currency.objects.create(code='USD', name='US Dollar', exchange_rate='120')
+        foreign_product = Product.objects.create(
+            name='Tea', sku='READ-TEA', unit=self.unit, currency=usd,
+            cost_price='2', sale_price='3', category=drinks,
+        )
+        Stock.objects.create(warehouse=self.branch, product=foreign_product, quantity='4')
+        missing_rate = Currency.objects.create(code='EUR', name='Euro', exchange_rate=None)
+        unpriced = Product.objects.create(
+            name='Coffee', sku='READ-COFFEE', unit=self.unit, currency=missing_rate,
+            cost_price='5', sale_price='8',
+        )
+        Stock.objects.create(warehouse=self.branch, product=unpriced, quantity='1')
+
+        response = self.client.get(self.chart_api)
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['currency'], 'BDT')
+        self.assertEqual(response.data['warehouse_label'], 'All branches')
+        self.assertEqual(response.data['totals'], {
+            'stock_value_by_price': '1470.0000',
+            'stock_value_by_cost': '980.0000',
+            'estimated_profit': '490.0000',
+        })
+        self.assertEqual(response.data['total_items'], 3)
+        self.assertEqual(response.data['total_quantity'], '7.000000')
+        self.assertEqual(response.data['quantity_unit_count'], 1)
+        self.assertEqual(response.data['missing_exchange_rate_currencies'], ['EUR'])
+        selected = self.client.get(self.chart_api, {'warehouse': self.branch.pk})
+        self.assertEqual(selected.data['warehouse']['id'], self.branch.pk)
+        self.assertEqual(selected.data['totals']['stock_value_by_price'], '1440.0000')
+        self.assertEqual(self.client.get(self.chart_api, {'warehouse': 'bad'}).status_code, 400)
+        self.assertEqual(self.client.get(self.chart_api, {'warehouse': 999999}).status_code, 404)
+
+        assignment = self.user.groups.get().warehouse_access
+        assignment.warehouse = self.warehouse
+        assignment.all_warehouses = False
+        assignment.save()
+        scoped = self.client.get(self.chart_api)
+        self.assertEqual(scoped.data['warehouse']['id'], self.warehouse.pk)
+        self.assertEqual(scoped.data['totals']['stock_value_by_price'], '30.0000')
+        self.assertEqual(self.client.get(self.chart_api, {'warehouse': self.branch.pk}).status_code, 404)
+        scoped_page = self.client.get(self.chart_page)
+        self.assertFalse(scoped_page.context['choose_warehouse'])
+        self.assertNotContains(scoped_page, 'id="stock-chart-warehouse"')
 
     def test_read_apis_return_stock_identifiers_labels_and_exact_quantities(self):
         self.grant('warehouse.view_stock')
@@ -71,7 +128,7 @@ class StockReadTests(TestCase):
 
     def test_stock_read_endpoints_allow_only_get_head_and_options_even_with_write_grants(self):
         self.grant('warehouse.view_stock', 'warehouse.add_stock', 'warehouse.change_stock', 'warehouse.delete_stock')
-        for url in [self.list_api, self.detail_api]:
+        for url in [self.list_api, self.chart_api, self.detail_api]:
             self.assertIn('no-store', self.client.get(url)['Cache-Control'])
             self.assertEqual(self.client.head(url).status_code, 200)
             self.assertEqual(self.client.options(url).status_code, 200)
@@ -109,6 +166,17 @@ class StockReadTests(TestCase):
         self.assertContains(page, 'data-catalog-pagination')
         self.assertNotContains(page, 'data-catalog-delete-dialog')
         self.assertNotContains(page, 'data-catalog-receive-form')
+        chart_page = self.client.get(self.chart_page)
+        self.assertContains(chart_page, f'data-api-url="{self.chart_api}"')
+        self.assertContains(chart_page, '/static/warehouse/js/stock_chart.js')
+        self.assertContains(chart_page, 'id="stock-chart-warehouse"')
+        self.assertContains(chart_page, 'data-total-items')
+        self.assertContains(chart_page, 'data-total-quantity')
+        self.assertContains(chart_page, 'data-stock-chart-svg width="320" height="320"')
+        self.assertNotContains(chart_page, 'stock-chart-metric')
+        self.assertContains(chart_page, 'aria-current="page">Stock chart')
+        self.assertContains(chart_page, 'FIFO or weighted-average purchase valuations')
+        self.assertTrue(chart_page.context['choose_warehouse'])
         for key in ['can_add', 'can_delete', 'edit_url_template', 'delete_url_template', 'stock_url_template', 'receive_api_url']:
             self.assertNotIn(key, page.context)
         self.assertEqual([column['key'] for column in page.context['columns']],
@@ -129,6 +197,7 @@ class StockReadTests(TestCase):
         dashboard = self.client.get(reverse('dashboard'))
         self.assertContains(dashboard, 'data-warehouses-toggle')
         self.assertContains(dashboard, f'href="{self.list_page}"')
+        self.assertContains(dashboard, f'href="{self.chart_page}"')
         self.assertNotContains(dashboard, '>Warehouse list</a>')
         self.assertNotContains(dashboard, '>Add warehouse</a>')
         self.assertEqual(self.client.get(self.list_page).status_code, 200)
@@ -136,6 +205,7 @@ class StockReadTests(TestCase):
         self.assertEqual(self.client.get(self.list_api).status_code, 403)
         self.assertEqual(self.client.get(self.detail_page).status_code, 403)
         self.assertNotContains(self.client.get(reverse('dashboard')), '>Stock list</a>')
+        self.assertNotContains(self.client.get(reverse('dashboard')), '>Stock chart</a>')
 
     def test_receiving_a_purchase_updates_the_list_and_details_without_duplicate_stock_rows(self):
         self.grant('warehouse.view_stock', 'purchase.change_purchaseorder')

@@ -3,6 +3,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from account.page_views import ProtectedAccountPageView
+from django.conf import settings
 from .activity import available_reports
 from .models import WareHouse
 from .scope import WarehouseScopePageMixin, all_warehouse_access, has_warehouse_scope, scoped_queryset, warehouse_scope
@@ -114,6 +115,24 @@ class StockListPageView(WarehouseScopePageMixin, ProtectedAccountPageView):
                 ('product_name', 'Product', 'text'), ('quantity', 'Current quantity', 'text'),
                 ('unit_code', 'Unit', 'text'), ('actions', 'Actions', 'edit'),
             ]],
+        })
+        return context
+
+
+class StockChartPageView(WarehouseScopePageMixin, ProtectedAccountPageView):
+    template_name = 'warehouse/stock_chart.html'
+    permission_required = ('warehouse.view_stock',)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        scope = warehouse_scope(self.request.user)
+        context.update({
+            'page_section': 'warehouses', 'page_mode': 'stock-chart',
+            'page_label': 'Stock chart', 'section_label': 'Warehouses',
+            'chart_api_url': reverse('warehouse:stock-chart'),
+            'choose_warehouse': all_warehouse_access(scope),
+            'warehouses': scoped_queryset(WareHouse.objects.order_by('name', 'pk'), scope, 'pk'),
+            'base_currency': settings.INVENTORY_BASE_CURRENCY,
         })
         return context
 

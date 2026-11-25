@@ -1,0 +1,46 @@
+{% extends "layouts/dashboard.html" %}
+{% load static %}
+{% block title %}Stock chart | eManager{% endblock %}
+{% block content %}
+<div class="workspace-content" data-stock-chart data-api-url="{{ chart_api_url }}" data-currency="{{ base_currency }}">
+    <div class="page-heading">
+        <div class="w-full text-center"><p class="page-eyebrow">Warehouses</p><h1 class="page-title">Stock Chart<span class="text-emerald-600">.</span></h1>
+            {% if choose_warehouse %}<p class="page-description">Select a warehouse to view its stock.</p>{% endif %}</div>
+    </div>
+    {% if choose_warehouse %}
+    <div class="user-form-card mb-6">
+        <div class="user-form-grid">
+            <div><label class="form-label" for="stock-chart-warehouse">Warehouse</label>
+                <select id="stock-chart-warehouse" class="form-input">
+                    <option value="">All Warehouses</option>
+                    {% for warehouse in warehouses %}<option value="{{ warehouse.pk }}">{{ warehouse.name }}</option>{% endfor %}
+                </select>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    <div class="grid gap-4 md:grid-cols-2 mb-6" aria-label="Stock summary">
+        <section class="user-form-card"><h2 class="form-label">Total Items</h2>
+            <p class="page-title" data-total-items>—</p></section>
+        <section class="user-form-card"><h2 class="form-label">Total Quantity</h2>
+            <p class="page-title" data-total-quantity>—</p>
+            <p class="mt-1 text-xs text-stone-500" data-quantity-units></p></section>
+    </div>
+    <section class="users-panel" aria-labelledby="stock-chart-title">
+        <div class="users-toolbar"><div><h2 class="section-title" id="stock-chart-title">Stock Value</h2>
+            <p class="text-sm text-stone-500" data-chart-scope>Loading stock values...</p></div></div>
+        <p class="users-list-status" data-chart-status role="status" aria-live="polite">Loading stock values...</p>
+        <div class="form-error mb-4" data-chart-warning role="status" hidden></div>
+        <div class="flex flex-col items-center gap-4 py-6">
+            <ul data-stock-chart-legend class="flex flex-wrap justify-center gap-x-4 gap-y-2" aria-label="Stock value metrics"></ul>
+            <div data-chart-plot style="max-width:100%" hidden>
+                <svg data-stock-chart-svg width="320" height="320" style="display:block;max-width:100%;height:auto" viewBox="0 0 320 320" role="img" aria-label="Stock value metrics"></svg>
+            </div>
+        </div>
+        <p data-chart-empty class="users-list-status" hidden>No stock values to chart for this selection.</p>
+        <button type="button" class="secondary-button" data-chart-retry hidden>Try again</button>
+    </section>
+    <p class="mt-4 text-sm text-stone-500">Values are estimates based on current catalog prices in {{ base_currency }}. Purchase cost is not FIFO or weighted-average purchase valuations; estimated profit excludes tax and operating costs.</p>
+</div>
+{% endblock %}
+{% block workspace_js %}<script type="module" src="{% static 'warehouse/js/stock_chart.js' %}"></script>{% endblock %}

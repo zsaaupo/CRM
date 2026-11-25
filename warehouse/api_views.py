@@ -1,24 +1,29 @@
+from decimal import Decimal, ROUND_HALF_UP, localcontext
+
+from django.conf import settings
 from common.view import (
     BaseAPIMixin, BaseDetailAPIView, BaseListAPIView, BaseListCreateAPIView,
     BaseUpdateAPIView,
 )
 
 from django.db import OperationalError, transaction
-from django.db.models import Prefetch
+from django.db.models import Count, DecimalField, ExpressionWrapper, F, Prefetch, Sum
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import never_cache
 from rest_framework.generics import GenericAPIView, RetrieveAPIView
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework import serializers
-from rest_framework.exceptions import PermissionDenied
+from rest_framework.exceptions import NotFound, PermissionDenied
 from django.contrib.auth.models import Group
 from django.shortcuts import get_object_or_404
 from account.permissions import has_role_permissions
 
 from .access import WarehouseAccessBusy, lock_assignment_write, managed_assignments
 from .models import Stock, RoleWarehouseAccess, WareHouse, WarehouseTransfer, WarehouseTransferItem
-from .scope import HasWarehouseAccess, WarehouseScopeAPIMixin, all_warehouse_access, scoped_queryset, warehouse_scope
+from .scope import (
+    HasWarehouseAccess, WarehouseScopeAPIMixin, all_warehouse_access, scoped_queryset, warehouse_scope,
+)
 from .serializers import (
     StockFilterSerializer, StockReadSerializer, RoleWarehouseAccessFilterSerializer,
     RoleWarehouseAccessSerializer, WareHouseSerializer,
@@ -72,6 +77,91 @@ class StockDetailAPIView(WarehouseScopeAPIMixin, BaseAPIMixin, RetrieveAPIView):
     serializer_class = StockReadSerializer
     queryset = StockListAPIView.queryset
     http_method_names = ['get', 'head', 'options']
+
+
+class StockChartFilterSerializer(serializers.Serializer):
+    warehouse = serializers.IntegerField(min_value=1, max_value=9223372036854775807, required=False)
+
+
+@method_decorator(never_cache, name='dispatch')
+class StockChartAPIView(WarehouseScopeAPIMixin, BaseAPIMixin, APIView):
+    required_permissions = ('warehouse.view_stock',)
+    http_method_names = ['get', 'head', 'options']
+
+    def get(self, request):
+        filters = StockChartFilterSerializer(data=request.query_params)
+        filters.is_valid(raise_exception=True)
+        requested_warehouse = filters.validated_data.get('warehouse')
+        scope = request.warehouse_scope
+
+        stocks = Stock.objects.filter(quantity__gt=0)
+        if all_warehouse_access(scope):
+            warehouse = None
+            if requested_warehouse is not None:
+                warehouse = get_object_or_404(WareHouse.objects.only('pk', 'name'), pk=requested_warehouse)
+                stocks = stocks.filter(warehouse_id=warehouse.pk)
+        else:
+            warehouse = scope.warehouse
+            if requested_warehouse is not None and requested_warehouse != warehouse.pk:
+                raise NotFound('Warehouse not found.')
+            stocks = stocks.filter(warehouse_id=warehouse.pk)
+
+        stock_summary = stocks.aggregate(
+            total_items=Count('product_id', distinct=True),
+            total_quantity=Sum('quantity'),
+            quantity_unit_count=Count('product__unit_id', distinct=True),
+        )
+        amount_field = DecimalField(max_digits=38, decimal_places=10)
+        grouped_stock = stocks.values(
+            'product__currency__code', 'product__currency__exchange_rate',
+        ).annotate(
+            sale_value=Sum(ExpressionWrapper(
+                F('quantity') * F('product__sale_price'), output_field=amount_field,
+            )),
+            cost_value=Sum(ExpressionWrapper(
+                F('quantity') * F('product__cost_price'), output_field=amount_field,
+            )),
+        ).order_by('product__currency__code')
+
+        missing_currencies = set()
+        sale_total = Decimal('0')
+        cost_total = Decimal('0')
+        with localcontext() as context:
+            context.prec = 50
+            for row in grouped_stock:
+                currency_code = row['product__currency__code']
+                rate = row['product__currency__exchange_rate']
+                if currency_code == settings.INVENTORY_BASE_CURRENCY:
+                    rate = Decimal('1')
+                elif rate is None:
+                    missing_currencies.add(currency_code)
+                    continue
+                sale_total += Decimal(row['sale_value'] or 0) * rate
+                cost_total += Decimal(row['cost_value'] or 0) * rate
+
+        total_price = sale_total.quantize(Decimal('0.0001'), rounding=ROUND_HALF_UP)
+        total_cost = cost_total.quantize(Decimal('0.0001'), rounding=ROUND_HALF_UP)
+        total_profit = total_price - total_cost
+
+        return Response({
+            'currency': settings.INVENTORY_BASE_CURRENCY,
+            'warehouse': {'id': warehouse.pk, 'name': warehouse.name} if warehouse else None,
+            'warehouse_label': warehouse.name if warehouse else 'All branches',
+            'total_items': stock_summary['total_items'],
+            'total_quantity': format(
+                (stock_summary['total_quantity'] or Decimal('0')).quantize(
+                    Decimal('0.000001'), rounding=ROUND_HALF_UP,
+                ),
+                'f',
+            ),
+            'quantity_unit_count': stock_summary['quantity_unit_count'],
+            'totals': {
+                'stock_value_by_price': format(total_price, 'f'),
+                'stock_value_by_cost': format(total_cost, 'f'),
+                'estimated_profit': format(total_profit, 'f'),
+            },
+            'missing_exchange_rate_currencies': sorted(missing_currencies),
+        })
 
 
 class WarehouseTransferAPIMixin:
