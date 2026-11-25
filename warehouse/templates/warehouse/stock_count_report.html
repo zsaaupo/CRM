@@ -1,0 +1,80 @@
+{% extends 'layouts/dashboard.html' %}
+{% block title %}Stock count report | eManager{% endblock %}
+{% block content %}
+<div class="workspace-content">
+    <div class="page-heading">
+        <div><p class="page-eyebrow">Warehouses</p><h1 class="page-title">Stock count report<span class="text-emerald-600">.</span></h1></div>
+        <div class="flex flex-wrap gap-3">
+            <a href="{{ list_url }}" class="secondary-button">Back to stock counts</a>
+            <a href="{% url 'warehouse:stock-count-final-file' count.pk %}" class="secondary-button">Download counted CSV</a>
+            {% if can_create_adjustment %}
+            <form method="post" action="{% url 'warehouse_pages:stock-count-report' count.pk %}">
+                {% csrf_token %}
+                <button type="submit" class="primary-button compact-primary">Create Draft Adjustment</button>
+            </form>
+            {% endif %}
+        </div>
+    </div>
+    {% include 'warehouse/stock_count_errors.html' %}
+    <section class="user-form-card mb-6" aria-labelledby="count-info-heading">
+        <h2 id="count-info-heading" class="section-title mb-6">Count information</h2>
+        <dl class="profile-grid text-sm">
+            <div><dt class="form-label">Reference</dt><dd class="font-mono">{{ count.reference_no }}</dd></div>
+            <div><dt class="form-label">Warehouse</dt><dd>{{ count.warehouse_name }}</dd></div>
+            <div><dt class="form-label">Type</dt><dd>{{ count.get_count_type_display }}</dd></div>
+            <div><dt class="form-label">Snapshot</dt><dd>{{ count.created_at|date:'d-m-Y H:i:s' }}</dd></div>
+            <div><dt class="form-label">Finalized</dt><dd>{{ count.finalized_at|date:'d-m-Y H:i:s' }}</dd></div>
+            <div><dt class="form-label">Finalized by</dt><dd>{{ count.finalized_by }}</dd></div>
+            {% if count.category_name %}<div><dt class="form-label">Category</dt><dd>{{ count.category_name }}</dd></div>{% endif %}
+            {% if count.brand_name %}<div><dt class="form-label">Brand</dt><dd>{{ count.brand_name }}</dd></div>{% endif %}
+            {% if count.adjustment_id %}
+            <div>
+                <dt class="form-label">{% if count.adjustment.is_completed %}Posted adjustment{% else %}Draft adjustment{% endif %}</dt>
+                <dd>{% if can_view_adjustment %}<a class="text-button" href="{% url 'warehouse_pages:adjustment-detail' count.adjustment_id %}">{{ count.adjustment.adjustment_number }}</a>
+                    {% elif count.adjustment.is_completed %}Completed{% else %}Draft{% endif %}</dd>
+            </div>
+            {% endif %}
+        </dl>
+    </section>
+    <section class="user-form-card mb-6" aria-labelledby="count-summary-heading">
+        <h2 id="count-summary-heading" class="section-title">Reconciliation</h2>
+        <p class="section-description">{{ summary.matched_items }} matched · {{ summary.overage_items }} overages · {{ summary.shortage_items }} shortages</p>
+        {% if summary.moved_items %}<p class="form-status mb-4" role="status">Stock moved after the snapshot for {{ summary.moved_items }} SKU{{ summary.moved_items|pluralize }}. Review the affected lines.</p>{% endif %}
+        <div class="users-table-scroll">
+            <table class="users-table">
+                <caption class="sr-only">Quantity totals per unit</caption>
+                <thead><tr><th scope="col">Unit</th><th scope="col">Expected</th><th scope="col">Counted</th><th scope="col">Overage</th><th scope="col">Shortage</th><th scope="col">Net variance</th></tr></thead>
+                <tbody>
+                {% for total in summary.quantities %}
+                <tr><th scope="row">{{ total.unit }}</th><td>{{ total.expected|floatformat:'-6u' }}</td><td>{{ total.counted|floatformat:'-6u' }}</td>
+                    <td>{{ total.overage|floatformat:'-6u' }}</td><td>{{ total.shortage|floatformat:'-6u' }}</td><td>{{ total.variance|floatformat:'-6u' }}</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <dl class="profile-grid mt-5 text-sm">
+            {% for total in summary.values %}<div><dt class="form-label">Net value variance ({{ total.currency }})</dt><dd>{{ total.variance|floatformat:'-10u' }}</dd></div>{% endfor %}
+        </dl>
+    </section>
+    <section class="user-form-card" aria-labelledby="count-lines-heading">
+        <h2 id="count-lines-heading" class="section-title mb-6">Counted items</h2>
+        <div class="users-table-scroll">
+            <table class="users-table">
+                <thead><tr><th scope="col">SKU</th><th scope="col">Product</th><th scope="col">Unit</th><th scope="col">Expected</th>
+                    <th scope="col">Counted</th><th scope="col">Variance</th><th scope="col">Unit cost</th><th scope="col">Variance value</th><th scope="col">Stock movement</th></tr></thead>
+                <tbody>
+                {% for item in items %}
+                <tr>
+                    <td class="font-mono">{{ item.sku }}</td><td>{{ item.product_name }}</td><td>{{ item.unit_code }}</td>
+                    <td>{{ item.expected_qty|floatformat:'-6u' }}</td><td>{{ item.counted_qty|floatformat:'-6u' }}</td>
+                    <td>{{ item.variance_qty|floatformat:'-6u' }}</td><td>{{ item.currency_code }} {{ item.unit_cost|floatformat:'-4u' }}</td>
+                    <td>{{ item.currency_code }} {{ item.variance_value|floatformat:'-10u' }}</td>
+                    <td>{% if item.stock_moved %}Moved after snapshot{% endif %}</td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+</div>
+{% endblock %}

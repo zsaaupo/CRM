@@ -1,0 +1,102 @@
+{% extends 'layouts/dashboard.html' %}
+{% load static %}
+{% block title %}Stock counts | eManager{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'warehouse/css/stock_counts.css' %}">{% endblock %}
+{% block content %}
+<div class="workspace-content" data-stock-count-list>
+    <div class="page-heading">
+        <div><p class="page-eyebrow">Warehouses</p><h1 class="page-title">Stock counts<span class="text-emerald-600">.</span></h1></div>
+        {% if can_create %}<a href="{% url 'warehouse_pages:add-stock-count' %}" class="primary-button compact-primary">Count Stock</a>{% endif %}
+    </div>
+    {% include 'warehouse/stock_count_errors.html' %}
+    <section class="users-panel" aria-labelledby="stock-counts-heading">
+        <div class="users-toolbar stock-count-controls">
+            <h2 id="stock-counts-heading" class="section-title">All stock counts <span class="user-count">{{ page.paginator.count }}</span></h2>
+            <form method="get" role="search" class="users-search flex-wrap">
+                <label for="stock-count-search" class="sr-only">Search stock counts</label>
+                <input id="stock-count-search" class="form-input" type="search" name="q" value="{{ search }}" placeholder="Search stock counts">
+                <label for="stock-count-page-size" class="sr-only">Rows per page</label>
+                <select id="stock-count-page-size" class="form-input" name="page_size" data-count-page-size>
+                    <option value="10"{% if page_size == '10' %} selected{% endif %}>10 rows</option>
+                    <option value="25"{% if page_size == '25' %} selected{% endif %}>25 rows</option>
+                    <option value="50"{% if page_size == '50' %} selected{% endif %}>50 rows</option>
+                    <option value="all"{% if page_size == 'all' %} selected{% endif %}>All rows</option>
+                </select>
+                <input type="hidden" name="ordering" value="{{ ordering }}">
+                <div data-count-selected-columns>
+                    {% for column in columns %}{% if column.visible %}<input type="hidden" name="column" value="{{ column.key }}">{% endif %}{% endfor %}
+                </div>
+                <button type="submit" class="secondary-button">Search</button>
+            </form>
+        </div>
+        <div class="stock-count-tools stock-count-controls">
+            <a class="secondary-button" href="{% querystring export='csv' %}" data-count-query>CSV</a>
+            <a class="secondary-button" href="{% querystring export='xlsx' %}" data-count-query>Excel</a>
+            <a class="secondary-button" href="{% querystring export='pdf' %}" data-count-query data-report-download><span data-report-label>PDF</span></a>
+            <button class="secondary-button" type="button" data-count-print hidden>Print</button>
+            <details class="stock-count-columns" data-count-visibility hidden>
+                <summary class="secondary-button">Columns</summary>
+                <div class="stock-count-column-options">
+                    {% for column in columns %}
+                    <label><input type="checkbox" value="{{ column.key }}" data-count-column-toggle
+                        {% if column.visible %} checked{% endif %}{% if column.key == 'reference_no' %} disabled{% endif %}> {{ column.label }}</label>
+                    {% endfor %}
+                </div>
+            </details>
+        </div>
+        {% if page.object_list %}
+        <div class="users-table-scroll">
+            <table class="users-table">
+                <caption class="sr-only">Stock count batches</caption>
+                <thead><tr>
+                    {% for column in columns %}
+                    <th scope="col" data-count-column="{{ column.key }}"{% if not column.visible %} hidden{% endif %}{% if column.aria_sort %} aria-sort="{{ column.aria_sort }}"{% endif %}>
+                        {% if column.sortable %}<a class="stock-count-sort" href="{% querystring ordering=column.sort page=None export=None %}" data-count-query>
+                            {{ column.label }}{% if column.aria_sort %} <span aria-hidden="true">{% if column.aria_sort == 'ascending' %}&uarr;{% else %}&darr;{% endif %}</span>{% endif %}
+                        </a>{% else %}{{ column.label }}{% endif %}
+                    </th>
+                    {% endfor %}
+                </tr></thead>
+                <tbody>
+                {% for count in page %}
+                <tr>
+                    {% for column in columns %}
+                    <td data-count-column="{{ column.key }}"{% if not column.visible %} hidden{% endif %}>
+                        {% if column.key == 'created_at' %}<time datetime="{{ count.created_at|date:'c' }}">{{ count.created_at|date:'d-m-Y H:i:s' }}</time>
+                        {% elif column.key == 'reference_no' %}<span class="font-mono">{{ count.reference_no }}</span>
+                        {% elif column.key == 'warehouse' %}{{ count.warehouse_name }}
+                        {% elif column.key == 'category' %}{{ count.category_name }}
+                        {% elif column.key == 'brand' %}{{ count.brand_name }}
+                        {% elif column.key == 'count_type' %}<span class="user-count">{{ count.get_count_type_display }}</span>
+                        {% elif column.key == 'initial_file' %}
+                        <a class="text-button" href="{% url 'warehouse:stock-count-initial-file' count.pk %}" aria-label="Download initial file for {{ count.reference_no }}">{{ count.total_items }} <span aria-hidden="true">&darr;</span></a>
+                        {% elif column.key == 'final_file' and count.status == 'finalized' %}
+                        <a class="text-button" href="{% url 'warehouse:stock-count-final-file' count.pk %}" aria-label="Download final file for {{ count.reference_no }}">{{ count.total_items }} <span aria-hidden="true">&darr;</span></a>
+                        {% elif column.key == 'actions' %}
+                            {% if count.status == 'finalized' %}
+                            <a class="secondary-button" href="{% url 'warehouse_pages:stock-count-report' count.pk %}">Final Report</a>
+                            {% elif can_finalize %}
+                            <a class="primary-button compact-primary" href="{% url 'warehouse_pages:stock-count-finalize' count.pk %}">Finalize</a>
+                            {% else %}<span class="user-count">Pending</span>{% endif %}
+                        {% endif %}
+                    </td>
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}<div class="users-empty"><p>No stock counts found.</p></div>{% endif %}
+        {% if page.paginator.num_pages > 1 %}
+        <nav class="users-pagination stock-count-controls" aria-label="Stock count pages">
+            <p>{{ page.start_index }}–{{ page.end_index }} of {{ page.paginator.count }}</p>
+            <div class="flex gap-2">
+                {% if page.has_previous %}<a class="secondary-button" href="{% querystring page=page.previous_page_number export=None %}" data-count-query>Previous</a>{% endif %}
+                {% if page.has_next %}<a class="secondary-button" href="{% querystring page=page.next_page_number export=None %}" data-count-query>Next</a>{% endif %}
+            </div>
+        </nav>
+        {% endif %}
+    </section>
+</div>
+{% endblock %}
+{% block workspace_js %}<script type="module" src="{% static 'warehouse/js/stock_counts.js' %}"></script>{% endblock %}

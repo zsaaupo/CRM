@@ -8,10 +8,19 @@ from .page_views import (
 )
 
 
+from .stock_count_pages import (
+    StockCountCreatePageView, StockCountFinalizePageView, StockCountListPageView, StockCountReportPageView,
+)
+
+
 app_name = 'warehouse_pages'
 
 urlpatterns = [
     path('report/', WarehouseReportPageView.as_view(), name='report'),
+    path('stock-counts/', StockCountListPageView.as_view(), name='stock-count-list'),
+    path('stock-counts/add/', StockCountCreatePageView.as_view(), name='add-stock-count'),
+    path('stock-counts/<int:pk>/finalize/', StockCountFinalizePageView.as_view(), name='stock-count-finalize'),
+    path('stock-counts/<int:pk>/report/', StockCountReportPageView.as_view(), name='stock-count-report'),
     path('adjustments/', AdjustmentListPageView.as_view(), name='adjustment-list'),
     path('adjustments/add/', AdjustmentAddPageView.as_view(), name='add-adjustment'),
     path('adjustments/<int:pk>/edit/', AdjustmentEditPageView.as_view(), name='edit-adjustment'),

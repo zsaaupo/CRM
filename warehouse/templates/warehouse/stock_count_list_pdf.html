@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Stock counts</title></head>
+<body>
+    <header class="document-header"><div class="brand"><strong>{{ report.company.name }}</strong></div></header>
+    <section class="document-title"><h1>Stock counts</h1></section>
+    <table class="products">
+        <thead><tr>{% for heading in report.headers %}<th scope="col">{{ heading }}</th>{% endfor %}</tr></thead>
+        <tbody>
+            {% for row in report.rows %}<tr>{% for value in row %}<td>{{ value }}</td>{% endfor %}</tr>
+            {% empty %}<tr><td colspan="{{ report.headers|length }}">No stock counts found.</td></tr>{% endfor %}
+        </tbody>
+    </table>
+    <div class="running-footer"><span>Generated {{ report.generated_at|date:'d-m-Y H:i:s' }}</span></div>
+</body>
+</html>

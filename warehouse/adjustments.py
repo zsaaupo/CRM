@@ -11,6 +11,7 @@ from inventory.models import Product
 from .models import Stock, StockAdjustment, StockAdjustmentItem, WareHouse
 from .scope import lock_warehouse_scope, scoped_queryset
 from .services import MAX_STOCK_QUANTITY
+from .stock_counts import validate_count_adjustment
 
 
 class AdjustmentCompleted(APIException):
@@ -100,6 +101,7 @@ def complete_adjustment(actor, adjustment_id):
             if not items:
                 raise ValidationError({'items': 'Add at least one product before completing the adjustment.'})
             products, changes = adjustment_changes(items)
+            validate_count_adjustment(record, changes)
             for product_id, change in sorted(changes.items()):
                 if change:
                     apply_stock_change(warehouse, products[product_id], change, username, now)

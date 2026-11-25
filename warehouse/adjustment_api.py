@@ -2,6 +2,7 @@ from decimal import InvalidOperation
 
 from django.db import OperationalError, transaction
 from django.db.models import Prefetch
+from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import never_cache
 from rest_framework import serializers
@@ -9,11 +10,12 @@ from rest_framework.generics import GenericAPIView
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from audit_log.service import record_activity
 from common.serializers import AUDIT_FIELDS, CatalogSerializer
 from common.view import BaseAPIMixin, BaseDetailAPIView, BaseListAPIView, BaseListCreateAPIView, BaseUpdateAPIView
 from inventory.models import Product
 from .adjustments import AdjustmentBusy, complete_adjustment, lock_editable_adjustment
-from .models import StockAdjustment, StockAdjustmentItem, WareHouse
+from .models import StockAdjustment, StockAdjustmentItem, StockCount, WareHouse
 from .scope import WarehouseScopeAPIMixin, WarehouseScopedSerializerMixin, lock_warehouse_scope, scoped_queryset, warehouse_scope
 
 
@@ -76,6 +78,9 @@ class StockAdjustmentSerializer(WarehouseScopedSerializerMixin, CatalogSerialize
         warehouse = attrs.get('warehouse', getattr(self.instance, 'warehouse', None))
         if warehouse and not warehouse.is_active and warehouse.pk != getattr(self.instance, 'warehouse_id', None):
             raise serializers.ValidationError({'warehouse': 'Choose an active warehouse.'})
+        if (self.instance and 'warehouse' in attrs and warehouse.pk != self.instance.warehouse_id
+                and StockCount.objects.filter(adjustment=self.instance).exists()):
+            raise serializers.ValidationError({'warehouse': 'Use the warehouse from the stock count.'})
         if items is not None:
             attrs['items'] = items
         return attrs
@@ -165,9 +170,16 @@ class StockAdjustmentListAPIView(StockAdjustmentAPIMixin, BaseListAPIView):
 class StockAdjustmentDetailAPIView(StockAdjustmentAPIMixin, BaseDetailAPIView):
     @transaction.atomic
     def perform_destroy(self, instance):
-        scope = lock_warehouse_scope(self.request.user)
+        actor = self.request.user
+        scope = lock_warehouse_scope(actor)
         self.check_permissions(self.request)
-        lock_editable_adjustment(instance.pk, scope).delete()
+        adjustment = lock_editable_adjustment(instance.pk, scope)
+        linked = StockCount.objects.filter(adjustment=adjustment)
+        count = linked.first()
+        if count:
+            linked.update(adjustment=None, modified_by=actor.get_username(), updated_at=timezone.now())
+            record_activity(count, 'adjustment_discarded', actor=actor)
+        adjustment.delete()
 
 
 class StockAdjustmentUpdateAPIView(StockAdjustmentAPIMixin, BaseUpdateAPIView):

@@ -1,0 +1,60 @@
+{% extends 'layouts/dashboard.html' %}
+{% load static %}
+{% block title %}Count stock | eManager{% endblock %}
+{% block content %}
+<div class="workspace-content">
+    <div class="page-heading">
+        <div><p class="page-eyebrow">Warehouses</p><h1 class="page-title">Count stock<span class="text-emerald-600">.</span></h1></div>
+        <a href="{{ list_url }}" class="secondary-button">Back to stock counts</a>
+    </div>
+    {% include 'warehouse/stock_count_errors.html' %}
+    <form method="post" data-stock-count-create>
+        {% csrf_token %}
+        <fieldset class="user-form-card">
+            <legend class="sr-only">Count scope</legend>
+            <div class="user-form-grid">
+                <div>
+                    <label class="form-label" for="count-warehouse">Warehouse</label>
+                    <select class="form-input" id="count-warehouse" name="warehouse" required>
+                        <option value="">Choose a warehouse</option>
+                        {% for warehouse in warehouses %}
+                        <option value="{{ warehouse.pk }}"{% if values.warehouse == warehouse.pk|stringformat:'s' or not values and warehouses|length == 1 %} selected{% endif %}>{{ warehouse }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="form-label" for="count-type">Count type</label>
+                    <select class="form-input" id="count-type" name="count_type" data-count-type>
+                        <option value="full">Full</option>
+                        <option value="partial"{% if values.count_type == 'partial' %} selected{% endif %}>Partial</option>
+                    </select>
+                </div>
+                <div data-partial-filter>
+                    <label class="form-label" for="count-category">Category</label>
+                    <select class="form-input" id="count-category" name="category">
+                        <option value="">Any category</option>
+                        {% for category in categories %}<option value="{{ category.pk }}"{% if values.category == category.pk|stringformat:'s' %} selected{% endif %}>{{ category.name }}</option>{% endfor %}
+                    </select>
+                </div>
+                <div data-partial-filter>
+                    <label class="form-label" for="count-brand">Brand</label>
+                    <select class="form-input" id="count-brand" name="brand">
+                        <option value="">Any brand</option>
+                        {% for brand in brands %}<option value="{{ brand.pk }}"{% if values.brand == brand.pk|stringformat:'s' %} selected{% endif %}>{{ brand.name }}</option>{% endfor %}
+                    </select>
+                </div>
+            </div>
+            <p class="section-description" data-partial-filter>Choose a category, a brand, or both for a partial count.</p>
+            <label class="mt-5 inline-flex gap-2 items-center">
+                <input type="checkbox" name="blind_count"{% if values.blind_count == 'on' %} checked{% endif %}>
+                <span class="text-sm">Blind count. Hide expected quantities while counting.</span>
+            </label>
+        </fieldset>
+        <div class="user-form-actions">
+            <a href="{{ list_url }}" class="secondary-button">Cancel</a>
+            <button class="primary-button compact-primary" type="submit">Count Stock</button>
+        </div>
+    </form>
+</div>
+{% endblock %}
+{% block workspace_js %}<script type="module" src="{% static 'warehouse/js/stock_counts.js' %}"></script>{% endblock %}

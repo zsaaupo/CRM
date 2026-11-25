@@ -1,5 +1,5 @@
 import uuid
-from decimal import Decimal
+from decimal import Decimal, localcontext
 
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
@@ -82,6 +82,94 @@ class StockAdjustmentItem(TimeStampedModel):
 
     def __str__(self):
         return f'{self.adjustment.adjustment_number} / {self.line_number}'
+
+
+class StockCount(TimeStampedModel):
+    class Type(models.TextChoices):
+        FULL = 'full', 'Full'
+        PARTIAL = 'partial', 'Partial'
+
+    class Status(models.TextChoices):
+        PENDING = 'pending', 'Pending'
+        FINALIZED = 'finalized', 'Finalized'
+
+    reference_no = models.CharField(max_length=50, unique=True, editable=False)
+    warehouse = models.ForeignKey(WareHouse, on_delete=models.PROTECT, related_name='stock_counts')
+    warehouse_name = models.CharField(max_length=200)
+    count_type = models.CharField(max_length=7, choices=Type.choices)
+    category = models.ForeignKey('inventory.ProductCategory', on_delete=models.PROTECT, null=True, blank=True)
+    category_name = models.CharField(max_length=150, blank=True)
+    brand = models.ForeignKey('inventory.Brand', on_delete=models.PROTECT, null=True, blank=True)
+    brand_name = models.CharField(max_length=150, blank=True)
+    blind_count = models.BooleanField(default=False)
+    total_items = models.PositiveIntegerField()
+    status = models.CharField(max_length=9, choices=Status.choices, default=Status.PENDING, editable=False)
+    finalized_at = models.DateTimeField(null=True, editable=False)
+    finalized_by = models.CharField(max_length=255, blank=True, editable=False)
+    adjustment = models.OneToOneField(StockAdjustment, on_delete=models.PROTECT, null=True, editable=False,
+                                      related_name='stock_count')
+
+    class Meta:
+        ordering = ['-created_at', '-pk']
+        default_permissions = ('view', 'add', 'change')
+        indexes = [models.Index(fields=['warehouse', '-created_at'], name='stock_count_wh_created_idx')]
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(count_type='full', category__isnull=True, brand__isnull=True)
+                    | (models.Q(count_type='partial') & (models.Q(category__isnull=False) | models.Q(brand__isnull=False)))
+                ),
+                name='stock_count_valid_scope',
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(status='pending', finalized_at__isnull=True, finalized_by='', adjustment__isnull=True)
+                    | (models.Q(status='finalized', finalized_at__isnull=False) & ~models.Q(finalized_by=''))
+                ),
+                name='stock_count_valid_state',
+            ),
+            models.CheckConstraint(condition=models.Q(total_items__gt=0), name='stock_count_has_items'),
+        ]
+
+    def __str__(self):
+        return self.reference_no
+
+
+class StockCountItem(models.Model):
+    stock_count = models.ForeignKey(StockCount, on_delete=models.CASCADE, related_name='items')
+    product = models.ForeignKey('inventory.Product', on_delete=models.PROTECT, related_name='stock_count_items')
+    sku = models.CharField(max_length=64)
+    product_name = models.CharField(max_length=255)
+    unit = models.ForeignKey('inventory.UnitOfMeasure', on_delete=models.PROTECT)
+    unit_code = models.CharField(max_length=20)
+    currency_code = models.CharField(max_length=3)
+    expected_qty = models.DecimalField(max_digits=18, decimal_places=6)
+    counted_qty = models.DecimalField(max_digits=18, decimal_places=6, null=True)
+    unit_cost = models.DecimalField(max_digits=18, decimal_places=4)
+    source_stock_id = models.PositiveBigIntegerField()
+    source_stock_updated_at = models.DateTimeField()
+    source_stock_event_id = models.PositiveBigIntegerField(null=True)
+    stock_moved = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ['sku', 'pk']
+        default_permissions = ()
+        constraints = [
+            models.UniqueConstraint(fields=['stock_count', 'product'], name='stock_count_item_product_unique'),
+            models.CheckConstraint(condition=models.Q(expected_qty__gte=0, counted_qty__gte=0, unit_cost__gte=0),
+                                   name='stock_count_item_values_nonnegative'),
+        ]
+
+    @property
+    def variance_qty(self):
+        return None if self.counted_qty is None else self.counted_qty - self.expected_qty
+
+    @property
+    def variance_value(self):
+        if self.counted_qty is not None:
+            with localcontext() as context:
+                context.prec = 50
+                return self.variance_qty * self.unit_cost
 
 
 class WarehouseTransfer(TimeStampedModel):

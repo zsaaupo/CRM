@@ -1,0 +1,73 @@
+{% extends 'layouts/dashboard.html' %}
+{% load static %}
+{% block title %}Finalize stock count | eManager{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'warehouse/css/stock_counts.css' %}">{% endblock %}
+{% block content %}
+<div class="workspace-content">
+    <div class="page-heading">
+        <div><p class="page-eyebrow">Warehouses</p><h1 class="page-title">Finalize stock count<span class="text-emerald-600">.</span></h1>
+            <p class="page-description"><span class="font-mono">{{ count.reference_no }}</span> · {{ count.warehouse_name }} · {{ count.total_items }} SKU{{ count.total_items|pluralize }}</p>
+        </div>
+        <a href="{{ list_url }}" class="secondary-button">Back to stock counts</a>
+    </div>
+    {% include 'warehouse/stock_count_errors.html' %}
+    <form method="post" enctype="multipart/form-data" data-stock-count-finalize novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="inline_counts" data-inline-counts>
+        <section class="user-form-card mb-6">
+            <div class="user-form-grid">
+                <div>
+                    <label class="form-label" for="count-input-method">Count entry</label>
+                    <select class="form-input" id="count-input-method" name="input_method" data-count-method>
+                        <option value="inline">Enter counts</option>
+                        <option value="csv"{% if method == 'csv' %} selected{% endif %}>Upload CSV</option>
+                    </select>
+                </div>
+                <div class="self-end">
+                    <a href="{% url 'warehouse:stock-count-initial-file' count.pk %}" class="secondary-button">Download initial CSV</a>
+                </div>
+                <fieldset class="min-w-0" data-count-method-panel="csv">
+                    <legend class="sr-only">Count sheet upload</legend>
+                    <label class="form-label" for="count-sheet">Counted file</label>
+                    <input class="form-input" id="count-sheet" type="file" name="file" accept=".csv,text/csv" aria-describedby="count-sheet-hint">
+                    <p id="count-sheet-hint" class="section-description">Fill the Counted column and upload as UTF-8 CSV, up to 5 MB. In Excel, import Product Code as text to preserve leading zeros.</p>
+                </fieldset>
+            </div>
+        </section>
+        <fieldset class="user-form-card mb-6 min-w-0" data-count-method-panel="inline">
+            <legend class="sr-only">Physical quantities</legend>
+            <h2 class="section-title">Physical quantities</h2>
+            <p class="section-description">Enter a quantity for each SKU. Enter 0 when no stock was found.</p>
+            <div class="users-table-scroll">
+                <table class="users-table">
+                    <thead><tr><th scope="col">SKU</th><th scope="col">Product</th><th scope="col">Unit</th>
+                        {% if not count.blind_count %}<th scope="col">Expected</th>{% endif %}<th scope="col">Counted</th>
+                    </tr></thead>
+                    <tbody>
+                    {% for item, value in rows %}
+                    <tr>
+                        <td class="font-mono">{{ item.sku }}</td><td>{{ item.product_name }}</td><td>{{ item.unit_code }}</td>
+                        {% if not count.blind_count %}<td>{{ item.expected_qty|floatformat:'-6u' }}</td>{% endif %}
+                        <td><input class="form-input stock-count-quantity" type="number" min="0" step="0.000001" inputmode="decimal"
+                            name="count_{{ item.pk }}" value="{{ value }}" aria-label="Counted quantity for {{ item.sku }}" data-count-sku="{{ item.sku }}"></td>
+                    </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </fieldset>
+        {% if can_post %}
+        <section class="user-form-card mb-6">
+            <label class="inline-flex items-center gap-2"><input type="checkbox" name="post_adjustment"{% if post_adjustment %} checked{% endif %}>
+                <span class="text-sm font-medium">Post stock adjustments for differences</span></label>
+            <p class="section-description">Stock movements since the snapshot can prevent posting. You can still finalize the report.</p>
+        </section>
+        {% endif %}
+        <div class="user-form-actions">
+            <a href="{{ list_url }}" class="secondary-button">Cancel</a>
+            <button type="submit" class="primary-button compact-primary">Finalize</button>
+        </div>
+    </form>
+</div>
+{% endblock %}
+{% block workspace_js %}<script type="module" src="{% static 'warehouse/js/stock_counts.js' %}"></script>{% endblock %}

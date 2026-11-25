@@ -4,6 +4,10 @@ from .adjustment_api import (
     AdjustmentCompleteAPIView, AdjustmentEditOptionsAPIView, AdjustmentOptionsAPIView, StockAdjustmentDetailAPIView,
     StockAdjustmentListAPIView, StockAdjustmentListCreateAPIView, StockAdjustmentUpdateAPIView,
 )
+from .stock_count_api import (
+    StockCountDetailAPIView, StockCountFileAPIView, StockCountFinalizeAPIView, StockCountListAPIView,
+    StockCountOptionsAPIView, StockCountReportAPIView,
+)
 
 from .api_views import (
     StockChartAPIView, StockDetailAPIView, StockListAPIView,
@@ -22,6 +26,13 @@ app_name = 'warehouse'
 urlpatterns = [
     *[path(f'reports/<int:warehouse_id>/{key}/', view.as_view(), name=f'report-{key}')
       for key, (_, view, _) in REPORTS.items()],
+    path('stock-counts/', StockCountListAPIView.as_view(), name='stock-count-list'),
+    path('stock-counts/options/', StockCountOptionsAPIView.as_view(), name='stock-count-options'),
+    path('stock-counts/<int:pk>/', StockCountDetailAPIView.as_view(), name='stock-count-detail'),
+    path('stock-counts/<int:pk>/initial-file/', StockCountFileAPIView.as_view(), name='stock-count-initial-file'),
+    path('stock-counts/<int:pk>/finalize/', StockCountFinalizeAPIView.as_view(), name='stock-count-finalize'),
+    path('stock-counts/<int:pk>/final-file/', StockCountFileAPIView.as_view(final=True), name='stock-count-final-file'),
+    path('stock-counts/<int:pk>/report/', StockCountReportAPIView.as_view(), name='stock-count-report'),
     path('adjustments/options/', AdjustmentOptionsAPIView.as_view(), name='adjustment-options'),
     path('adjustments/edit-options/', AdjustmentEditOptionsAPIView.as_view(), name='adjustment-edit-options'),
     path('adjustments/complete/', AdjustmentCompleteAPIView.as_view(), name='adjustment-complete'),

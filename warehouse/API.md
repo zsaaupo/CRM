@@ -330,3 +330,44 @@ Repeated products are combined before stock checks, and a failure on any line
 rolls back every product. The create/edit page supports Add item and Remove item;
 details show a product table. Existing single-product transfers are migrated
 to one line, preserving audit values and completion state without moving stock.
+
+## Stock counts
+
+Warehouses → Stock counts lists pending and finalized counts. Create a full
+snapshot of an active warehouse or choose category, brand, or both for a
+partial count. Each snapshot includes eligible SKUs with zero balances and
+freezes their quantities, units, costs, and currencies.
+
+| URL | Methods | Purpose |
+| --- | --- | --- |
+| `/warehouse/api/stock-counts/` | GET, POST | Search, sort, and list counts or create a snapshot |
+| `/warehouse/api/stock-counts/options/` | GET | Active warehouse, category, and brand choices |
+| `/warehouse/api/stock-counts/<id>/` | GET | Snapshot details |
+| `/warehouse/api/stock-counts/<id>/initial-file/` | GET | Download the initial CSV |
+| `/warehouse/api/stock-counts/<id>/finalize/` | POST | Validate counts and finalize once |
+| `/warehouse/api/stock-counts/<id>/final-file/` | GET | Download the counted CSV |
+| `/warehouse/api/stock-counts/<id>/report/` | GET | Read the finalized reconciliation |
+
+Create with `warehouse`, `count_type` (`full` or `partial`), optional `category`
+and `brand` IDs, and optional `blind_count`. The list accepts `q`, `ordering`,
+`page`, and `page_size` (`10`, `25`, `50`, or `all`).
+
+Finalize with multipart `file` or a JSON `items` array containing one
+`{"sku":"A-100","counted_qty":"0"}` entry for each snapshot SKU. Counted
+quantities support six decimal places. The CSV headings are Product Name,
+Product Code, IMEI or Serial Numbers, Expected, and Counted. Save as UTF-8.
+
+Reading requires `warehouse.view_stockcount`. Creating and finalizing also
+require `warehouse.add_stockcount` and `warehouse.change_stockcount`, respectively.
+Every route uses the current user's warehouse scope. To post the variance,
+submit `post_adjustment: true` with stock adjustment add and change permissions.
+Posting and finalization commit together, and posting returns a conflict if
+stock moved after the snapshot for a SKU with a variance. The count can still
+be finalized for reporting. A retry of a successful submission returns
+`finalized_now: false`.
+
+The Final Report page offers **Create Draft Adjustment** for a finalized count
+with SKU differences. Stock count view and stock adjustment add permissions
+allow draft creation. The report links to the draft. Complete it from Stock
+Adjustments to apply its quantities. Completion checks for stock movement
+since the count on the affected SKUs. Deleting the draft clears the report link.

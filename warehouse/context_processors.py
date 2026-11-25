@@ -2,6 +2,7 @@ from account.permissions import has_role_permissions
 from rest_framework.exceptions import PermissionDenied
 from .activity import available_reports
 from .scope import all_warehouse_access, warehouse_scope
+from .stock_counts import VIEW_COUNT
 
 
 def warehouse_navigation(request):
@@ -10,7 +11,8 @@ def warehouse_navigation(request):
         scope = warehouse_scope(user)
     except PermissionDenied:
         return {'warehouse_access': dict.fromkeys(
-            ('report', 'view', 'stock', 'stock_chart', 'adjustments', 'transfers', 'add_transfer', 'add'), False,
+            ('report', 'view', 'stock', 'stock_chart', 'adjustments', 'stock_counts', 'transfers', 'add_transfer', 'add'),
+            False,
         )}
     can_view = has_role_permissions(user, ('warehouse.view_warehouse',))
     can_view_stock = has_role_permissions(user, ('warehouse.view_stock',))
@@ -20,6 +22,7 @@ def warehouse_navigation(request):
         'stock': can_view_stock,
         'stock_chart': can_view_stock,
         'adjustments': has_role_permissions(user, ('warehouse.view_stockadjustment',)),
+        'stock_counts': has_role_permissions(user, VIEW_COUNT),
         'transfers': has_role_permissions(user, ('warehouse.view_warehousetransfer',)),
         'add_transfer': all_warehouse_access(scope) and has_role_permissions(user, ('warehouse.view_warehousetransfer',
                         'warehouse.add_warehousetransfer')),

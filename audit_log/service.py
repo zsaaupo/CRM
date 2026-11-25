@@ -43,7 +43,7 @@ POLICIES = dict.fromkeys('''
     hrm.payrolldeductionrule hrm.employeeloan hrm.loaninstallment
 '''.split(), Visibility())
 POLICIES.update(dict.fromkeys('''
-    warehouse.stock warehouse.stockadjustment purchase.purchaseorder sale.salesorder sale.salesquotation
+    warehouse.stock warehouse.stockadjustment warehouse.stockcount purchase.purchaseorder sale.salesorder sale.salesquotation
     accounting.expense accounting.income accounting.financialaccount
 '''.split(), Visibility(('warehouse_id',))))
 POLICIES.update({
@@ -176,7 +176,7 @@ class AuditLogSerializer(serializers.ModelSerializer):
 
 active_request = ContextVar('audit_log_request', default=None)
 REFERENCE_FIELDS = ('order_number', 'return_number', 'quotation_number', 'adjustment_number',
-                    'transfer_number', 'sku', 'employee_code', 'code', 'number')
+                    'transfer_number', 'sku', 'employee_code', 'code', 'number', 'reference_no')
 
 
 def audit_request(get_response):
