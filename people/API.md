@@ -1,10 +1,8 @@
 # Party model and APIs
 
-A Party is a customer, supplier, both, or an exclusive biller. When
-`is_biller=true`, both `is_customer` and `is_supplier` must be false. The model
-lives in `people.models` and inherits the shared timestamp and actor fields.
-`code` and `name` are required; set `is_biller` or at least one of `is_customer`
-or `is_supplier` to true. Codes are
+A Party is one customer, supplier, or both. The model lives in `people.models`
+and inherits the shared timestamp and actor fields. `code` and `name` are
+required; set at least one of `is_customer` or `is_supplier` to true. Codes are
 trimmed and uppercased by the API and model validation, with a database constraint
 against duplicate codes regardless of case or surrounding spaces. Names may
 repeat. Records default to active and sort by name, then ID.
@@ -76,12 +74,11 @@ still readable until deleted. Codes remain reserved after soft deletion.
 Lists return `count`, `next`, `previous` and `results`, with 20 rows per page.
 Use `?page=2` for pagination and `?q=example` to search code, name, contact person,
 email, phone numbers, tax number or address fields. Optional boolean filters
-are `is_customer`, `is_supplier`, `is_biller` and `is_active`:
+are `is_customer`, `is_supplier` and `is_active`:
 
 `/people/api/parties/?is_supplier=true&is_active=true&q=trading`
 
-A party with both customer and supplier roles appears in both searches. Billers
-appear only in biller searches.
+A party with both roles appears in both customer and supplier searches.
 Invalid values return 400 with field errors; unauthenticated or unauthorized
 requests return 403, missing records return 404. Lists are never cached.
 
@@ -112,28 +109,27 @@ referencing purchases as records to remove or as blockers to soft deletion.
 
 ## People pages
 
-The People sidebar contains Supplier list, Add supplier, Customer list, Add
-customer, Biller list and Add biller in that order. Lists and details require
-`people.view_party`; add and edit pages additionally require `people.add_party` and `people.change_party`
+The People sidebar contains Supplier list, Add supplier, Customer list and Add
+customer in that order. Lists and details require `people.view_party`; add and
+edit pages additionally require `people.add_party` and `people.change_party`
 respectively. Row actions show view, edit and delete icons according to those
 permissions; deletion requires `people.delete_party` and CSRF.
 
-| Page | Supplier | Customer | Biller |
-| --- | --- | --- | --- |
-| List | `/people/suppliers/` | `/people/customers/` | `/people/billers/` |
-| Add | `/people/suppliers/add/` | `/people/customers/add/` | `/people/billers/add/` |
-| Detail | `/people/suppliers/<id>/` | `/people/customers/<id>/` | `/people/billers/<id>/` |
-| Edit | `/people/suppliers/<id>/edit/` | `/people/customers/<id>/edit/` | `/people/billers/<id>/edit/` |
+| Page | Supplier | Customer |
+| --- | --- | --- |
+| List | `/people/suppliers/` | `/people/customers/` |
+| Add | `/people/suppliers/add/` | `/people/customers/add/` |
+| Detail | `/people/suppliers/<id>/` | `/people/customers/<id>/` |
+| Edit | `/people/suppliers/<id>/edit/` | `/people/customers/<id>/edit/` |
 
 Pages use plain HTML and the existing API form/list controllers. The primary
-role is checked and locked on each form; customer and supplier forms allow
-their complementary role, while biller forms lock customer and supplier off.
-Add uses POST, edit loads GET and saves PATCH,
+role is checked and locked on each form; the other role can be selected so one
+party appears in both lists. Add uses POST, edit loads GET and saves PATCH,
 and successful saves redirect to the matching list. Details load through GET.
 
-Lists use `?is_supplier=true`, `?is_customer=true`, or `?is_biller=true` on the
-party list API. The same optional filters now apply to detail, update and delete endpoints to
-prevent a role page from targeting a record outside its role.
+Lists use `?is_supplier=true` or `?is_customer=true` on the party list API.
+The same optional filters now apply to detail, update and delete endpoints to
+prevent a supplier page from targeting a customer-only record and vice versa.
 These filters select records, not grant permissions. Generic unfiltered APIs
 remain available under the existing Party permissions.
 

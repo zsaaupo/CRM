@@ -9,7 +9,6 @@ class PartyModelTests(TestCase):
     def test_shared_roles_optional_details_normalization_and_display(self):
         for index, roles in enumerate([
             {'is_customer': True}, {'is_supplier': True}, {'is_customer': True, 'is_supplier': True},
-            {'is_biller': True},
         ]):
             with self.subTest(roles=roles):
                 party = Party(code=f'  party-{index}  ', name='  Example company  ', **roles)
@@ -24,8 +23,7 @@ class PartyModelTests(TestCase):
                 self.assertIsNotNone(party.updated_at)
 
     def test_validation_rejects_missing_roles_whitespace_and_invalid_contacts(self):
-        for changes in [{'is_supplier': False}, {'is_biller': True, 'is_supplier': True},
-                        {'is_biller': True, 'is_customer': True}, {'code': '   '}, {'name': '   '},
+        for changes in [{'is_supplier': False}, {'code': '   '}, {'name': '   '},
                         {'email': 'invalid'}, {'website': 'invalid'}, {'code': 'A' * 41}]:
             with self.subTest(changes=changes):
                 party = Party(**{'code': 'SUP-1', 'name': 'Supplier', 'is_supplier': True, **changes})
@@ -40,10 +38,6 @@ class PartyModelTests(TestCase):
                     Party.objects.create(code=code, name='Duplicate', is_customer=True)
         with self.assertRaises(IntegrityError), transaction.atomic():
             Party.objects.create(code='NO-ROLE', name='Missing role')
-        Party.objects.create(code='BILLER', name='Biller', is_biller=True)
-        for roles in [{'is_customer': True, 'is_biller': True}, {'is_supplier': True, 'is_biller': True}]:
-            with self.subTest(roles=roles), self.assertRaises(IntegrityError), transaction.atomic():
-                Party.objects.create(code='MIXED', name='Invalid biller', **roles)
 
     def test_ordering_is_stable_for_duplicate_names(self):
         first = Party.objects.create(code='B', name='Same', is_supplier=True)

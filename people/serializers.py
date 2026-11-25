@@ -36,7 +36,7 @@ class PartySerializer(CatalogSerializer):
     class Meta:
         model = Party
         fields = [
-            'id', 'code', 'name', 'image', 'is_customer', 'is_supplier', 'is_biller', 'contact_person',
+            'id', 'code', 'name', 'image', 'is_customer', 'is_supplier', 'contact_person',
             'email', 'phone', 'alternate_phone', 'website', 'tax_number', 'address',
             'city', 'state', 'postal_code', 'country', 'notes', 'is_active',
             'is_deleted', 'deleted_at', 'deleted_by', *AUDIT_FIELDS[1:],
@@ -47,5 +47,4 @@ class PartySerializer(CatalogSerializer):
 class PartyFilterSerializer(serializers.Serializer):
     is_customer = serializers.BooleanField(required=False)
     is_supplier = serializers.BooleanField(required=False)
-    is_biller = serializers.BooleanField(required=False)
     is_active = serializers.BooleanField(required=False)

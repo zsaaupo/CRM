@@ -28,7 +28,6 @@ class PartyPageTests(TestCase):
         self.client.force_login(self.user)
         self.supplier = Party.objects.create(code='SUP-1', name='Supplier', is_supplier=True)
         self.customer = Party.objects.create(code='CUST-1', name='Customer', is_customer=True)
-        self.biller = Party.objects.create(code='BILL-1', name='Biller', is_biller=True)
         self.both = Party.objects.create(code='BOTH', name='Both roles', is_supplier=True, is_customer=True)
         deleted = Party.objects.create(code='DELETED', name='Deleted', is_supplier=True, is_customer=True)
         deleted.delete(actor='original-deleter')
@@ -51,12 +50,12 @@ class PartyPageTests(TestCase):
         self.client.credentials(HTTP_X_CSRFTOKEN=token)
 
     def test_pages_require_login_and_action_permissions(self):
-        for role in ('supplier', 'customer', 'biller'):
+        for role in ('supplier', 'customer'):
             for url in self.pages(role).values():
                 self.assertRedirects(Client().get(url), reverse('account_pages:login'))
                 self.assertEqual(self.client.get(url).status_code, 403)
         self.grant('view')
-        for role in ('supplier', 'customer', 'biller'):
+        for role in ('supplier', 'customer'):
             pages = self.pages(role)
             for mode in ('list', 'detail'):
                 response = self.client.get(pages[mode])
@@ -70,7 +69,7 @@ class PartyPageTests(TestCase):
             self.assertNotContains(listing, 'data-catalog-delete-dialog')
             self.assertNotContains(listing, f'href="{pages["add"]}"')
         self.grant('add', 'change')
-        for role in ('supplier', 'customer', 'biller'):
+        for role in ('supplier', 'customer'):
             for url in self.pages(role).values():
                 self.assertEqual(self.client.get(url).status_code, 200)
 
@@ -84,55 +83,15 @@ class PartyPageTests(TestCase):
         self.assertContains(response, 'data-people-toggle')
         submenu = response.content.decode().split('<div id="people-submenu"', 1)[1].split('</div>', 1)[0]
         positions = []
-        for role in ('supplier', 'customer', 'biller'):
+        for role in ('supplier', 'customer'):
             positions += [submenu.index(f'href="{self.pages(role)[mode]}"') for mode in ('list', 'add')]
         self.assertEqual(positions, sorted(positions))
-        for role in ('supplier', 'customer', 'biller'):
+        for role in ('supplier', 'customer'):
             for mode, url in self.pages(role).items():
                 page = self.client.get(url)
                 self.assertContains(page, 'aria-controls="people-submenu" aria-expanded="true"')
                 label = f'Add {role}' if mode == 'add' else f'{role.capitalize()} list'
                 self.assertContains(page, f'aria-current="page">{label}')
-
-    def test_biller_pages_use_exclusive_party_api_and_scoped_list(self):
-        self.grant('view', 'add', 'change')
-        listing = self.client.get(self.pages('biller')['list'])
-        self.assertEqual(listing.context['list_api_url'], reverse('people:party-list-view') + '?is_biller=true')
-        self.assertEqual(self.client.get(listing.context['list_api_url']).data['count'], 1)
-        self.assertContains(listing, 'Biller list')
-        self.assertContains(listing, '/people/billers/0/')
-        adding = self.client.get(self.pages('biller')['add'])
-        fields = PartyPageInputs(adding.content.decode()).fields
-        self.assertEqual(set(fields) - {'csrfmiddlewaretoken'}, {
-            'code', 'name', 'image', 'is_biller', 'is_customer', 'is_supplier', 'contact_person',
-            'phone', 'alternate_phone', 'email', 'website', 'tax_number', 'address', 'city',
-            'state', 'postal_code', 'country', 'notes', 'is_active',
-        })
-        self.assertIn('checked', fields['is_biller'])
-        self.assertIn('disabled', fields['is_biller'])
-        self.assertIn('disabled', fields['is_customer'])
-        self.assertIn('disabled', fields['is_supplier'])
-        self.assertContains(adding, 'action="/people/api/parties/"')
-        self.csrf()
-        created = self.client.post(adding.context['create_api_url'], {
-            'code': 'BILL-2', 'name': 'New Biller', 'is_biller': True,
-            'is_customer': False, 'is_supplier': False,
-        }, format='json')
-        self.assertEqual(created.status_code, 201, created.data)
-        record_id = created.data['party']['id']
-        detail = self.client.get(reverse('people_pages:biller-detail', args=[record_id]))
-        self.assertContains(detail, f'data-api-url="/people/api/parties/{record_id}/?is_biller=true"')
-        self.assertContains(detail, 'data-detail-field="is_biller"')
-        editing = self.client.get(reverse('people_pages:edit-biller', args=[record_id]))
-        self.assertEqual(editing.context['detail_api_url'],
-                         reverse('people:party-detail', args=[record_id]) + '?is_biller=true')
-        self.assertEqual(editing.context['create_api_url'],
-                         reverse('people:party-update', args=[record_id]) + '?is_biller=true')
-        updated = self.client.patch(editing.context['create_api_url'], {'name': 'Updated Biller'}, format='json')
-        self.assertEqual(updated.status_code, 200, updated.data)
-        self.assertEqual(updated.data['name'], 'Updated Biller')
-        wrong_scope = reverse('people:party-detail', args=[self.supplier.pk]) + '?is_biller=true'
-        self.assertEqual(self.client.get(wrong_scope).status_code, 404)
 
     def test_lists_filter_roles_include_dual_roles_and_preserve_pagination_filter(self):
         self.grant('view')
@@ -250,7 +209,7 @@ class PartyPageTests(TestCase):
         group = Group.objects.create(name='People readers')
         group.permissions.add(Permission.objects.get(content_type__app_label='people', codename='view_party'))
         self.user.groups.add(group)
-        for role in ('supplier', 'customer', 'biller'):
+        for role in ('supplier', 'customer'):
             self.assertEqual(self.client.get(self.pages(role)['list']).status_code, 200)
             self.assertEqual(self.client.get(self.pages(role)['detail']).status_code, 200)
         missing = reverse('people_pages:supplier-detail', args=[999999])

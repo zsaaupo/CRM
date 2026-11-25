@@ -103,26 +103,6 @@ class PartyAPITests(TestCase):
         self.assertTrue(response.data['is_customer'])
         self.assertFalse(response.data['is_supplier'])
 
-    def test_billers_are_exclusive_and_can_be_filtered(self):
-        self.grant('add', 'view', 'change')
-        response = self.client.post(self.url, {'code': 'BILL-1', 'name': 'Biller', 'is_biller': True}, format='json')
-        self.assertEqual(response.status_code, 201, response.data)
-        biller = response.data['party']
-        self.assertTrue(biller['is_biller'])
-        self.assertFalse(biller['is_customer'])
-        self.assertFalse(biller['is_supplier'])
-        self.assertEqual(self.client.get(self.readonly, {'is_biller': 'true'}).data['count'], 1)
-        for conflicting_role in ('is_customer', 'is_supplier'):
-            invalid = self.client.post(self.url, {
-                'code': f'INVALID-{conflicting_role}', 'name': 'Invalid biller',
-                'is_biller': True, conflicting_role: True,
-            }, format='json')
-            self.assertEqual(invalid.status_code, 400, invalid.data)
-        detail = reverse('people:party-detail', args=[biller['id']])
-        invalid_update = self.client.patch(detail, {'is_supplier': True}, format='json')
-        self.assertEqual(invalid_update.status_code, 400, invalid_update.data)
-        self.assertTrue(Party.objects.get(pk=biller['id']).is_biller)
-
     def test_minimal_and_multipart_payloads_preserve_optional_defaults(self):
         self.grant('add')
         response = self.client.post(self.url, {'code': 'CUST-1', 'name': 'Customer', 'is_customer': True}, format='json')
@@ -151,7 +131,7 @@ class PartyAPITests(TestCase):
         self.assertEqual(self.client.get(self.url, {'is_supplier': 'false'}).data['results'][0]['id'], customer.pk)
         self.assertEqual(self.client.get(self.url, {'q': 'SEARCH@EXAMPLE'}).data['count'], 1)
         self.assertEqual(self.client.get(self.url, {'q': '  sup-1  '}).data['results'][0]['id'], self.record.pk)
-        for name in ['is_supplier', 'is_customer', 'is_biller', 'is_active']:
+        for name in ['is_supplier', 'is_customer', 'is_active']:
             self.assertEqual(self.client.get(self.url, {name: 'invalid'}).status_code, 400)
         Party.objects.bulk_create([Party(code=f'EXTRA-{i}', name=f'Extra {i:02}', is_customer=True) for i in range(21)])
         first = self.client.get(self.url).data

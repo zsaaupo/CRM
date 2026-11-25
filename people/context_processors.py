@@ -14,7 +14,7 @@ def people_navigation(request):
              'add_label': f'Add {role}', 'can_add': can_add_party,
              'list_url': reverse(f'people_pages:{role}-list'),
              'add_url': reverse(f'people_pages:add-{role}')}
-            for role in ('supplier', 'customer', 'biller')
+            for role in ('supplier', 'customer')
         ]
 
     can_view_lead = user.has_perm('people.view_lead')

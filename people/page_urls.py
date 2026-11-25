@@ -14,7 +14,7 @@ urlpatterns = [
     path('leads/<int:pk>/', LeadDetailPageView.as_view(), name='lead-detail'),
     path('leads/<int:pk>/edit/', LeadEditPageView.as_view(), name='edit-lead'),
 ]
-for role in ('supplier', 'customer', 'biller'):
+for role in ('supplier', 'customer'):
     urlpatterns += [
         path(f'{role}s/', PartyListPageView.as_view(party_role=role), name=f'{role}-list'),
         path(f'{role}s/add/', PartyAddPageView.as_view(party_role=role), name=f'add-{role}'),
