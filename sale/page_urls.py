@@ -1,4 +1,5 @@
 from django.urls import path
+from .quotation_purchase import QuotePurchasePage
 
 from accounting.page_views import SalesPaymentListPageView
 
@@ -12,6 +13,7 @@ from .page_views import (
 app_name = 'sale_pages'
 
 urlpatterns = [
+    path('quotations/<int:pk>/purchase/', QuotePurchasePage.as_view(), name='quote-purchase'),
     path('sales-orders/<int:pk>/edit/', SalesEditPageView.as_view(), name='edit-sale'),
     path('sales-orders/', SalesListPageView.as_view(), name='sale-list'),
     path('sales-orders/add/', SalesCreatePageView.as_view(), name='create-sale'),

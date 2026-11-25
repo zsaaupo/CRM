@@ -1,4 +1,8 @@
 {% include 'inventory/includes/field.html' with name='name' label='Account name' required=True maxlength=150 only %}
+{% include 'inventory/includes/field.html' with name='account_number' label='Account number' maxlength=100 only %}
+{% include 'inventory/includes/field.html' with name='account_holder' label='Account holder' maxlength=150 only %}
+{% include 'inventory/includes/field.html' with name='bank_name' label='Bank name' maxlength=150 only %}
+{% include 'inventory/includes/field.html' with name='note' label='Note' field_type='textarea' only %}
 {% if financial_account %}
 <div class="user-form-full text-sm text-stone-600">
     {{ financial_account.get_type_display }} · {{ financial_account.warehouse.name|default:'Shared' }}

@@ -11,6 +11,7 @@ from rest_framework.exceptions import APIException, NotFound, PermissionDenied, 
 from account.permissions import has_role_permissions
 from accounting.services import post_purchase_return_refund, return_refund_amount
 from inventory.models import Product
+from warehouse.movements import record_lines
 from warehouse.models import Stock, WareHouse
 from warehouse.scope import lock_warehouse_scope, scoped_queryset
 
@@ -145,6 +146,9 @@ def complete_return(user, pk):
             for line_id, quantity in quantities.items():
                 stock_quantities[received[line_id].product_id] += quantity
             deduct_stock(warehouse, stock_quantities, products, user, now)
+            lines = record.items.select_related('purchase_order_item').all()
+            record_lines(warehouse.pk, record, lines, 'purchase_return', record.return_date, user,
+                         original_line='purchase_order_item')
             post_purchase_return_refund(record, scope, user, date=timezone.localdate(now),
                                         amount=return_refund_amount(order, quantities, previous))
             return record, True

@@ -10,6 +10,11 @@ export function salesPayload(form) {
     payload.expected_delivery_date ||= null;
     payload.customer ||= null;
     payload.warehouse ||= null;
+    const mode = form.elements.namedItem("settlement_mode");
+    if (mode) {
+        payload.settlement_mode = mode.value;
+        payload.payment_account ||= null;
+    }
     payload.items = [...form.querySelectorAll("[data-sale-line]")].map((row, index) => ({
         line_number: index + 1,
         ...(row.dataset.itemId ? {id: Number(row.dataset.itemId)} : {}),
@@ -219,6 +224,7 @@ export function initializeSalesForm(form) {
                     field('warehouse').append(historical);
                 }
                 for (const name of quotation ? quotationFields : headerFields) field(name).value = record[name] ?? '';
+                if (field("settlement_mode")) field("settlement_mode").value = record.settlement_mode || "auto_full";
                 field('exchange_rate').readOnly = record.currency === options.base_currency;
             }
             if (!quotation) updatePaymentAccounts(record?.payment_account ?? "");

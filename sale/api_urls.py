@@ -1,4 +1,6 @@
 from django.urls import path
+from .quotation_purchase import QuotePurchaseAPI
+from common.order_copy import DuplicateOrderView
 
 from .api_views import (
     QuotationActionAPIView, QuotationDetailAPIView, QuotationListCreateAPIView, QuotationOptionsAPIView,
@@ -13,6 +15,8 @@ from .return_api import (SalesReturnCompleteAPIView, SalesReturnDetailAPIView, S
 app_name = 'sale'
 
 urlpatterns = [
+    path('quotations/<int:pk>/convert-purchase/', QuotePurchaseAPI.as_view(), name='quote-purchase'),
+    path('sales-orders/<int:pk>/duplicate/', DuplicateOrderView.as_view(), name='duplicate-order'),
     path('sales-orders/complete/', SaleCompleteAPIView.as_view(), name='sales-order-complete'),
     path('sales-orders/edit-options/', SalesEditOptionsAPIView.as_view(), name='sales-edit-options'),
     path('sales-orders/options/', SalesOptionsAPIView.as_view(), name='sale-options'),

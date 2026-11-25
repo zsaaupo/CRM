@@ -39,6 +39,60 @@ class Stock(TimeStampedModel):
         return f'{self.product} - {self.warehouse}: {self.quantity}'
 
 
+class StockMovement(models.Model):
+    class Kind(models.TextChoices):
+        OPENING = 'opening', 'Opening balance'
+        RECEIPT = 'receipt', 'Purchase receipt'
+        ISSUE = 'issue', 'Sale'
+        SALE_RETURN = 'sale_return', 'Sales return'
+        PURCHASE_RETURN = 'purchase_return', 'Purchase return'
+        TRANSFER_OUT = 'transfer_out', 'Transfer out'
+        TRANSFER_IN = 'transfer_in', 'Transfer in'
+        COUNT = 'count', 'Physical count adjustment'
+
+    warehouse = models.ForeignKey(WareHouse, on_delete=models.PROTECT)
+    product = models.ForeignKey('inventory.Product', on_delete=models.PROTECT)
+    unit = models.ForeignKey('inventory.UnitOfMeasure', on_delete=models.PROTECT)
+    quantity = models.DecimalField(max_digits=18, decimal_places=6)
+    kind = models.CharField(max_length=24, choices=Kind.choices)
+    source_id = models.PositiveBigIntegerField()
+    source_line_id = models.PositiveBigIntegerField(null=True)
+    posting_key = models.CharField(max_length=128, unique=True)
+    business_date = models.DateField(db_index=True)
+    posted_at = models.DateTimeField(default=timezone.now)
+    posted_by = models.CharField(max_length=255)
+    unit_cost_base = models.DecimalField(max_digits=30, decimal_places=8, null=True)
+
+    class Meta:
+        ordering = ['-pk']
+        indexes = [models.Index(fields=['warehouse', 'product', 'business_date'])]
+        constraints = [models.CheckConstraint(condition=~models.Q(quantity=0), name='warehouse_movement_nonzero')]
+
+
+class StockCount(TimeStampedModel):
+    request_key = models.UUIDField(unique=True)
+    warehouse = models.ForeignKey(WareHouse, on_delete=models.PROTECT)
+    full_count = models.BooleanField(default=True)
+    note = models.CharField(max_length=250, blank=True)
+    finalized_at = models.DateTimeField(null=True, editable=False)
+
+    class Meta:
+        ordering = ['-pk']
+
+
+class StockCountLine(models.Model):
+    count = models.ForeignKey(StockCount, on_delete=models.CASCADE, related_name='lines')
+    product = models.ForeignKey('inventory.Product', on_delete=models.PROTECT)
+    unit = models.ForeignKey('inventory.UnitOfMeasure', on_delete=models.PROTECT)
+    expected = models.DecimalField(max_digits=18, decimal_places=6)
+    last_movement = models.PositiveBigIntegerField(default=0)
+    counted = models.DecimalField(max_digits=18, decimal_places=6, null=True)
+
+    class Meta:
+        ordering = ['product_id']
+        constraints = [models.UniqueConstraint(fields=['count', 'product'], name='warehouse_count_product')]
+
+
 class WarehouseTransfer(TimeStampedModel):
     """A draft containing product lines; stock moves only on completion."""
 

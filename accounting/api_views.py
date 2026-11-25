@@ -280,7 +280,7 @@ class FinancialAccountSerializer(WarehouseScopedSerializerMixin, CatalogSerializ
     class Meta:
         model = FinancialAccount
         fields = [*AUDIT_FIELDS, 'name', 'type', 'type_label', 'warehouse', 'warehouse_name', 'currency',
-                  'opening_balance', 'balance', 'is_active']
+                  'opening_balance', 'balance', 'is_active', 'account_number', 'account_holder', 'bank_name', 'note']
         read_only_fields = [*AUDIT_FIELDS, 'currency']
 
     def get_balance(self, account):

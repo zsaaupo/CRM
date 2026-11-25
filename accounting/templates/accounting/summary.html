@@ -1,0 +1,18 @@
+{% extends "layouts/dashboard.html" %}
+{% block title %}Accounting reports | eManager{% endblock %}
+{% block content %}
+<div class="workspace-content">
+    <h1 class="page-title">{% if kind == 'balances' %}Account balances{% else %}Income and expenses{% endif %}</h1>
+    <form method="get" class="user-form-grid my-5">{{ form.as_div }}<button class="secondary-button">Apply filters</button></form>
+    {% if totals %}<p>{{ start }} – {{ end }} · {{ currency }}</p>
+    {% if kind == 'balances' %}
+    <table class="w-full"><thead><tr><th>Account</th><th>Opening</th><th>Received</th><th>Sent</th><th>Closing</th></tr></thead>
+    <tbody>{% for row in rows %}<tr><td>{{ row.name }}</td><td>{{ row.opening }}</td><td>{{ row.received }}</td><td>{{ row.sent }}</td><td>{{ row.closing }}</td></tr>{% endfor %}</tbody>
+    <tfoot><tr><th>Total</th><td>{{ totals.opening }}</td><td>{{ totals.received }}</td><td>{{ totals.sent }}</td><td>{{ totals.closing }}</td></tr></tfoot></table>
+    {% else %}
+    <p class="page-description">Completed income {{ totals.income }} · Completed expenses {{ totals.expense }} · Difference {{ totals.difference }}</p>
+    <table class="w-full"><thead><tr><th>Type</th><th>Category</th><th>Amount</th></tr></thead>
+    <tbody>{% for row in rows %}<tr><td>{{ row.kind|capfirst }}</td><td>{{ row.category }}</td><td>{{ row.amount }}</td></tr>{% empty %}<tr><td colspan="3">No completed entries for this period.</td></tr>{% endfor %}</tbody></table>
+    {% endif %}{% endif %}
+</div>
+{% endblock %}

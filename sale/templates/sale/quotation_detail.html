@@ -16,6 +16,7 @@
     </div>
     {% include 'includes/detail_status.html' %}
     <div data-record-content hidden>
+        {% if procure_url %}<a class="secondary-button mb-5" href="{{ procure_url }}">Purchase from quotation</a>{% endif %}
         <section class="user-form-card mb-6" aria-labelledby="quotation-information">
             <h2 id="quotation-information" class="section-title mb-5">Quotation details</h2>
             <dl class="profile-grid">
@@ -41,6 +42,7 @@
                 <p class="form-status mt-4" data-quotation-feedback role="status" tabindex="-1" hidden></p>
                 {% if show_payment_account %}
                 <div class="mt-4" data-quotation-payment-account hidden>
+                    {% include 'accounting/fields/settlement_mode.html' %}
                     {% include 'accounting/fields/accounts_select.html' with name='payment_account' label='Receive into account' accounts=payment_accounts only %}
                 </div>
                 {% endif %}

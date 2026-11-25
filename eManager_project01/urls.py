@@ -7,6 +7,7 @@ from django.views.generic import RedirectView
 from account.page_views import DashboardPageView
 
 urlpatterns = [
+    path('tasks/', include('tasks.urls')),
     path('', RedirectView.as_view(pattern_name='dashboard', permanent=False), name='home'),
     path('dashboard/', DashboardPageView.as_view(), name='dashboard'),
     path('admin/', admin.site.urls),

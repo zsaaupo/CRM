@@ -57,8 +57,7 @@ class PurchaseReturnDetailSerializer(PurchaseReturnSerializer):
     def get_refund_amount(self, record):
         if not record.is_completed:
             return None
-        payment = getattr(record, 'refund_payment', None)
-        return format(payment.amount if payment else ZERO, '.4f')
+        return format(sum((p.amount for p in record.refund_payments.all()), ZERO), '.4f')
 
     def get_currency(self, record):
         return base_currency()
@@ -208,7 +207,7 @@ class PurchaseReturnDetailAPIView(PurchaseReturnResource, BaseDetailAPIView):
         return PurchaseReturnWriteSerializer if self.request.method in ('PATCH', 'PUT') else PurchaseReturnDetailSerializer
 
     def get_queryset(self):
-        queryset = super().get_queryset().select_related('refund_payment')
+        queryset = super().get_queryset().prefetch_related('refund_payments')
         if has_role_permissions(self.request.user, ('purchase.view_purchasereturnitem',)):
             return queryset.prefetch_related(Prefetch('items', queryset=PurchaseReturnItem.objects.select_related(
                 'purchase_order_item__unit', 'purchase_order_item__product')))

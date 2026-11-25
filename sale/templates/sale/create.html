@@ -24,7 +24,8 @@
                 {% include 'inventory/includes/field.html' with name='valid_until' label='Valid until' field_type='date' required=True value=valid_until|date:'Y-m-d' only %}
                 {% else %}
                 {% include 'inventory/includes/field.html' with name='warehouse' label='Warehouse' field_type='select' hint='Optional while preparing the order.' only %}
-                {% include 'inventory/includes/field.html' with name='payment_account' label='Receive into account' field_type='select' required=True only %}
+                {% include 'accounting/fields/settlement_mode.html' %}
+                {% include 'inventory/includes/field.html' with name='payment_account' label='Receive into account' field_type='select' hint='Required for automatic payment.' only %}
                 {% include 'inventory/includes/field.html' with name='order_date' label='Order date' field_type='date' required=True value=today|date:'Y-m-d' only %}
                 {% endif %}
                 {% include 'inventory/includes/field.html' with name='expected_delivery_date' label='Expected date' field_type='date' only %}

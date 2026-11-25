@@ -4,11 +4,11 @@ from django.core.exceptions import PermissionDenied
 from account.permissions import has_role_permissions
 from common.admin import AuditedAdmin
 from warehouse.admin import WarehouseScopedAdmin
-from warehouse.scope import scoped_queryset
+from warehouse.scope import all_warehouse_access, scoped_queryset
 
 from .models import (
     AccountTransaction, AccountTransfer, Expense, ExpenseCategory, ExpensePayment, FinancialAccount, PurchasePayment,
-    Income, IncomeCategory, IncomePayment, SalesPayment,
+    Income, IncomeCategory, IncomePayment, SalesPayment, SettlementCommand,
 )
 from .services import (
     INCOME_PAYMENT_VIEW, PAYMENT_VIEW, PURCHASE_PAYMENT_VIEW, SALES_PAYMENT_VIEW, STATEMENT_VIEW, TRANSFER_VIEW, available_payment_accounts, lock_rows,
@@ -95,6 +95,16 @@ class AccountTransactionAdmin(PostedFinanceAdmin):
     list_select_related = ['account']
     list_filter = ['direction', 'date']
     # exclude = ['transfer', 'expense_payment', 'sales_payment']
+
+
+@admin.register(SettlementCommand)
+class SettlementCommandAdmin(PostedFinanceAdmin):
+    list_display = ('request_key', 'created_at', 'create_by')
+    view_permissions = (*SALES_PAYMENT_VIEW, *PURCHASE_PAYMENT_VIEW)
+
+    def scope_queryset(self, queryset, scope):
+        # Batch payloads may include allocations across warehouses.
+        return queryset if all_warehouse_access(scope) else queryset.none()
 
 
 @admin.register(AccountTransfer)

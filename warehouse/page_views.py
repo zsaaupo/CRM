@@ -118,6 +118,22 @@ class StockListPageView(WarehouseScopePageMixin, ProtectedAccountPageView):
         return context
 
 
+class MovementListPageView(WarehouseScopePageMixin, ProtectedAccountPageView):
+    template_name = 'inventory/list.html'
+    permission_required = ('warehouse.view_stockmovement',)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        columns = [('business_date', 'Date'), ('warehouse_name', 'Warehouse'), ('product_sku', 'SKU'),
+                   ('kind', 'Movement'), ('quantity', 'Quantity'), ('unit_code', 'Unit'),
+                   ('unit_cost_base', 'Recorded unit cost'), ('source_id', 'Document'), ('posted_by', 'Posted by')]
+        context.update(page_section='warehouses', page_label='Stock movements', section_label='Warehouses',
+                       resource={'singular': 'movement', 'plural': 'stock movements'},
+                       list_api_url=reverse('warehouse:movement-list'),
+                       columns=[{'key': key, 'label': label, 'type': 'text'} for key, label in columns])
+        return context
+
+
 class StockDetailPageView(WarehouseScopePageMixin, ProtectedAccountPageView):
     template_name = 'warehouse/stock_detail.html'
     permission_required = ('warehouse.view_stock',)

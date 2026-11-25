@@ -1,0 +1,7 @@
+{% load static %}
+<form method="post" action="{{ copy_url }}" class="mb-5" data-copy-order>
+    {% csrf_token %}
+    <button type="submit" class="secondary-button">Duplicate as draft</button>
+    <p role="status" class="form-error" hidden></p>
+</form>
+<script type="module" src="{% static 'js/order_copy.js' %}"></script>

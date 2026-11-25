@@ -129,6 +129,10 @@ class FinancialAccount(TimeStampedModel):
 
     name = models.CharField(max_length=150)
     type = models.CharField(max_length=20, choices=Type.choices)
+    account_number = models.CharField(max_length=100, blank=True)
+    account_holder = models.CharField(max_length=150, blank=True)
+    bank_name = models.CharField(max_length=150, blank=True)
+    note = models.TextField(blank=True)
     warehouse = models.ForeignKey('warehouse.WareHouse', on_delete=models.PROTECT, blank=True, null=True,
                                   related_name='financial_accounts', help_text='Leave blank for a shared account.')
     currency = models.CharField(max_length=3, default=base_currency, editable=False)
@@ -231,14 +235,28 @@ class IncomePayment(IncomeExpensePayment):
         return f'IP-{self.pk}'
 
 
+class SettlementCommand(TimeStampedModel):
+    request_key = models.UUIDField(unique=True)
+    details = models.JSONField()
+
+
+class TenderMethod(models.TextChoices):
+    CASH = 'cash', 'Cash'
+    BANK = 'bank', 'Bank'
+    MOBILE = 'mobile_banking', 'Mobile banking'
+    CARD = 'card', 'Card'
+    CHEQUE = 'cheque', 'Cheque'
+
+
 class SalesPayment(TimeStampedModel):
+    command = models.ForeignKey(SettlementCommand, null=True, on_delete=models.PROTECT, related_name='sales_payments')
     sales_order = models.ForeignKey('sale.SalesOrder', on_delete=models.PROTECT, related_name='payments')
     sales_return = models.ForeignKey('sale.SalesReturn', on_delete=models.PROTECT, blank=True, null=True,
                                      related_name='refund_payments')
     account = models.ForeignKey(FinancialAccount, on_delete=models.PROTECT, related_name='sales_payments')
     date = models.DateField(default=timezone.localdate)
     amount = models.DecimalField(max_digits=15, decimal_places=4, validators=[MinValueValidator(MIN_AMOUNT)])
-    method = models.CharField(max_length=20, choices=FinancialAccount.Type.choices)
+    method = models.CharField(max_length=20, choices=TenderMethod.choices)
     reference = models.CharField(max_length=150, blank=True)
     request_key = models.UUIDField(default=uuid4, unique=True, editable=False)
 
@@ -246,7 +264,7 @@ class SalesPayment(TimeStampedModel):
         ordering = ['-pk']
         constraints = [
             models.CheckConstraint(condition=models.Q(amount__gt=0), name='accounting_sales_payment_amount_positive'),
-            models.UniqueConstraint(fields=['sales_return', 'account'], name='accounting_refund_return_account_unique'),
+            models.UniqueConstraint(fields=['sales_return', 'account', 'method'], name='accounting_sale_refund_tender_unique'),
         ]
 
     @property
@@ -262,21 +280,22 @@ class SalesPayment(TimeStampedModel):
 
 
 class PurchasePayment(TimeStampedModel):
+    command = models.ForeignKey(SettlementCommand, null=True, on_delete=models.PROTECT, related_name='purchase_payments')
     purchase_order = models.ForeignKey('purchase.PurchaseOrder', on_delete=models.PROTECT, related_name='payments')
-    purchase_return = models.OneToOneField('purchase.PurchaseReturn', on_delete=models.PROTECT, blank=True, null=True,
-                                           related_name='refund_payment')
+    purchase_return = models.ForeignKey('purchase.PurchaseReturn', on_delete=models.PROTECT, blank=True, null=True,
+                                        related_name='refund_payments')
     account = models.ForeignKey(FinancialAccount, on_delete=models.PROTECT, related_name='purchase_payments')
     date = models.DateField(default=timezone.localdate)
     amount = models.DecimalField(max_digits=15, decimal_places=4, validators=[MinValueValidator(MIN_AMOUNT)])
-    method = models.CharField(max_length=20, choices=FinancialAccount.Type.choices)
+    method = models.CharField(max_length=20, choices=TenderMethod.choices)
     reference = models.CharField(max_length=150, blank=True)
 
     class Meta:
         ordering = ['-pk']
         constraints = [
             models.CheckConstraint(condition=models.Q(amount__gt=0), name='accounting_purchase_payment_amount_positive'),
-            models.UniqueConstraint(fields=['purchase_order'], condition=models.Q(purchase_return__isnull=True),
-                                    name='accounting_purchase_original_payment_unique'),
+            models.UniqueConstraint(fields=['purchase_order'], condition=models.Q(purchase_return__isnull=True, command__isnull=True),
+                                    name='accounting_purchase_auto_payment_unique'),
         ]
 
     @property

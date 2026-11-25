@@ -17,7 +17,7 @@ from django.shortcuts import get_object_or_404
 from account.permissions import has_role_permissions
 
 from .access import WarehouseAccessBusy, lock_assignment_write, managed_assignments
-from .models import Stock, RoleWarehouseAccess, WareHouse, WarehouseTransfer, WarehouseTransferItem
+from .models import Stock, StockMovement, RoleWarehouseAccess, WareHouse, WarehouseTransfer, WarehouseTransferItem
 from .scope import HasWarehouseAccess, WarehouseScopeAPIMixin, all_warehouse_access, scoped_queryset, warehouse_scope
 from .serializers import (
     StockFilterSerializer, StockReadSerializer, RoleWarehouseAccessFilterSerializer,
@@ -72,6 +72,23 @@ class StockDetailAPIView(WarehouseScopeAPIMixin, BaseAPIMixin, RetrieveAPIView):
     serializer_class = StockReadSerializer
     queryset = StockListAPIView.queryset
     http_method_names = ['get', 'head', 'options']
+
+
+class MovementSerializer(serializers.ModelSerializer):
+    product_sku = serializers.CharField(source='product.sku')
+    warehouse_name = serializers.CharField(source='warehouse.name')
+    unit_code = serializers.CharField(source='unit.code')
+
+    class Meta:
+        model = StockMovement
+        fields = ('id', 'warehouse', 'warehouse_name', 'product', 'product_sku', 'unit_code', 'quantity', 'kind',
+                  'business_date', 'posted_at', 'posted_by', 'source_id', 'source_line_id', 'unit_cost_base')
+
+
+class MovementListAPIView(StockListAPIView):
+    serializer_class = MovementSerializer
+    queryset = StockMovement.objects.select_related('warehouse', 'product', 'unit')
+    ordering = ['-pk']
 
 
 class WarehouseTransferAPIMixin:

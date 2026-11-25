@@ -65,6 +65,32 @@ class QuotationTests(TestCase):
         self.assertEqual(response.status_code, expected, response.data)
         return response.data.get('sales_quotation', response.data)
 
+    def test_procurement_creates_one_draft_at_reviewed_supplier_prices(self):
+        from purchase.models import PurchaseOrder
+
+        record = self.create()
+        self.action(record['id'], 'issue')
+        quote = SalesQuotation.objects.get(pk=record['id'])
+        vendor = Party.objects.create(code='QUOTE-VENDOR', name='Vendor', is_supplier=True)
+        payload = {'supplier': vendor.pk, 'costs': [{'line': quote.items.get().pk, 'unit_cost': '16'}]}
+        url = reverse('sale:quote-purchase', args=[quote.pk])
+        self.assertEqual(self.client.post(url, payload, format='json', HTTP_X_CSRFTOKEN=self.token).status_code, 403)
+        client = APIClient()
+        client.force_login(self.root)
+        result = client.post(url, payload, format='json')
+        self.assertEqual(result.status_code, 201, result.data)
+        self.assertEqual(client.post(url, payload, format='json').status_code, 200)
+        payload['costs'][0]['unit_cost'] = '17'
+        self.assertEqual(client.post(url, payload, format='json').status_code, 409)
+        purchase = PurchaseOrder.objects.get()
+        self.assertEqual((purchase.grand_total, purchase.supplier_id), (Decimal('40'), vendor.pk))
+        self.assertFalse(purchase.is_received)
+        self.assertFalse(purchase.payments.exists())
+        self.assertEqual(Stock.objects.get().quantity, Decimal('10'))
+        quote.refresh_from_db()
+        self.assertEqual(quote.status, SalesQuotation.Status.ISSUED)
+        self.assertEqual(quote.purchase_order_id, purchase.pk)
+
     def test_draft_crud_defaults_pricing_and_preserves_line_ids(self):
         record = self.create(status='issued')
         self.assertEqual(record['status'], 'draft')

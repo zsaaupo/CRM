@@ -1,4 +1,8 @@
 from django.urls import path
+from .summaries import FinancialSummaryView
+from .party_statements import PartyStatementPage
+from purchase.models import PurchaseOrder
+from .settlement_views import OrderSettlementPage
 from .book_reports import DaybookView
 
 from .models import TransferType
@@ -13,6 +17,12 @@ app_name = 'accounting_pages'
 money_transfer_pages = {'resource': MONEY_TRANSFERS, 'transfer_type': TransferType.MONEY_TRANSFER}
 
 urlpatterns = [
+    path('reports/account-balances/', FinancialSummaryView.as_view(), name='balance-overview'),
+    path('reports/income-expense/', FinancialSummaryView.as_view(kind='categories'), name='income-expense'),
+    path('customers/<int:pk>/statement/', PartyStatementPage.as_view(), name='customer-statement'),
+    path('suppliers/<int:pk>/statement/', PartyStatementPage.as_view(party_role='supplier'), name='supplier-statement'),
+    path('sales-orders/<int:pk>/settlement/', OrderSettlementPage.as_view(), name='sale-settlement'),
+    path('purchase-orders/<int:pk>/settlement/', OrderSettlementPage.as_view(order_model=PurchaseOrder), name='purchase-settlement'),
     path('daybook/', DaybookView.as_view(), name='daybook'),
     path('expense-categories/', AccountingListPageView.as_view(resource=CATEGORIES), name='expense-category-list'),
     path('expense-categories/add/', AccountingFormPageView.as_view(resource=CATEGORIES), name='add-expense-category'),

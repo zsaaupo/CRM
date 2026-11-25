@@ -84,6 +84,108 @@ class FinanceTests(TestCase):
         Stock.objects.create(warehouse=self.warehouse, product=product, quantity=5)
         return order
 
+    def test_deferred_sale_split_collection_and_return_adjust_due_once(self):
+        from sale.models import SalesReturn, SalesReturnItem
+        from sale.returns import complete_return
+        from warehouse.models import StockMovement
+
+        order = self.sales_order(price='1000', settlement_mode='deferred', payment_account=None)
+        self.assertEqual(self.complete_sale(order).status_code, 200)
+        self.assertFalse(AccountTransaction.objects.exists())
+        url = reverse('accounting:sale-settlement', args=[order.pk])
+        payload = {'date': timezone.localdate(), 'request_key': str(uuid4()), 'tenders': [
+            {'account': self.account.pk, 'method': 'cash', 'amount': '250'},
+            {'account': self.bank.pk, 'method': 'card', 'amount': '150'},
+        ]}
+        result = self.client.post(url, payload, format='json')
+        self.assertEqual(result.status_code, 201, result.data)
+        self.assertEqual(result.data['due'], '600.0000')
+        self.assertEqual(self.client.post(url, payload, format='json').status_code, 200)
+        self.assertEqual(self.client.post(url, {**payload, 'reference': 'changed'}, format='json').status_code, 400)
+        record = SalesReturn.objects.create(sales_order=order)
+        SalesReturnItem.objects.create(sales_return=record, sales_order_item=order.items.get(), quantity='0.25')
+        complete_return(self.root, record.pk)
+        amounts = self.client.get(url).data
+        self.assertEqual((amounts['due'], amounts['refunded']), ('350.0000', '0.0000'))
+        self.assertEqual(AccountTransaction.objects.count(), 2)
+        self.assertEqual(StockMovement.objects.filter(kind='sale_return').get().quantity, Decimal('0.25'))
+        self.assertContains(self.client.get(reverse('accounting_pages:sale-settlement', args=[order.pk])), '350.0000')
+
+    def test_supplier_statement_allocates_across_orders_atomically(self):
+        from people.models import Party
+        from purchase.models import PurchaseOrder
+
+        vendor = Party.objects.create(code='VENDOR', name='Vendor', is_supplier=True)
+        orders = [PurchaseOrder.objects.create(supplier=vendor, warehouse=self.warehouse, currency_id='BDT',
+                  exchange_rate=1, shipping_cost='40', is_received=True, settlement_mode='deferred') for _ in range(2)]
+        url = reverse('accounting:supplier-statement', args=[vendor.pk])
+        self.assertEqual(self.client.get(url).data['totals']['due'], '80.0000')
+        payload = dict(request_key=str(uuid4()), date=timezone.localdate(), method='cash', account=self.account.pk,
+                       allocations=[{'order': orders[0].pk, 'amount': '20'}, {'order': orders[1].pk, 'amount': '41'}])
+        self.assertEqual(self.client.post(url, payload, format='json').status_code, 400)
+        self.assertFalse(AccountTransaction.objects.exists())
+        payload['allocations'][1]['amount'] = '35'
+        self.assertEqual(self.client.post(url, payload, format='json').status_code, 201)
+        self.assertEqual(self.client.post(url, payload, format='json').status_code, 200)
+        self.assertEqual(self.client.get(url).data['totals']['due'], '25.0000')
+        self.assertEqual(AccountTransaction.objects.count(), 2)
+        new = {**payload, 'request_key': str(uuid4()), 'allocations': [{'order': orders[0].pk, 'amount': '5'}]}
+        self.assertEqual(self.client.post(url, new, format='json').status_code, 201)
+        self.assertEqual(orders[0].original_payment_amount, Decimal('25'))
+        self.assertContains(self.client.get(reverse('accounting_pages:supplier-statement', args=[vendor.pk])), '20.0000')
+
+    def test_trading_dashboard_and_export_agree_on_posted_foreign_currency_orders(self):
+        currency = Currency.objects.create(code='EUR', name='Euro', exchange_rate='9')
+        order = self.sales_order(price='10', currency_id=currency.code, exchange_rate='2.25')
+        self.complete_sale(order)
+        data = self.client.get(reverse('report:dashboard')).json()
+        sales = next(report for report in data['reports'] if report['key'] == 'sales')
+        self.assertEqual((sales['count'], sales['total']), (1, '22.5000'))
+        self.assertEqual(data['cash']['inflow'], '22.5000')
+        endpoint = reverse('report:trading-export', args=['sales'])
+        self.assertContains(self.client.get(endpoint), '22.5000')
+        self.assertNotContains(self.client.get(endpoint, {'warehouse': self.other_warehouse.pk}), order.order_number)
+        self.client.force_login(self.staff)
+        self.assertEqual(self.client.get(endpoint).status_code, 403)
+
+    def test_duplicating_a_posted_sale_only_creates_a_fresh_draft(self):
+        original = self.sales_order()
+        self.assertEqual(self.complete_sale(original).status_code, 200)
+        result = self.client.post(reverse('sale:duplicate-order', args=[original.pk]), {}, format='json')
+        self.assertEqual(result.status_code, 201, result.data)
+        draft = SalesOrder.objects.get(pk=result.data['id'])
+        self.assertFalse(draft.is_completed)
+        self.assertEqual(draft.status_id, 'draft')
+        self.assertNotEqual(draft.order_number, original.order_number)
+        self.assertEqual(draft.grand_total, original.grand_total)
+        self.assertFalse(draft.payments.exists())
+        self.assertEqual(Stock.objects.get().quantity, Decimal('4'))
+        self.assertEqual(AccountTransaction.objects.count(), 1)
+
+    def test_split_payment_form_posts_and_replays_one_receipt(self):
+        order = self.sales_order(price='40', payment_account=None, settlement_mode='deferred')
+        self.complete_sale(order)
+        url = reverse('accounting_pages:sale-settlement', args=[order.pk])
+        values = dict(request_key=str(uuid4()), date=timezone.localdate(), account=[self.account.pk, self.bank.pk],
+                      method=['cash', 'card'], amount=['15', '25'])
+        self.assertEqual(self.client.post(url, values).status_code, 302)
+        self.assertEqual(self.client.post(url, values).status_code, 302)
+        self.assertEqual(order.payments.count(), 2)
+        self.assertContains(self.client.get(url), 'Paid')
+
+    def test_financial_summaries_reconcile_posted_entries(self):
+        self.assertEqual(self.complete_expense().status_code, 200)
+        filters = {'warehouse': self.warehouse.pk}
+        balances = self.client.get(reverse('accounting:balance-overview'), filters).json()['totals']
+        self.assertEqual(Decimal(balances['opening']), Decimal('100.0001'))
+        self.assertEqual(Decimal(balances['sent']), Decimal('70.0001'))
+        self.assertEqual(Decimal(balances['closing']), Decimal('30'))
+        categories = self.client.get(reverse('accounting:income-expense'), filters).json()
+        self.assertEqual(Decimal(categories['totals']['difference']), Decimal('-70.0001'))
+        self.assertEqual(categories['rows'][0]['category'], self.category.name)
+        self.client.force_login(self.staff)
+        self.assertEqual(self.client.get(reverse('accounting:balance-overview')).status_code, 403)
+
     def test_completing_sales_and_expenses_posts_once_to_the_same_statement(self):
         order = self.sales_order()
         payments = reverse('accounting:sales-payment-list', args=[order.pk])

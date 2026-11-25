@@ -9,6 +9,7 @@
             {% include 'report/includes/download_button.html' %}
             <a href="{{ list_url }}" class="secondary-button">Back to sales <span aria-hidden="true">&rarr;</span></a>
             {% if payments_url %}<a href="{{ payments_url }}" class="secondary-button" data-sale-payments hidden>Payments</a>{% endif %}
+            {% if settlement_url %}<a href="{{ settlement_url }}" class="secondary-button">Settlement</a>{% endif %}
             {% if quotation_url %}<a href="{{ quotation_url }}" class="secondary-button">Source quotation</a>{% endif %}
             {% if edit_url %}<a href="{{ edit_url }}" class="primary-button compact-primary" data-sale-edit hidden>Edit sale</a>{% endif %}
             {% if return_url %}<a href="{{ return_url }}" class="primary-button compact-primary" data-sale-return hidden>Create return</a>{% endif %}
@@ -16,6 +17,7 @@
     </div>
     {% include 'includes/detail_status.html' %}
     <div data-record-content hidden>
+        {% if copy_url %}{% include 'includes/order_copy.html' %}{% endif %}
         <section class="user-form-card mb-6" aria-labelledby="sale-information-heading">
             <h2 id="sale-information-heading" class="section-title mb-6">Sales information</h2>
             <dl class="profile-grid">

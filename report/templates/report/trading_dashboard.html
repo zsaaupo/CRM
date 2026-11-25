@@ -1,0 +1,16 @@
+<section class="mb-9">
+    <h2 class="section-title">Trading overview</h2>
+    <form method="get" class="user-form-grid my-4">
+        {{ trading.form.as_div }}
+        <button class="secondary-button">Apply filters</button>
+    </form>
+    {% if trading.start %}<p class="page-description">{{ trading.start }} – {{ trading.end }} · {{ trading.currency }}. Order amounts include tax and shipping before returns, by document date.</p>{% endif %}
+    <div class="grid gap-4 md:grid-cols-2">
+        {% for report in trading.reports %}
+        <section class="overview-card"><h3>{{ report.label }}</h3><strong class="text-2xl">{{ report.total }}</strong> · {{ report.count }} order{{ report.count|pluralize }}
+            <ul>{% for row in report.latest %}<li><a href="{{ row.url }}">{{ row.number }}</a> · {{ row.date }} · {{ row.total }}</li>{% endfor %}</ul>
+            <a class="secondary-button mt-3" href="{% url 'report:trading-export' key=report.key %}?{{ request.GET.urlencode }}">Export orders</a>
+        </section>{% endfor %}
+        {% if trading.cash %}<section class="overview-card"><h3>Cash flow by payment date</h3><p>Received {{ trading.cash.inflow }}</p><p>Sent {{ trading.cash.outflow }}</p><small>Internal transfers excluded.</small></section>{% endif %}
+    </div>
+</section>

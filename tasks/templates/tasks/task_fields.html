@@ -1,0 +1,8 @@
+<div class="user-form-grid">
+    <label>Title<input class="form-input" name="title" maxlength="200" value="{{ task.title }}" required></label>
+    <label>Assignee<select class="form-input" name="assignee" required>{% for member in users %}<option value="{{ member.pk }}" {% if member.pk == task.assignee_id %}selected{% endif %}>{{ member.username }}</option>{% endfor %}</select></label>
+    {% if perms.tasks.view_taskgroup %}<label>Group<select class="form-input" name="group"><option value="">Ungrouped</option>{% for g in group_options %}<option value="{{ g.pk }}" {% if g.pk == task.group_id %}selected{% endif %}>{{ g.name }}</option>{% endfor %}</select></label>{% endif %}
+    <label>Priority<select class="form-input" name="priority">{% for value,label in priorities %}<option value="{{ value }}" {% if value == task.priority or not task and value == 'normal' %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+    <label>Due date<input class="form-input" type="date" name="due_date" value="{{ task.due_date|date:'Y-m-d' }}"></label>
+    <label>Description<textarea class="form-input" name="description">{{ task.description }}</textarea></label>
+</div>

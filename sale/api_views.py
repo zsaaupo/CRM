@@ -11,7 +11,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from accounting.services import available_payment_accounts, payment_account_options
-from common.models import TradeStatus
+from common.models import SettlementMode, TradeStatus
 from common.serializers import AUDIT_FIELDS, CatalogSerializer
 from common.view import BaseAPIMixin, BaseDetailAPIView, BaseListAPIView, BaseListCreateAPIView, BaseUpdateAPIView, RecordInUse
 from inventory.models import Currency, Product
@@ -410,6 +410,8 @@ class QuotationActionAPIView(QuotationConcurrencyMixin, BaseAPIMixin, APIView):
             payment_account = serializers.IntegerField(min_value=1, max_value=2**63 - 1).run_validation(
                 request.data['payment_account'],
             )
-        quotation = apply_quotation_action(request.user, pk, action, payment_account=payment_account)
+        mode = serializers.ChoiceField(choices=SettlementMode.choices).run_validation(
+            request.data.get('settlement_mode', SettlementMode.AUTO_FULL))
+        quotation = apply_quotation_action(request.user, pk, action, payment_account=payment_account, settlement_mode=mode)
         data = QuotationDetailSerializer(quotation, context={'request': request}).data
         return Response({'sales_quotation': data, 'quotation_url': reverse('sale_pages:quotation-detail', args=[quotation.pk])})

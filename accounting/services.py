@@ -1,4 +1,3 @@
-from collections import defaultdict
 from decimal import ROUND_HALF_UP, localcontext
 
 from django.db import connections, transaction
@@ -254,31 +253,8 @@ def post_completed_sale_payment(sales_order, scope, actor, *, date):
 
 
 def post_sales_return_refund(record, scope, actor, *, date, amount):
-    """Refund the original collection accounts while the sale order is locked."""
-    if amount <= ZERO:
-        return
-    refundable = defaultdict(lambda: ZERO)
-    entries = AccountTransaction.objects.filter(sales_payment__sales_order=record.sales_order_id)
-    for account_id, direction, posted in entries.order_by().values_list('account_id', 'direction', 'amount').iterator():
-        refundable[account_id] += posted if direction == AccountTransaction.Direction.INFLOW else -posted
-
-    # Lock accounts in primary-key order, matching internal transfers.
-    for account_id, collected in sorted(refundable.items()):
-        refund = min(amount, collected)
-        if refund <= ZERO:
-            continue
-        if refund > MAX_AMOUNT:
-            raise ValidationError({'amount': 'The sales refund exceeds the ledger limit.'})
-        account = lock_payment_account(scope, account_id, record.sales_order.warehouse_id)
-        payment = SalesPayment.objects.create(
-            sales_order_id=record.sales_order_id, sales_return=record, account=account, amount=refund,
-            date=date, reference=record.return_number, method=account.type, **audit_fields(actor),
-        )
-        post_transaction(account, AccountTransaction.Direction.OUTFLOW, actor, date=date, amount=refund,
-                         sales_payment=payment)
-        amount -= refund
-        if amount == ZERO:
-            break
+    from .settlement import refund_credit
+    refund_credit(record, record.sales_order, scope, actor, date=date, amount=amount)
 
 
 def post_received_purchase_payment(purchase_order, scope, actor, *, date):
@@ -302,23 +278,5 @@ def post_received_purchase_payment(purchase_order, scope, actor, *, date):
 
 
 def post_purchase_return_refund(record, scope, actor, *, date, amount):
-    """Credit the original paying account while the purchase order is locked."""
-    if amount <= ZERO:
-        return
-    entries = AccountTransaction.objects.filter(purchase_payment__purchase_order_id=record.purchase_order_id)
-    original = entries.filter(direction=AccountTransaction.Direction.OUTFLOW,
-                              purchase_payment__purchase_return__isnull=True).first()
-    if original is None:
-        return
-    refunds = entries.filter(direction=AccountTransaction.Direction.INFLOW).order_by().values_list('amount', flat=True)
-    refunded = sum(refunds.iterator(), ZERO)
-    refund = min(amount, original.amount - refunded)
-    if refund <= ZERO:
-        return
-    account = lock_payment_account(scope, original.account_id, record.purchase_order.warehouse_id)
-    payment = PurchasePayment.objects.create(
-        purchase_order_id=record.purchase_order_id, purchase_return=record, account=account, amount=refund,
-        date=date, reference=record.return_number, method=account.type, **audit_fields(actor),
-    )
-    post_transaction(account, AccountTransaction.Direction.INFLOW, actor, date=date, amount=refund,
-                     purchase_payment=payment)
+    from .settlement import refund_credit
+    refund_credit(record, record.purchase_order, scope, actor, date=date, amount=amount)

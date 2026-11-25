@@ -12,7 +12,7 @@ from warehouse.models import WareHouse
 from warehouse.scope import all_warehouse_access, has_warehouse_scope, scoped_queryset, warehouse_scope
 
 from .models import AccountTransaction, AccountTransfer, Expense, ExpenseCategory, FinancialAccount, Income, IncomeCategory, SalesPayment, TransferType
-from .services import SALES_PAYMENT_VIEW, STATEMENT_VIEW, TRANSFER_VIEW, accounts_with_balances, sales_payment_totals
+from .services import SALES_PAYMENT_VIEW, STATEMENT_VIEW, TRANSFER_VIEW, accounts_with_balances
 
 
 CATEGORIES = CatalogResource(
@@ -319,9 +319,10 @@ class SalesPaymentListPageView(FinanceListPageView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         order = self.sales_order()
-        total, paid, refunded = sales_payment_totals(order)
+        from .settlement import balance
+        amounts = balance(order)
         context.update(
-            sales_order=order, payment_total=total, paid=paid, refunded=refunded, due=total - paid,
+            sales_order=order, payment_total=amounts['total'], paid=amounts['paid'], refunded=amounts['refunded'], due=amounts['due'],
             currency=settings.INVENTORY_BASE_CURRENCY,
             list_api_url=reverse('accounting:sales-payment-list', args=[order.pk]),
             secondary_url=reverse('sale_pages:sale-detail', args=[order.pk]), secondary_label='Back to sale',

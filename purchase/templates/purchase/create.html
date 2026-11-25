@@ -18,7 +18,8 @@
             <div class="user-form-grid">
                 {% include 'inventory/includes/field.html' with name='supplier' label='Supplier' field_type='select' hint='Only parties marked as suppliers are listed.' only %}
                 {% include 'inventory/includes/field.html' with name='warehouse' label='Receiving warehouse' field_type='select' hint='Choose where the products will be stocked. Required before receiving the purchase.' only %}
-                {% include 'inventory/includes/field.html' with name='payment_account' label='Pay from account' field_type='select' required=True hint='The payment posts when you receive the purchase.' only %}
+                {% include 'accounting/fields/settlement_mode.html' %}
+                {% include 'inventory/includes/field.html' with name='payment_account' label='Pay from account' field_type='select' hint='Required for automatic payment.' only %}
                 {% include 'inventory/includes/field.html' with name='supplier_reference' label='Supplier reference' maxlength='100' only %}
                 {% include 'inventory/includes/field.html' with name='order_date' label='Order date' field_type='date' required=True value=today|date:'Y-m-d' only %}
                 {% include 'inventory/includes/field.html' with name='expected_date' label='Expected date' field_type='date' only %}

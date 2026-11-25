@@ -1,11 +1,14 @@
 from django.urls import path
 
 from hrm.payroll_reports import PayslipPDFAPIView
+from .trading import TradingReportView
 from .views import PurchasePDFAPIView, QuotationPDFAPIView, SalePDFAPIView, TransferPDFAPIView
 
 
 app_name = 'report'
 urlpatterns = [
+    path('dashboard/', TradingReportView.as_view(), name='dashboard'),
+    path('trading/<slug:key>/export/', TradingReportView.as_view(), name='trading-export'),
     path('purchases/<int:pk>/pdf/', PurchasePDFAPIView.as_view(), name='purchase-pdf'),
     path('sales/<int:pk>/pdf/', SalePDFAPIView.as_view(), name='sale-pdf'),
     path('quotations/<int:pk>/pdf/', QuotationPDFAPIView.as_view(), name='quotation-pdf'),

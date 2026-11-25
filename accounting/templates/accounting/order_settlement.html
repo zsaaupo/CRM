@@ -1,0 +1,38 @@
+{% extends "layouts/dashboard.html" %}
+{% load static %}
+{% block title %}Order payments | eManager{% endblock %}
+{% block content %}
+<div class="workspace-content">
+    <h1 class="section-title">Payments for {{ order.order_number }}</h1>
+    <p>{{ amounts.payment_status|capfirst }} · {{ currency }}</p>
+    <dl class="user-form-grid">
+        <div><dt>Order total</dt><dd>{{ amounts.total }}</dd></div>
+        <div><dt>Returned</dt><dd>{{ amounts.returned }}</dd></div>
+        <div><dt>Paid</dt><dd>{{ amounts.paid }}</dd></div>
+        <div><dt>Refunded</dt><dd>{{ amounts.refunded }}</dd></div>
+        <div><dt>Due</dt><dd>{{ amounts.due }}</dd></div>
+    </dl>
+    {% if errors %}<div class="form-error" role="alert">{{ errors }}</div>{% endif %}
+    {% if can_post and amounts.payment_status != 'pending' and amounts.payment_status != 'paid' %}
+    <form method="post" class="user-form-card" data-settlement-form>
+        {% csrf_token %}<input type="hidden" name="request_key" value="{{ request_key }}">
+        <div data-tender-list><div class="user-form-grid mb-3" data-tender>
+            <label>Amount ({{ currency }})<input class="form-input" name="amount" type="number" min="0.0001" step="0.0001" max="{{ amounts.due }}" required></label>
+            <label>Account<select class="form-input" name="account" required>{% for account in accounts %}<option value="{{ account.pk }}">{{ account.name }}</option>{% endfor %}</select></label>
+            <label>Method<select class="form-input" name="method">{% for value, label in methods %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></label>
+            <button class="secondary-button" type="button" data-remove-tender hidden>Remove tender</button>
+        </div></div>
+        <button type="button" class="secondary-button mb-5" data-add-tender hidden>Add another tender</button>
+        <div class="user-form-grid">
+            <label>Date<input class="form-input" name="date" type="date" value="{{ today|date:'Y-m-d' }}" required></label>
+            <label>Reference<input class="form-input" name="reference" maxlength="150"></label>
+        </div>
+        <button class="primary-button">Record payment</button>
+    </form>
+    {% endif %}
+    <h2 class="section-title">Payment history</h2>
+    <table><thead><tr><th>Date</th><th>Type</th><th>Account</th><th>Method</th><th>Amount</th><th>Reference</th></tr></thead>
+    <tbody>{% for entry in payments %}<tr><td>{{ entry.date }}</td><td>{{ entry.type_label }}</td><td>{{ entry.account }}</td><td>{{ entry.get_method_display }}</td><td>{{ entry.amount }}</td><td>{{ entry.reference }}</td></tr>{% empty %}<tr><td colspan="6">No payments recorded.</td></tr>{% endfor %}</tbody></table>
+</div>
+{% endblock %}
+{% block workspace_js %}<script type="module" src="{% static 'js/settlement_tenders.js' %}"></script>{% endblock %}

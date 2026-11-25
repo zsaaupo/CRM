@@ -57,6 +57,10 @@ class DashboardPageView(ProtectedAccountPageView):
     template_name = 'account/dashboard.html'
     extra_context = {'page_label': 'Dashboard', 'page_section': 'dashboard'}
 
+    def get_context_data(self, **kwargs):
+        from report.trading import dashboard_data
+        return {**super().get_context_data(**kwargs), 'trading': dashboard_data(self.request.user, self.request.GET)}
+
 
 class ProfilePageView(ProtectedAccountPageView):
     template_name = 'account/profile.html'

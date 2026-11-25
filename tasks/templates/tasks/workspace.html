@@ -1,0 +1,31 @@
+{% extends "layouts/dashboard.html" %}
+{% block title %}Tasks | eManager{% endblock %}
+{% block content %}
+<div class="workspace-content">
+<div class="page-heading"><h1 class="page-title">{% if task %}{{ task.title }}{% elif area == 'groups' %}Task groups{% elif area == 'report' %}Task report{% elif area == 'responsibility' %}My responsibilities{% else %}Tasks{% endif %}</h1>
+<nav><a class="secondary-button" href="{% url 'tasks:list' %}">All tasks</a> <a class="secondary-button" href="{% url 'tasks:responsibility' %}">My responsibilities</a> <a class="secondary-button" href="{% url 'tasks:report' %}">Report</a> {% if perms.tasks.view_taskgroup %}<a class="secondary-button" href="{% url 'tasks:groups' %}">Groups</a>{% endif %}</nav></div>
+{% if errors %}<p role="alert" class="form-error">{{ errors }}</p>{% endif %}
+{% if area == 'groups' %}
+    {% if perms.tasks.add_taskgroup %}<form method="post" class="user-form-card">{% csrf_token %}<label>Group name<input class="form-input" name="name" maxlength="100" required></label><label>Description<textarea class="form-input" name="description"></textarea></label><button class="primary-button">Create group</button></form>{% endif %}
+    <table class="w-full"><thead><tr><th>Group</th><th>Creator</th><th>Visible tasks</th></tr></thead><tbody>{% for group in groups %}<tr><td><a href="{% url 'tasks:list' %}?group={{ group.pk }}">{{ group.name }}</a></td><td>{{ group.create_by }}</td><td>{{ group.task_count }}</td></tr>{% endfor %}</tbody></table>
+{% elif task %}
+    <p class="page-description">{{ task.get_status_display }} · {{ task.assignee }} · Due {{ task.due_date|default:'unscheduled' }}</p>
+    <p>{{ task.description|linebreaksbr }}</p>
+    {% if perms.tasks.change_task %}{% if manages or task.assignee_id == user.pk %}
+    <form method="post" class="user-form-card">{% csrf_token %}
+    {% if manages %}{% include 'tasks/task_fields.html' %}{% endif %}
+    <label>Status<select class="form-input" name="status">{% for value,label in statuses %}<option value="{{ value }}" {% if value == task.status %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label><button class="primary-button">Save changes</button></form>{% endif %}{% endif %}
+    {% if perms.tasks.view_subtask %}<h2 class="section-title">Subtasks</h2><ul>{% for sub in children %}<li class="overview-card">{{ sub.title }} · {{ sub.assignee }} · {{ sub.due_date|default:'Unscheduled' }} · {{ sub.get_status_display }}
+    {% if perms.tasks.change_subtask %}{% if manages or sub.assignee_id == user.pk %}<form method="post" action="{% url 'tasks:subtask-update' task.pk sub.pk %}">{% csrf_token %}<select aria-label="Subtask status" name="status">{% for value,label in statuses %}<option value="{{ value }}" {% if sub.status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select><button class="secondary-button">Update</button></form>{% endif %}{% endif %}</li>{% endfor %}</ul>{% endif %}
+    {% if manages and perms.tasks.add_subtask %}<form method="post" action="{% url 'tasks:subtask' task.pk %}" class="user-form-card">{% csrf_token %}<label>Subtask<input class="form-input" name="title" required maxlength="200"></label><label>Assignee<select class="form-input" name="assignee">{% for member in users %}<option value="{{ member.pk }}">{{ member.username }}</option>{% endfor %}</select></label><label>Due date<input type="date" class="form-input" name="due_date"></label><button class="primary-button">Add subtask</button></form>{% endif %}
+{% else %}
+    <form method="get" class="flex gap-3"><label>Search<input class="form-input" name="q" value="{{ request.GET.q }}"></label><label>Status<select class="form-input" name="status"><option value="">All statuses</option>{% for value,label in statuses %}<option value="{{ value }}" {% if value == request.GET.status %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label><button class="secondary-button">Filter</button></form>
+    {% if counts %}<p class="my-5">{{ counts.total }} total · {{ counts.assigned }} assigned to me · {{ counts.created }} created by me · {{ counts.unseen }} unseen · {{ counts.completed_today }} completed today · {{ counts.overdue }} overdue</p>{% endif %}
+    {% if workload %}<h2 class="section-title">Workload by assignee and group</h2><table class="w-full mb-5"><thead><tr><th>Assignee</th><th>Group</th><th>Total</th><th>Completed</th></tr></thead><tbody>{% for row in workload %}<tr><td>{{ row.assignee__username }}</td><td>{{ row.group__name|default:'Ungrouped' }}</td><td>{{ row.total }}</td><td>{{ row.completed }}</td></tr>{% endfor %}</tbody></table>{% endif %}
+    <table class="w-full"><thead><tr><th>Task</th><th>Assignee</th><th>Group</th><th>Due</th><th>Status</th></tr></thead><tbody>
+    {% for row in records %}<tr><td><a href="{% url 'tasks:detail' row.pk %}">{{ row.title }}</a></td><td>{{ row.assignee }}</td><td>{{ row.group|default:'—' }}</td><td>{{ row.due_date|default:'—' }}</td><td>{{ row.get_status_display }}</td></tr>{% empty %}<tr><td colspan="5">No matching tasks.</td></tr>{% endfor %}</tbody></table>
+    {% if records.has_previous %}<a href="{% querystring page=records.previous_page_number %}">Previous</a>{% endif %} {% if records.has_next %}<a href="{% querystring page=records.next_page_number %}">Next</a>{% endif %}
+    {% if area == 'list' and perms.tasks.add_task %}<form method="post" class="user-form-card mt-5">{% csrf_token %}<h2 class="section-title">New task</h2>{% include 'tasks/task_fields.html' %}<button class="primary-button">Create task</button></form>{% endif %}
+{% endif %}
+</div>
+{% endblock %}

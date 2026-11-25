@@ -16,6 +16,8 @@ def warehouse_navigation(request):
         'report': bool(available_reports(scope)),
         'view': can_view,
         'stock': can_view_stock,
+        'movements': has_role_permissions(user, ('warehouse.view_stockmovement',)),
+        'counts': can_view_stock and has_role_permissions(user, ('warehouse.view_stockcount',)),
         'transfers': has_role_permissions(user, ('warehouse.view_warehousetransfer',)),
         'add_transfer': all_warehouse_access(scope) and has_role_permissions(user, ('warehouse.view_warehousetransfer',
                         'warehouse.add_warehousetransfer')),

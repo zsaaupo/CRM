@@ -20,14 +20,17 @@ export function initializeQuotationDetail(panel) {
             if (busy || button.hidden) return;
             const converting = button.dataset.quotationAction === "convert";
             const account = form.elements.namedItem("payment_account");
-            if (converting && !account?.reportValidity()) return;
+            const mode = form.elements.namedItem("settlement_mode")?.value || "auto_full";
+            if (converting && mode === "auto_full" && !account?.reportValidity()) return;
             busy = true;
             for (const action of buttons) action.disabled = true;
             const feedback = form.querySelector("[data-quotation-feedback]");
             feedback.hidden = true;
             try {
                 const csrf = form.elements.namedItem("csrfmiddlewaretoken").value;
-                const data = await postJSON(button.dataset.url, converting ? { payment_account: account.value } : {}, csrf);
+                const payload = converting ? { settlement_mode: mode } : {};
+                if (converting && account?.value) payload.payment_account = account.value;
+                const data = await postJSON(button.dataset.url, payload, csrf);
                 const orderUrl = converting ? data.sales_quotation.sales_order_url : null;
                 window.location.assign(orderUrl || data.quotation_url);
             } catch (error) {

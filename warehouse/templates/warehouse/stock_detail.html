@@ -8,6 +8,8 @@
         <a href="{{ list_url }}" class="secondary-button">Back to stock list <span aria-hidden="true">&rarr;</span></a>
     </div>
     {% include 'includes/detail_status.html' %}
+    {% if perms.warehouse.view_stockmovement %}<a class="secondary-button mb-5" href="{% url 'warehouse_pages:movement-list' %}">Stock movements</a>{% endif %}
+    {% if perms.warehouse.view_stockcount %}<a class="secondary-button mb-5" href="{% url 'warehouse_pages:count-list' %}">Physical counts</a>{% endif %}
     <div data-record-content hidden>
         <section class="user-form-card mb-6" aria-labelledby="stock-information-heading">
             <h2 id="stock-information-heading" class="section-title mb-6">Stock information</h2>

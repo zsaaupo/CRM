@@ -9,6 +9,7 @@ from rest_framework.exceptions import APIException, NotFound, PermissionDenied, 
 
 from account.permissions import has_role_permissions
 from inventory.models import Product
+from warehouse.movements import record_lines
 from .models import Stock, WareHouse, WarehouseTransfer
 from .scope import all_warehouse_access, check_warehouse, lock_warehouse_scope
 
@@ -126,6 +127,8 @@ def complete_transfer(actor, transfer_id):
                 destination.refresh_from_db(fields=['quantity'])
                 if source.quantity != expected_source or destination.quantity != expected_destination:
                     raise ValidationError({'quantity': 'The database cannot store the resulting stock quantities accurately.'})
+            record_lines(record.source_warehouse_id, record, items, 'transfer_out', record.transfer_date, actor)
+            record_lines(record.destination_warehouse_id, record, items, 'transfer_in', record.transfer_date, actor)
             return record, True
     except OperationalError as exc:
         if 'locked' in str(exc).lower() or 'deadlock' in str(exc).lower():

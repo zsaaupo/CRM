@@ -8,13 +8,13 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from accounting.models import AccountTransaction, AccountTransfer, ExpensePayment, IncomePayment, PurchasePayment, SalesPayment
+from accounting.models import AccountTransaction, AccountTransfer, ExpensePayment, IncomePayment, PurchasePayment, SalesPayment, SettlementCommand
 from hrm.models import (
     Employee, EmployeeLoan, LeaveRequest, LeaveType, PayrollPeriod, PayrollRun, Payslip, PayslipLine,
     SalaryPayment,
 )
 from sale.models import SalesOrder, SalesReturn
-from warehouse.models import RoleWarehouseAccess, WareHouse
+from warehouse.models import RoleWarehouseAccess, Stock, StockCount, StockCountLine, StockMovement, WareHouse
 from warehouse.tests.helpers import assign_warehouse_role
 
 
@@ -29,7 +29,8 @@ class ProjectAdminTests(TestCase):
 
     def test_all_project_models_have_admin_lists(self):
         self.client.force_login(self.root)
-        posted_models = (AccountTransaction, AccountTransfer, ExpensePayment, IncomePayment, PurchasePayment, SalesPayment)
+        posted_models = (AccountTransaction, AccountTransfer, ExpensePayment, IncomePayment, PurchasePayment, SalesPayment,
+                         SettlementCommand, Stock, StockMovement, StockCount, StockCountLine)
         for app_label in ('account', 'accounting', 'common', 'hrm', 'inventory', 'people', 'purchase', 'report', 'sale', 'warehouse'):
             for model in apps.get_app_config(app_label).get_models():
                 with self.subTest(model=model._meta.label):

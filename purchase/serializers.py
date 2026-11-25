@@ -6,7 +6,7 @@ from django.utils import timezone
 from rest_framework import serializers
 from rest_framework.exceptions import NotFound, PermissionDenied
 
-from accounting.serializers import PaymentAccountField
+from accounting.serializers import OrderSettlementMixin, PaymentAccountField
 from common.models import TradeStatus
 from common.serializers import AUDIT_FIELDS, CatalogSerializer
 from inventory.models import Currency
@@ -17,14 +17,14 @@ from .models import PurchaseOrder, PurchaseOrderItem
 from .services import PurchaseBusy, lock_editable_purchase
 
 
-class PurchaseOrderSerializer(WarehouseScopedSerializerMixin, CatalogSerializer):
+class PurchaseOrderSerializer(OrderSettlementMixin, WarehouseScopedSerializerMixin, CatalogSerializer):
     warehouse_name = serializers.CharField(source='warehouse.name', read_only=True, default=None)
     supplier = serializers.PrimaryKeyRelatedField(
         queryset=Party.objects.filter(is_supplier=True), required=False, allow_null=True,
     )
     supplier_name = serializers.CharField(source='supplier.name', read_only=True, default=None)
     supplier_code = serializers.CharField(source='supplier.code', read_only=True, default=None)
-    payment_account = PaymentAccountField()
+    payment_account = PaymentAccountField(required=False, allow_null=True)
     payment_account_name = serializers.CharField(source='payment_account.name', read_only=True, default=None)
     currency = serializers.SlugRelatedField(slug_field='code', queryset=Currency.objects.all())
     status = serializers.SlugRelatedField(slug_field='code', queryset=TradeStatus.objects.all(), required=False)
@@ -42,7 +42,7 @@ class PurchaseOrderSerializer(WarehouseScopedSerializerMixin, CatalogSerializer)
         model = PurchaseOrder
         fields = [
             'id', 'order_number', 'supplier', 'supplier_name', 'supplier_code', 'order_date', 'expected_date', 'currency',
-            'exchange_rate', 'status', 'warehouse', 'warehouse_name', 'payment_account', 'payment_account_name',
+            'exchange_rate', 'status', 'warehouse', 'warehouse_name', 'settlement_mode', 'payment_account', 'payment_account_name',
             'is_received', 'supplier_reference', 'shipping_cost', 'notes',
             'subtotal', 'tax_total', 'grand_total', *AUDIT_FIELDS[1:],
         ]

@@ -159,3 +159,14 @@ class PartyEditPageView(PartyAddPageView):
 class PartyDetailPageView(PartyPageView):
     template_name = 'people/detail.html'
     mode = 'detail'
+
+    def get_context_data(self, **kwargs):
+        from account.permissions import has_role_permissions
+        from accounting.services import PURCHASE_PAYMENT_VIEW, SALES_PAYMENT_VIEW
+        from warehouse.scope import has_warehouse_scope
+
+        context = super().get_context_data(**kwargs)
+        roles = SALES_PAYMENT_VIEW if self.party_role == 'customer' else PURCHASE_PAYMENT_VIEW
+        if has_role_permissions(self.request.user, (*roles, 'people.view_party')) and has_warehouse_scope(self.request.user):
+            context['statement_url'] = reverse(f'accounting_pages:{self.party_role}-statement', args=[self.kwargs['pk']])
+        return context

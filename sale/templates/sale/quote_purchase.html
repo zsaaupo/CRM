@@ -1,0 +1,18 @@
+{% extends "layouts/dashboard.html" %}
+{% block title %}Purchase from quotation | eManager{% endblock %}
+{% block content %}
+<div class="workspace-content"><h1 class="page-title">Purchase from {{ quote.quotation_number }}</h1>
+{% if errors %}<p class="form-error" role="alert">{{ errors }}</p>{% endif %}
+{% if quote.purchase_order_id %}
+<a class="secondary-button" href="{% url 'purchase_pages:purchase-detail' quote.purchase_order_id %}">View draft purchase</a>
+{% else %}
+<p class="page-description">Enter the supplier's prices in {{ quote.currency_id }}. Stock and payment are posted separately after review.</p>
+<form method="post" class="user-form-card">{% csrf_token %}
+<label>Supplier<select name="supplier" class="form-input" required><option value="">Select supplier</option>{% for party in suppliers %}<option value="{{ party.pk }}">{{ party.name }}</option>{% endfor %}</select></label>
+<table class="w-full my-5"><thead><tr><th>Product</th><th>Quantity</th><th>Unit cost</th><th>Tax %</th></tr></thead>
+<tbody>{% for line in lines %}<tr><td>{{ line.product }}</td><td>{{ line.quantity }} {{ line.unit.code }}</td>
+<td><input aria-label="Unit cost for {{ line.product.sku }}" class="form-input" name="cost_{{ line.pk }}" type="number" min="0" step=".0001" required></td>
+<td><input aria-label="Tax for {{ line.product.sku }}" class="form-input" name="tax_{{ line.pk }}" type="number" min="0" max="100" step=".0001" value="0" required></td>
+</tr>{% endfor %}</tbody></table><button class="primary-button">Create draft purchase</button>
+</form>{% endif %}</div>
+{% endblock %}

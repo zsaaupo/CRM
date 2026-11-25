@@ -64,6 +64,9 @@ class PurchaseDetailPageView(WarehouseScopePageMixin, ProtectedAccountPageView):
         context = super().get_context_data(**kwargs)
         context.update({
             'page_section': 'purchase', 'page_mode': 'detail', 'page_label': 'Purchase details',
+            'copy_url': reverse('purchase:duplicate-order', args=[self.kwargs['pk']]) if has_role_permissions(
+                self.request.user, ('purchase.view_purchaseorder', 'purchase.view_purchaseorderitem', 'purchase.add_purchaseorder', 'purchase.add_purchaseorderitem')) else None,
+            'can_view_payments': has_role_permissions(self.request.user, ('purchase.view_purchaseorder', 'accounting.view_financialaccount', 'accounting.view_purchasepayment')),
             'list_url': reverse('purchase_pages:purchase-list'),
             'detail_api_url': reverse('purchase:purchase-order-detail', args=[self.kwargs['pk']]),
             'base_currency': settings.INVENTORY_BASE_CURRENCY,

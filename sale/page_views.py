@@ -71,6 +71,8 @@ class SalesDetailPageView(WarehouseScopePageMixin, ProtectedAccountPageView):
         context = super().get_context_data(**kwargs)
         context.update({
             'page_section': 'sale', 'page_mode': 'detail', 'page_label': 'Sales details',
+            'copy_url': reverse('sale:duplicate-order', args=[self.kwargs['pk']]) if has_role_permissions(
+                self.request.user, ('sale.view_salesorder', 'sale.view_salesorderitem', 'sale.add_salesorder', 'sale.add_salesorderitem')) else None,
             'list_url': reverse('sale_pages:sale-list'),
             'detail_api_url': reverse('sale:sales-order-detail', args=[self.kwargs['pk']]),
             'base_currency': settings.INVENTORY_BASE_CURRENCY,
@@ -87,6 +89,7 @@ class SalesDetailPageView(WarehouseScopePageMixin, ProtectedAccountPageView):
             context['return_url'] = f"{reverse('sale_pages:create-return')}?sales_order={self.kwargs['pk']}"
         if has_role_permissions(self.request.user, SALES_PAYMENT_VIEW):
             context['payments_url'] = reverse('sale_pages:sales-payment-list', args=[self.kwargs['pk']])
+            context['settlement_url'] = reverse('accounting_pages:sale-settlement', args=[self.kwargs['pk']])
         if has_role_permissions(self.request.user, QUOTE_VIEW):
             scope = warehouse_scope(self.request.user)
             quotes = SalesQuotation.objects.filter(sales_order_id=self.kwargs['pk'])
@@ -291,6 +294,9 @@ class QuotationDetailPageView(QuotationPageView):
         context = super().get_context_data(**kwargs)
         record = self.get_record()
         user = self.request.user
+        from .quotation_purchase import ELIGIBLE, PROCURE
+        if record.status in ELIGIBLE and has_role_permissions(user, PROCURE):
+            context['procure_url'] = reverse('sale_pages:quote-purchase', args=[record.pk])
         context.update(
             page_mode='detail', detail_api_url=reverse('sale:quotation-detail', args=[record.pk]),
             can_view_items=has_role_permissions(user, ITEM_VIEW),

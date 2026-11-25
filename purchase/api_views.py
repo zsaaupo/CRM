@@ -1,6 +1,6 @@
 from django.conf import settings
 from django.db import OperationalError
-from django.db.models import OuterRef, Subquery
+from django.db.models import OuterRef, Subquery, Sum
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import never_cache
 from rest_framework.exceptions import PermissionDenied
@@ -64,7 +64,7 @@ class PurchaseOrderDetailAPIView(PurchaseConcurrencyMixin, WarehouseScopeAPIMixi
     serializer_class = PurchaseOrderDetailSerializer
     queryset = PurchaseOrderListCreateAPIView.queryset.annotate(posted_payment_amount=Subquery(
         PurchasePayment.objects.filter(purchase_order_id=OuterRef('pk'), purchase_return__isnull=True)
-        .order_by().values('amount')[:1],
+        .order_by().values('purchase_order_id').annotate(total=Sum('amount')).values('total')[:1],
     ))
 
     def get_serializer_class(self):

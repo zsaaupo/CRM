@@ -8,7 +8,7 @@ from django.db import models
 from django.db.models import F, Q
 from django.utils import timezone
 
-from common.models import TradeStatus, TimeStampedModel
+from common.models import SettlementMode, TradeStatus, TimeStampedModel
 
 
 MONEY_PRECISION = Decimal('0.0001')
@@ -76,6 +76,7 @@ class SalesLineAmounts:
 
 
 class SalesOrder(SalesTotals, TimeStampedModel):
+    settlement_mode = models.CharField(max_length=12, choices=SettlementMode.choices, default=SettlementMode.AUTO_FULL)
     order_number = models.CharField(max_length=50, unique=True, default=generate_order_number, editable=False)
     customer = models.ForeignKey('people.Party', on_delete=models.PROTECT, null=True, blank=True,
                                  related_name='sales_orders')
@@ -266,6 +267,9 @@ class SalesQuotation(SalesTotals, TimeStampedModel):
     responded_at = models.DateTimeField(null=True, blank=True, editable=False)
     responded_by = models.CharField(max_length=255, blank=True, editable=False)
     issued_document = models.JSONField(default=dict, editable=False)
+    purchase_order = models.OneToOneField('purchase.PurchaseOrder', null=True, blank=True, editable=False,
+                                          on_delete=models.PROTECT, related_name='source_quotation')
+    purchase_conversion = models.JSONField(default=dict, editable=False)
     revised_from = models.OneToOneField('self', null=True, blank=True, on_delete=models.PROTECT,
                                         related_name='revision', editable=False)
     sales_order = models.OneToOneField(SalesOrder, null=True, blank=True, on_delete=models.PROTECT,

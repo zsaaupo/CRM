@@ -4,7 +4,7 @@ from django.utils import timezone
 from rest_framework import serializers
 from rest_framework.exceptions import NotFound
 
-from accounting.serializers import PaymentAccountField
+from accounting.serializers import OrderSettlementMixin, PaymentAccountField
 from common.models import TradeStatus
 from common.serializers import AUDIT_FIELDS, CatalogSerializer
 from inventory.models import Currency
@@ -14,14 +14,14 @@ from .models import SalesOrder, SalesOrderItem
 from .services import lock_order, require_item_permission
 
 
-class SalesOrderSerializer(WarehouseScopedSerializerMixin, CatalogSerializer):
+class SalesOrderSerializer(OrderSettlementMixin, WarehouseScopedSerializerMixin, CatalogSerializer):
     warehouse_name = serializers.CharField(source='warehouse.name', read_only=True, default=None)
     customer = serializers.PrimaryKeyRelatedField(
         queryset=Party.objects.filter(is_customer=True), required=False, allow_null=True,
     )
     customer_name = serializers.CharField(source='customer.name', read_only=True, default=None)
     customer_code = serializers.CharField(source='customer.code', read_only=True, default=None)
-    payment_account = PaymentAccountField()
+    payment_account = PaymentAccountField(required=False, allow_null=True)
     payment_account_name = serializers.CharField(source='payment_account.name', read_only=True, default=None)
     currency = serializers.SlugRelatedField(slug_field='code', queryset=Currency.objects.all())
     status = serializers.SlugRelatedField(slug_field='code', queryset=TradeStatus.objects.all(), required=False)
@@ -33,7 +33,7 @@ class SalesOrderSerializer(WarehouseScopedSerializerMixin, CatalogSerializer):
         model = SalesOrder
         fields = [
             'id', 'order_number', 'customer', 'customer_name', 'customer_code', 'order_date', 'expected_delivery_date', 'currency',
-            'exchange_rate', 'status', 'warehouse', 'warehouse_name', 'payment_account', 'payment_account_name',
+            'exchange_rate', 'status', 'warehouse', 'warehouse_name', 'settlement_mode', 'payment_account', 'payment_account_name',
             'customer_reference',
             'billing_address', 'shipping_address', 'shipping_cost', 'notes', 'confirmed_at', 'fulfilled_at', 'is_completed',
             'subtotal', 'tax_total', 'grand_total', *AUDIT_FIELDS[1:],

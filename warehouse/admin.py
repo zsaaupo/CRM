@@ -7,7 +7,7 @@ from account.permissions import has_role_permissions
 from common.admin import AuditedAdmin
 
 from .access import check_assignment_scope, lock_assignment_write, managed_assignments
-from .models import RoleWarehouseAccess, Stock, WareHouse, WarehouseTransfer, WarehouseTransferItem
+from .models import RoleWarehouseAccess, Stock, StockCount, StockCountLine, StockMovement, WareHouse, WarehouseTransfer, WarehouseTransferItem
 from .scope import all_warehouse_access, has_warehouse_scope, lock_warehouse_scope, scoped_queryset, warehouse_scope
 from .services import transfer_queryset
 
@@ -133,8 +133,38 @@ class WareHouseAdmin(WarehouseScopedAdmin):
     ordering = ['name', 'pk']
 
 
+class ReadOnlyWarehouseAdmin(WarehouseScopedAdmin):
+    actions = None
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(StockMovement)
+class MovementAdmin(ReadOnlyWarehouseAdmin):
+    list_display = ('business_date', 'warehouse', 'product', 'kind', 'quantity', 'source_id')
+    search_fields = ('product__sku', 'posting_key')
+
+
+@admin.register(StockCount)
+class StockCountAdmin(ReadOnlyWarehouseAdmin):
+    list_display = ('id', 'warehouse', 'created_at', 'create_by', 'finalized_at')
+
+
+@admin.register(StockCountLine)
+class CountLineAdmin(ReadOnlyWarehouseAdmin):
+    warehouse_lookup = 'count__warehouse_id'
+    list_display = ('count_id', 'product', 'expected', 'counted')
+
+
 @admin.register(Stock)
-class StockAdmin(WarehouseScopedAdmin):
+class StockAdmin(ReadOnlyWarehouseAdmin):
     list_display = ['warehouse', 'product', 'quantity', 'updated_at']
     list_filter = ['warehouse']
     search_fields = ['warehouse__name', 'warehouse__code', 'product__name', 'product__sku']

@@ -9,6 +9,7 @@
     </div>
     {% include 'includes/detail_status.html' %}
     <div data-record-content hidden>
+        {% if statement_url %}<a class="secondary-button mb-5" href="{{ statement_url }}">Account statement</a>{% endif %}
         <figure class="user-form-card mb-6" data-record-image-wrapper hidden><img data-record-image class="max-h-72 max-w-full rounded-xl object-contain" alt=""></figure>
         <section class="user-form-card mb-6" aria-labelledby="party-details-heading">
             <h2 id="party-details-heading" class="section-title mb-6">{{ resource.singular|capfirst }} details</h2>

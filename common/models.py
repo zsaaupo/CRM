@@ -1,6 +1,11 @@
 from django.db import models
 from django.utils import timezone
 
+class SettlementMode(models.TextChoices):
+    AUTO_FULL = 'auto_full', 'Pay in full on posting'
+    DEFERRED = 'deferred', 'Pay separately'
+
+
 class TimeStampedModel(models.Model):
     created_at = models.DateTimeField(default=timezone.now, editable=False)
     updated_at = models.DateTimeField(auto_now=True)

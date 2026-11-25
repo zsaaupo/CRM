@@ -7,7 +7,9 @@ from django.utils import timezone
 from rest_framework.exceptions import APIException, NotFound, PermissionDenied, ValidationError
 
 from accounting.services import lock_payment_account, post_completed_sale_payment
+from common.models import SettlementMode
 from inventory.models import Product
+from warehouse.movements import record_lines
 from people.models import Party
 from report.services import document_context
 from warehouse.models import Stock, WareHouse
@@ -107,7 +109,9 @@ def complete_sale(actor, sale_id):
                 stock.refresh_from_db(fields=['quantity'])
                 if stock.quantity != expected_quantity:
                     raise ValidationError({'quantity': 'The database cannot store this resulting stock quantity accurately.'})
-            post_completed_sale_payment(order, scope, actor, date=timezone.localdate(now))
+            record_lines(warehouse.pk, order, items, 'issue', order.order_date, actor)
+            if order.settlement_mode == SettlementMode.AUTO_FULL:
+                post_completed_sale_payment(order, scope, actor, date=timezone.localdate(now))
             return order, True
     except OperationalError as exc:
         if 'locked' in str(exc).lower() or 'deadlock' in str(exc).lower():
@@ -213,7 +217,7 @@ def sales_values(quotation, today):
 
 
 @transaction.atomic
-def apply_quotation_action(actor, pk, action, *, payment_account=None):
+def apply_quotation_action(actor, pk, action, *, payment_account=None, settlement_mode=SettlementMode.AUTO_FULL):
     permissions = ACTION_PERMISSIONS[action]
     require_permissions(actor, permissions)
     scope = lock_warehouse_scope(actor)
@@ -251,9 +255,11 @@ def apply_quotation_action(actor, pk, action, *, payment_account=None):
         if quotation.status != Status.ACCEPTED:
             raise QuotationConflict('Accept the quotation before converting it to a sales order.')
         items = eligible_lines(quotation)
-        account = lock_payment_account(scope, payment_account, quotation.warehouse_id)
+        account = None
+        if settlement_mode == SettlementMode.AUTO_FULL or payment_account is not None:
+            account = lock_payment_account(scope, payment_account, quotation.warehouse_id)
         order = SalesOrder.objects.create(
-            **sales_values(quotation, today), payment_account=account, notes=quotation.terms,
+            **sales_values(quotation, today), payment_account=account, settlement_mode=settlement_mode, notes=quotation.terms,
             create_by=username, modified_by=username,
         )
         SalesOrderItem.objects.bulk_create([

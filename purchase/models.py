@@ -7,7 +7,7 @@ from django.db import models
 from django.db.models import F, Q
 from django.utils import timezone
 
-from common.models import TradeStatus, TimeStampedModel
+from common.models import SettlementMode, TradeStatus, TimeStampedModel
 
 
 MONEY_PRECISION = Decimal('0.0001')
@@ -22,6 +22,7 @@ def generate_return_number():
 
 
 class PurchaseOrder(TimeStampedModel):
+    settlement_mode = models.CharField(max_length=12, choices=SettlementMode.choices, default=SettlementMode.AUTO_FULL)
     order_number = models.CharField(max_length=50, unique=True, default=generate_order_number, editable=False)
     supplier = models.ForeignKey('people.Party', on_delete=models.PROTECT, null=True, blank=True,
                                  related_name='purchase_orders')
@@ -94,7 +95,7 @@ class PurchaseOrder(TimeStampedModel):
     def original_payment_amount(self):
         if hasattr(self, 'posted_payment_amount'):
             return self.posted_payment_amount
-        return self.payments.filter(purchase_return__isnull=True).values_list('amount', flat=True).first()
+        return self.payments.filter(purchase_return__isnull=True).aggregate(total=models.Sum('amount'))['total']
 
     def calculate_totals(self):
         with localcontext() as context:

@@ -1,4 +1,6 @@
 from django.urls import path
+from common.order_copy import DuplicateOrderView
+from purchase.models import PurchaseOrder
 
 from .api_views import (
     PurchaseOrderDetailAPIView, PurchaseOrderItemDetailAPIView, PurchaseOrderItemListAPIView,
@@ -14,6 +16,7 @@ from .return_api import (
 app_name = 'purchase'
 
 urlpatterns = [
+    path('purchase-orders/<int:pk>/duplicate/', DuplicateOrderView.as_view(model=PurchaseOrder), name='duplicate-order'),
     path('purchase-orders/options/', PurchaseOptionsAPIView.as_view(), name='purchase-options'),
     path('purchase-orders/edit-options/', PurchaseEditOptionsAPIView.as_view(), name='purchase-edit-options'),
     path('purchase-orders/receive/', PurchaseReceiveAPIView.as_view(), name='purchase-order-receive'),
