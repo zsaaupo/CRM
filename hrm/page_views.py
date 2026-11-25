@@ -276,3 +276,27 @@ class LeaveRequestDetailPageView(HRMPageView):
         if leave.status == LeaveRequest.Status.PENDING and user.has_perm(REVIEW_LEAVE_PERMISSION) and leave.employee.user_id != user.pk:
             context['review_api_url'] = reverse('hrm:leave-request-review', args=[leave.pk])
         return context
+
+
+class WorkforceConsolePageView(ProtectedAccountPageView):
+    template_name = 'hrm/workforce_console.html'
+    permission_required = ('hrm.view_employee',)
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        ctx.update({
+            'page_section': 'hrm',
+            'page_label': 'Workforce, Leave & Payroll Console',
+            'promotions_url': reverse('hrm:promotion-list'),
+            'notices_url': reverse('hrm:notice-list'),
+            'calendar_url': reverse('hrm:calendar-month'),
+            'attendance_preview_url': reverse('hrm:attendance-import-preview'),
+            'attendance_commit_url': reverse('hrm:attendance-import-commit'),
+            'leave_policies_url': reverse('hrm:leave-policy-list'),
+            'leave_balances_url': reverse('hrm:leave-balance-list'),
+            'leave_allocate_url': reverse('hrm:leave-balance-allocate'),
+            'advances_url': reverse('hrm:salary-advance-list'),
+            'increments_url': reverse('hrm:salary-increment-list'),
+            'manual_payroll_url': reverse('hrm:manual-payroll-list'),
+        })
+        return ctx

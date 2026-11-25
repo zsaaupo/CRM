@@ -1,4 +1,4 @@
-import { getJSON } from "../../js/api.js";
+import { getJSON, postJSON } from "../../js/api.js";
 import { detailValue, initializeRecordDetail } from "../../js/record_detail.js";
 
 export function purchaseItemRow(item, currency, productUrlTemplate = "") {
@@ -87,8 +87,33 @@ if (panel) {
     initializeRecordDetail(panel, async (record) => {
         const returnLink = panel.querySelector("[data-purchase-return]");
         if (returnLink) returnLink.hidden = record.is_received !== true || !record.warehouse;
+        const recPanel = document.getElementById("po-receipt-panel");
+        if (recPanel) recPanel.hidden = record.is_received === true;
         const section = panel.querySelector("[data-purchase-items]");
         if (section && !items) items = initializePurchaseItems(section, record.currency);
         if (items) await items.ready;
+    });
+
+    const csrf = panel.dataset.csrf;
+    document.getElementById("po-duplicate-btn")?.addEventListener("click", async () => {
+        const res = await postJSON(panel.dataset.duplicateUrl, {}, csrf);
+        window.location.assign(`/purchase/purchase-orders/${res.id}/`);
+    });
+    document.getElementById("po-receipt-form")?.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const fd = new FormData(e.currentTarget);
+        const msg = document.getElementById("po-receipt-msg");
+        try {
+            await postJSON(panel.dataset.receiptUrl, {
+                request_key: crypto.randomUUID(),
+                lines: [{
+                    order_line: Number(fd.get("order_line")),
+                    quantity: fd.get("quantity"),
+                    batch_number: fd.get("batch_number") || "",
+                    expiry_date: fd.get("expiry_date") || null,
+                }],
+            }, csrf);
+            window.location.reload();
+        } catch (err) { msg.textContent = err.message || "Receipt failed."; }
     });
 }

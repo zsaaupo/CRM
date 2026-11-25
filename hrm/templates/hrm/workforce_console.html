@@ -1,0 +1,121 @@
+{% extends "layouts/dashboard.html" %}
+{% block content %}
+<div class="workspace-content" id="hr-m5-app" data-csrf="{{ csrf_token }}">
+  <div class="mb-6 flex flex-wrap items-center justify-between gap-4">
+    <div>
+      <h1 class="text-2xl font-semibold text-stone-900">{{ page_label }}</h1>
+      <p class="text-sm text-stone-500">Promotions, notices, device attendance import, leave balances, advances, increments, and manual payroll.</p>
+    </div>
+    <div class="flex flex-wrap gap-2">
+      <button type="button" class="erp-tab-btn is-active" data-hr-tab="promotions">Promotions</button>
+      <button type="button" class="erp-tab-btn" data-hr-tab="notices">Notices</button>
+      <button type="button" class="erp-tab-btn" data-hr-tab="attendance">Attendance Import</button>
+      <button type="button" class="erp-tab-btn" data-hr-tab="leave">Leave Balances</button>
+      <button type="button" class="erp-tab-btn" data-hr-tab="advances">Advances</button>
+      <button type="button" class="erp-tab-btn" data-hr-tab="increments">Increments</button>
+      <button type="button" class="erp-tab-btn" data-hr-tab="manual">Manual Payroll</button>
+    </div>
+  </div>
+
+  <section class="erp-card space-y-4">
+    <div id="hr-toolbar" class="flex flex-wrap items-center justify-between gap-2">
+      <h2 id="hr-panel-title" class="text-base font-semibold">Promotions</h2>
+      <div id="hr-actions" class="flex flex-wrap gap-2"></div>
+    </div>
+    <div class="users-table-scroll">
+      <table class="users-table"><thead id="hr-head"></thead><tbody id="hr-body"></tbody></table>
+    </div>
+    <form id="hr-create-form" class="grid gap-3 sm:grid-cols-4 text-sm border-t border-stone-200 pt-4"></form>
+    <p id="hr-msg" class="text-xs text-stone-600"></p>
+  </section>
+</div>
+{% endblock %}
+
+{% block workspace_js %}
+<script type="module">
+import { getJSON, postJSON } from "/static/js/api.js";
+const app = document.getElementById("hr-m5-app");
+const csrf = app.dataset.csrf;
+
+const CONFIG = {
+    promotions: {
+        title: "Employee Promotions", url: "{{ promotions_url }}",
+        fields: [{ name: "employee", placeholder: "Employee ID", type: "number" }, { name: "effective_date", placeholder: "Effective Date", type: "date" }, { name: "note", placeholder: "Reason" }],
+    },
+    notices: {
+        title: "HR Notices", url: "{{ notices_url }}",
+        fields: [{ name: "title", placeholder: "Title" }, { name: "body", placeholder: "Message" }, { name: "audience", placeholder: "Audience (all)" }],
+    },
+    attendance: {
+        title: "Device Attendance Import & Calendar", url: "{{ calendar_url }}",
+        fields: [{ name: "csv", placeholder: "CSV lines: device_id,punch_time" }],
+        customSubmit: async (payload) => {
+            const p = await postJSON("{{ attendance_preview_url }}", payload, csrf);
+            return `Previewed batch #${p.batch_id} (matched=${p.matched}, unmatched=${p.unmatched})`;
+        },
+    },
+    leave: {
+        title: "Leave Policies & Balances", url: "{{ leave_balances_url }}",
+        fields: [{ name: "year", placeholder: "Year (e.g. 2026)", type: "number" }],
+        customSubmit: async (payload) => {
+            const r = await postJSON("{{ leave_allocate_url }}", { year: Number(payload.year || new Date().getFullYear()), request_key: crypto.randomUUID() }, csrf);
+            return `Allocated leave balances: ${JSON.stringify(r)}`;
+        },
+    },
+    advances: {
+        title: "Salary Advances", url: "{{ advances_url }}",
+        fields: [{ name: "employee", placeholder: "Employee ID", type: "number" }, { name: "amount", placeholder: "Amount", type: "number" }, { name: "installments", placeholder: "Installments", type: "number" }, { name: "start_month", placeholder: "Start Month (YYYY-MM)" }],
+    },
+    increments: {
+        title: "Salary Increments", url: "{{ increments_url }}",
+        fields: [{ name: "employee", placeholder: "Employee ID", type: "number" }, { name: "effective_date", placeholder: "Effective Date", type: "date" }, { name: "new_basic", placeholder: "New Basic", type: "number" }],
+    },
+    manual: {
+        title: "Manual Payroll Vouchers", url: "{{ manual_payroll_url }}",
+        fields: [{ name: "employee", placeholder: "Employee ID", type: "number" }, { name: "period", placeholder: "Period ID", type: "number" }, { name: "amount", placeholder: "Net Pay", type: "number" }, { name: "account", placeholder: "Account ID", type: "number" }],
+    },
+};
+
+let activeTab = "promotions";
+async function renderTab(tab) {
+    activeTab = tab;
+    const cfg = CONFIG[tab];
+    document.getElementById("hr-panel-title").textContent = cfg.title;
+    const form = document.getElementById("hr-create-form");
+    form.innerHTML = cfg.fields.map((f) => `<input name="${f.name}" type="${f.type || 'text'}" placeholder="${f.placeholder}" class="form-input">`).join("")
+        + `<button type="submit" class="primary-button">Submit</button>`;
+
+    const data = await getJSON(cfg.url);
+    const rows = data.results || (Array.isArray(data) ? data : [data]);
+    const head = document.getElementById("hr-head");
+    const body = document.getElementById("hr-body");
+    if (!rows.length) { head.innerHTML = ""; body.innerHTML = '<tr><td class="text-stone-400">No rows yet.</td></tr>'; return; }
+    const keys = Object.keys(rows[0]).slice(0, 7);
+    head.innerHTML = `<tr>${keys.map((k) => `<th>${k}</th>`).join("")}</tr>`;
+    body.innerHTML = rows.map((r) => `<tr>${keys.map((k) => `<td>${r[k] ?? ""}</td>`).join("")}</tr>`).join("");
+}
+
+document.querySelectorAll("[data-hr-tab]").forEach((b) => b.addEventListener("click", () => {
+    document.querySelectorAll("[data-hr-tab]").forEach((x) => x.classList.remove("is-active"));
+    b.classList.add("is-active");
+    renderTab(b.dataset.hrTab);
+}));
+
+document.getElementById("hr-create-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const payload = Object.fromEntries(new FormData(e.currentTarget).entries());
+    const msg = document.getElementById("hr-msg");
+    try {
+        if (CONFIG[activeTab].customSubmit) {
+            msg.textContent = await CONFIG[activeTab].customSubmit(payload);
+        } else {
+            await postJSON(CONFIG[activeTab].url, payload, csrf);
+            msg.textContent = "Saved.";
+        }
+        renderTab(activeTab);
+    } catch (err) { msg.textContent = err.message || "Request failed."; }
+});
+
+renderTab("promotions");
+</script>
+{% endblock %}

@@ -56,6 +56,33 @@
             </div>
         </fieldset>
     </template>
+    {% if page_mode == 'add' %}
+    <section class="user-form-card mt-6 space-y-3">
+        <h2 class="section-title">Import Purchase Lines from CSV</h2>
+        <p class="text-xs text-stone-500">Columns: <code>product_code, quantity, purchase_unit_code, cost, discount_per_unit, tax_name</code></p>
+        <form id="po-csv-import-form" class="flex flex-wrap gap-2 text-sm">
+            <input type="number" name="warehouse" class="form-input w-32" placeholder="Warehouse ID" required min="1">
+            <input type="number" name="supplier" class="form-input w-32" placeholder="Supplier ID" required min="1">
+            <input type="file" name="file" accept=".csv" class="form-input w-64" required>
+            <button type="submit" class="secondary-button">Import Draft Purchase</button>
+        </form>
+        <p id="po-csv-msg" class="text-xs text-stone-500"></p>
+    </section>
+    {% endif %}
 </div>
 {% endblock %}
-{% block workspace_js %}<script type="module" src="{% static 'purchase/js/purchase_form.js' %}"></script>{% endblock %}
+{% block workspace_js %}<script type="module" src="{% static 'purchase/js/purchase_form.js' %}"></script>
+<script type="module">
+import { postFormData } from "/static/js/api.js";
+document.getElementById("po-csv-import-form")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    const csrf = document.querySelector("input[name=csrfmiddlewaretoken]")?.value || "";
+    try {
+        const res = await postFormData("/purchase/api/purchase-orders/import-csv/", fd, csrf);
+        window.location.assign(`/purchase/purchase-orders/${res.id}/`);
+    } catch (err) {
+        document.getElementById("po-csv-msg").textContent = err.message || "Import failed.";
+    }
+});
+</script>{% endblock %}

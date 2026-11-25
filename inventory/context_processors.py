@@ -16,4 +16,12 @@ def inventory_navigation(request):
                 'add_url': reverse(f'inventory_pages:add-{resource.key}'),
                 'can_add': request.user.has_perm(resource.permission('add')),
             })
+    if request.user.has_perm('inventory.view_product'):
+        menu.append({
+            'key': 'print-barcode',
+            'label': 'Print barcode',
+            'list_url': reverse('inventory_pages:print-barcode'),
+            'add_url': '',
+            'can_add': False,
+        })
     return {'inventory_menu': menu}

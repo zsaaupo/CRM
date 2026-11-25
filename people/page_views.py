@@ -119,12 +119,22 @@ class PartyPageView(ProtectedAccountPageView):
             'view_url_template': reverse(f'people_pages:{role}-detail', args=[0]),
             'columns': [
                 {'key': key, 'label': label, 'type': kind}
-                for key, label, kind in [
-                    ('name', 'Name', 'identity'), ('code', 'Code', 'text'),
-                    ('contact_person', 'Contact person', 'text'), ('phone', 'Phone', 'text'),
-                    ('email', 'Email', 'text'), ('is_active', 'Status', 'status'),
-                    ('actions', 'Actions', 'edit'),
-                ]
+                for key, label, kind in (
+                    [
+                        ('name', 'Name', 'identity'), ('code', 'Code', 'text'),
+                        ('customer_group_name', 'Customer group', 'text'),
+                        ('discount_plan_name', 'Discount plan', 'text'),
+                        ('reward_points', 'Reward points', 'text'),
+                        ('deposited_balance', 'Deposited', 'price'),
+                        ('total_due', 'Total due', 'price'),
+                        ('is_active', 'Status', 'status'), ('actions', 'Actions', 'edit'),
+                    ] if role == 'customer' else [
+                        ('name', 'Name', 'identity'), ('code', 'Code', 'text'),
+                        ('contact_person', 'Contact person', 'text'), ('phone', 'Phone', 'text'),
+                        ('purchase_due', 'Total due', 'price'),
+                        ('is_active', 'Status', 'status'), ('actions', 'Actions', 'edit'),
+                    ]
+                )
             ],
         })
         if user.has_perm('people.change_party'):
@@ -140,6 +150,17 @@ class PartyPageView(ProtectedAccountPageView):
             })
         if self.mode == 'detail' and user.has_perm('people.change_party'):
             context['edit_url'] = reverse(f'people_pages:edit-{role}', args=[self.kwargs['pk']])
+        if self.mode == 'detail':
+            pk = self.kwargs['pk']
+            context.update({
+                'party_id': pk,
+                'due_summary_url': reverse('accounting:party-due-summary', args=[pk]),
+                'clear_due_preview_url': reverse('accounting:party-clear-due-preview', args=[pk]),
+                'clear_due_confirm_url': reverse('accounting:party-clear-due-confirm', args=[pk]),
+                'deposits_url': reverse('accounting:customer-deposit-list', args=[pk]) if role == 'customer' else '',
+                'points_url': reverse('people:customer-points', args=[pk]) if role == 'customer' else '',
+                'create_login_url': reverse('people:party-create-login', args=[pk]) if user.has_perm('people.create_customer_login') else '',
+            })
         return context
 
 

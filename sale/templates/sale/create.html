@@ -68,6 +68,33 @@
             </div>
         </fieldset>
     </template>
+    {% if not quotation and page_mode == 'add' %}
+    <section class="user-form-card mt-6 space-y-3">
+        <h2 class="section-title">Import Sale Lines from CSV</h2>
+        <p class="text-xs text-stone-500">Columns: <code>product_code, quantity, sale_unit_code, price, discount_per_unit, tax_name</code></p>
+        <form id="sale-csv-import-form" class="flex flex-wrap gap-2 text-sm">
+            <input type="number" name="warehouse" class="form-input w-32" placeholder="Warehouse ID" required min="1">
+            <input type="number" name="customer" class="form-input w-32" placeholder="Customer ID">
+            <input type="file" name="file" accept=".csv" class="form-input w-64" required>
+            <button type="submit" class="secondary-button">Import Draft Sale</button>
+        </form>
+        <p id="sale-csv-msg" class="text-xs text-stone-500"></p>
+    </section>
+    {% endif %}
 </div>
 {% endblock %}
-{% block workspace_js %}<script type="module" src="{% static 'sale/js/sales_form.js' %}"></script>{% endblock %}
+{% block workspace_js %}<script type="module" src="{% static 'sale/js/sales_form.js' %}"></script>
+<script type="module">
+import { postFormData } from "/static/js/api.js";
+document.getElementById("sale-csv-import-form")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    const csrf = document.querySelector("input[name=csrfmiddlewaretoken]")?.value || "";
+    try {
+        const res = await postFormData("/sale/api/sales-orders/import-csv/", fd, csrf);
+        window.location.assign(`/sale/sales-orders/${res.id}/`);
+    } catch (err) {
+        document.getElementById("sale-csv-msg").textContent = err.message || "Import failed.";
+    }
+});
+</script>{% endblock %}

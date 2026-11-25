@@ -79,6 +79,10 @@ class PurchaseDetailPageView(WarehouseScopePageMixin, ProtectedAccountPageView):
             context['return_url'] = f"{reverse('purchase_pages:create-return')}?purchase_order={self.kwargs['pk']}"
         if has_role_permissions(self.request.user, ('purchase.view_purchaseorder', 'accounting.view_financialaccount', 'accounting.view_purchasepayment')):
             context['payments_url'] = reverse('purchase_pages:purchase-payment-list', args=[self.kwargs['pk']])
+        if has_role_permissions(self.request.user, ('purchase.view_purchaseorder', 'purchase.add_purchaseorder')):
+            context['duplicate_url'] = reverse('purchase:purchase-order-duplicate', args=[self.kwargs['pk']])
+        if has_role_permissions(self.request.user, ('purchase.receive_purchase',)):
+            context['partial_receipt_url'] = reverse('purchase:purchase-order-receipts', args=[self.kwargs['pk']])
         return context
 
 

@@ -5,12 +5,14 @@ from .page_views import (
     EmployeeDetailPageView, HRMAddPageView, HRMEditPageView, HRMListPageView,
     LeaveApplyPageView, LeaveRequestDetailPageView, LeaveRequestListPageView,
     PayrollAdjustmentDetailPageView, PayrollCalculationPageView, PayrollReportPageView, PayrollRunDetailPageView,
+    WorkforceConsolePageView,
 )
 
 
 app_name = 'hrm_pages'
 
 urlpatterns = [
+    path('workforce/', WorkforceConsolePageView.as_view(), name='workforce-console'),
     path('employees/<int:pk>/', EmployeeDetailPageView.as_view(), name='employee-detail'),
     path('leave-requests/', LeaveRequestListPageView.as_view(), name='leave-request-list'),
     path('leave-requests/add/', LeaveApplyPageView.as_view(), name='add-leave-request'),

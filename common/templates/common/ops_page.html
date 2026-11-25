@@ -35,17 +35,26 @@
     <button type="button" class="erp-tab-btn" data-ops-tab="task">Task</button>
     <button type="button" class="erp-tab-btn" data-ops-tab="mail">Mail</button>
     <button type="button" class="erp-tab-btn" data-ops-tab="sms">SMS</button>
+    <button type="button" class="erp-tab-btn" data-ops-tab="custom-fields">Custom Fields</button>
+    <button type="button" class="erp-tab-btn" data-ops-tab="gateways">Gateways</button>
+    <button type="button" class="erp-tab-btn" data-ops-tab="tables">Tables</button>
+    <button type="button" class="erp-tab-btn" data-ops-tab="barcodes">Barcodes</button>
+    <button type="button" class="erp-tab-btn" data-ops-tab="languages">Languages</button>
+    <button type="button" class="erp-tab-btn" data-ops-tab="sms-templates">SMS Templates</button>
   </div>
   <section class="erp-card">
     <form id="ops-json-form" class="space-y-4 text-sm">
       <div id="ops-fields" class="grid gap-4 sm:grid-cols-2"></div>
-      <div class="flex gap-3">
-        <button type="submit" class="primary-button">Save Settings</button>
+      <div class="flex flex-wrap gap-3">
+        <button type="submit" class="primary-button" id="ops-save-btn">Save</button>
         <button type="button" id="ops-backup-btn" class="erp-toolbar-btn">Run DB Backup</button>
         <button type="button" id="ops-outbox-btn" class="erp-toolbar-btn">Process Outbox</button>
       </div>
       <p id="ops-msg" class="text-xs text-stone-600"></p>
     </form>
+    <div id="ops-list-wrap" class="users-table-scroll mt-6" hidden>
+      <table class="users-table"><thead id="ops-list-head"></thead><tbody id="ops-list-body"></tbody></table>
+    </div>
   </section>
   {% endif %}
 </div>
@@ -58,6 +67,15 @@ const root = document.getElementById("ops-app");
 const key = root.dataset.key;
 const csrf = root.dataset.csrf;
 let currentSection = "general";
+
+const COLLECTION_CREATE_FIELDS = {
+    "custom-fields": ["entity", "label", "key", "field_type", "required", "show_in_invoice"],
+    "gateways": ["provider", "enabled", "mode", "secret"],
+    "tables": ["name", "code", "warehouse", "capacity"],
+    "barcodes": ["name", "paper", "rows", "columns"],
+    "languages": ["code", "name", "is_rtl", "is_active"],
+    "sms-templates": ["code", "name", "body", "is_active"],
+};
 
 if (key === "audit-logs") {
     const loadLogs = async (q = "") => {
@@ -77,15 +95,35 @@ if (key === "audit-logs") {
     });
     loadLogs();
 } else {
+    const isCollection = (sec) => sec in COLLECTION_CREATE_FIELDS;
     const loadSection = async (sec) => {
         currentSection = sec;
         const data = await getJSON(`/settings/api/${sec}/`);
-        document.getElementById("ops-fields").innerHTML = Object.entries(data).map(([k, v]) => {
-            if (typeof v === "boolean") {
-                return `<label class="flex items-center gap-2"><input type="checkbox" name="${k}" ${v ? "checked" : ""}> <span>${k}</span></label>`;
-            }
-            return `<div><label class="form-label">${k}</label><input class="form-input" name="${k}" value="${v ?? ""}"></div>`;
-        }).join("");
+        const listWrap = document.getElementById("ops-list-wrap");
+        if (isCollection(sec)) {
+            listWrap.hidden = false;
+            const rows = data.results || [];
+            document.getElementById("ops-fields").innerHTML = COLLECTION_CREATE_FIELDS[sec].map((f) => {
+                if (["enabled", "required", "show_in_invoice", "is_rtl", "is_active"].includes(f)) {
+                    return `<label class="flex items-center gap-2"><input type="checkbox" name="${f}"> <span>${f}</span></label>`;
+                }
+                return `<div><label class="form-label">${f}</label><input class="form-input" name="${f}" placeholder="${f}"></div>`;
+            }).join("");
+            const head = document.getElementById("ops-list-head");
+            const body = document.getElementById("ops-list-body");
+            if (!rows.length) { head.innerHTML = ""; body.innerHTML = '<tr><td class="text-stone-400">No items configured.</td></tr>'; return; }
+            const cols = Object.keys(rows[0]);
+            head.innerHTML = `<tr>${cols.map((c) => `<th>${c}</th>`).join("")}</tr>`;
+            body.innerHTML = rows.map((r) => `<tr>${cols.map((c) => `<td>${r[c] ?? ""}</td>`).join("")}</tr>`).join("");
+        } else {
+            listWrap.hidden = true;
+            document.getElementById("ops-fields").innerHTML = Object.entries(data).map(([k, v]) => {
+                if (typeof v === "boolean") {
+                    return `<label class="flex items-center gap-2"><input type="checkbox" name="${k}" ${v ? "checked" : ""}> <span>${k}</span></label>`;
+                }
+                return `<div><label class="form-label">${k}</label><input class="form-input" name="${k}" value="${v ?? ""}"></div>`;
+            }).join("");
+        }
     };
     document.querySelectorAll("[data-ops-tab]").forEach((btn) => btn.addEventListener("click", () => {
         document.querySelectorAll("[data-ops-tab]").forEach((b) => b.classList.remove("is-active"));
@@ -99,7 +137,12 @@ if (key === "audit-logs") {
             payload[el.name] = el.type === "checkbox" ? el.checked : (el.value === "" ? null : el.value);
         }
         try {
-            await patchJSON(`/settings/api/${currentSection}/`, payload, csrf);
+            if (isCollection(currentSection)) {
+                await postJSON(`/settings/api/${currentSection}/`, payload, csrf);
+                loadSection(currentSection);
+            } else {
+                await patchJSON(`/settings/api/${currentSection}/`, payload, csrf);
+            }
             document.getElementById("ops-msg").textContent = "Saved and audited.";
         } catch (err) {
             document.getElementById("ops-msg").textContent = err.message;

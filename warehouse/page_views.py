@@ -220,6 +220,8 @@ class TransferDetailPageView(WarehouseScopePageMixin, ProtectedAccountPageView):
             'page_section': 'warehouses', 'page_mode': 'transfer-detail', 'page_label': 'Transfer details',
             'list_url': reverse('warehouse_pages:transfer-list'),
             'detail_api_url': reverse('warehouse:transfer-detail', args=[self.kwargs['pk']]),
+            'dispatch_url': reverse('warehouse:transfer-dispatch', args=[self.kwargs['pk']]),
+            'receive_url': reverse('warehouse:transfer-receive', args=[self.kwargs['pk']]),
         })
         return context
 

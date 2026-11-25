@@ -1,4 +1,4 @@
-import { getJSON } from "../../js/api.js";
+import { getJSON, postJSON } from "../../js/api.js";
 import { detailValue, initializeRecordDetail } from "../../js/record_detail.js";
 
 export function salesItemRow(item, currency, productUrlTemplate = "") {
@@ -84,15 +84,43 @@ export function initializeSalesItems(section, currency) {
 const panel = document.querySelector("[data-record-detail]");
 if (panel) {
     let items;
+    let currentRecord = null;
     initializeRecordDetail(panel, async (record) => {
+        currentRecord = record;
         const edit = panel.querySelector('[data-sale-edit]');
         if (edit) edit.hidden = record.is_completed !== false;
         const returnLink = panel.querySelector('[data-sale-return]');
         if (returnLink) returnLink.hidden = record.is_completed !== true;
         const paymentsLink = panel.querySelector('[data-sale-payments]');
         if (paymentsLink) paymentsLink.hidden = record.is_completed !== true || !record.warehouse;
+        const shipPanel = document.getElementById("sale-shipping-panel");
+        if (shipPanel) shipPanel.hidden = record.is_completed !== true;
         const section = panel.querySelector("[data-sale-items]");
         if (section && !items) items = initializeSalesItems(section, record.currency);
         if (items) await items.ready;
+    });
+
+    const csrf = panel.dataset.csrf;
+    document.getElementById("sale-duplicate-btn")?.addEventListener("click", async () => {
+        const res = await postJSON(panel.dataset.duplicateUrl, {}, csrf);
+        window.location.assign(`/sale/sales-orders/${res.id}/`);
+    });
+    document.getElementById("sale-whatsapp-btn")?.addEventListener("click", async () => {
+        const res = await getJSON(panel.dataset.whatsappUrl);
+        if (res.whatsapp_url) window.open(res.whatsapp_url, "_blank");
+    });
+    document.getElementById("sale-pack-btn")?.addEventListener("click", async () => {
+        const msg = document.getElementById("sale-ship-msg");
+        try {
+            const r = await postJSON(panel.dataset.packingSlipsUrl, { sales_order: Number(panel.dataset.saleId), amount: currentRecord?.grand_total || 0 }, csrf);
+            msg.textContent = `Packing slip ${r.reference_number || r.id} created.`;
+        } catch (err) { msg.textContent = err.message; }
+    });
+    document.getElementById("sale-deliver-btn")?.addEventListener("click", async () => {
+        const msg = document.getElementById("sale-ship-msg");
+        try {
+            const r = await postJSON(panel.dataset.deliveriesUrl, { sales_order: Number(panel.dataset.saleId), status: "packing" }, csrf);
+            msg.textContent = `Delivery ${r.reference_number || r.id} (${r.status}) created.`;
+        } catch (err) { msg.textContent = err.message; }
     });
 }

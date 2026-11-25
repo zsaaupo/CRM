@@ -2,7 +2,14 @@
 {% load static %}
 {% block title %}{{ page_label }} | eManager{% endblock %}
 {% block content %}
-<div class="workspace-content" data-record-detail data-api-url="{{ detail_api_url }}" data-title-field="name" data-login-url="{% url 'account_pages:login' %}">
+<div class="workspace-content" data-record-detail data-api-url="{{ detail_api_url }}" data-title-field="name" data-login-url="{% url 'account_pages:login' %}"
+     data-due-url="{{ due_summary_url }}"
+     data-clear-preview-url="{{ clear_due_preview_url }}"
+     data-clear-confirm-url="{{ clear_due_confirm_url }}"
+     data-deposits-url="{{ deposits_url }}"
+     data-points-url="{{ points_url }}"
+     data-create-login-url="{{ create_login_url }}"
+     data-csrf="{{ csrf_token }}">
     <div class="page-heading">
         <div class="min-w-0 max-w-full"><p class="page-eyebrow">People</p><h1 class="page-title break-all"><span data-record-title>{{ page_label }}</span><span class="text-emerald-600">.</span></h1><p class="page-description">Contact and business details for this {{ resource.singular }}.</p></div>
         <div class="flex flex-wrap gap-3"><a href="{{ list_url }}" class="secondary-button">Back to {{ resource.plural }} <span aria-hidden="true">&rarr;</span></a>{% if edit_url %}<a href="{{ edit_url }}" class="primary-button compact-primary">Edit {{ resource.singular }}</a>{% endif %}</div>
@@ -15,6 +22,12 @@
             <dl class="profile-grid">
                 {% include 'includes/detail_field.html' with name='code' label='Code' only %}
                 {% include 'includes/detail_field.html' with name='name' label='Name' only %}
+                {% include 'includes/detail_field.html' with name='customer_group_name' label='Customer group' only %}
+                {% include 'includes/detail_field.html' with name='discount_plan_name' label='Discount plan' only %}
+                {% include 'includes/detail_field.html' with name='reward_points' label='Reward points' only %}
+                {% include 'includes/detail_field.html' with name='deposited_balance' label='Deposited balance' kind='money' only %}
+                {% include 'includes/detail_field.html' with name='total_due' label='Receivable due' kind='money' only %}
+                {% include 'includes/detail_field.html' with name='purchase_due' label='Payable due' kind='money' only %}
                 {% include 'includes/detail_field.html' with name='is_supplier' label='Supplier' kind='boolean' only %}
                 {% include 'includes/detail_field.html' with name='is_customer' label='Customer' kind='boolean' only %}
                 {% include 'includes/detail_field.html' with name='is_active' label='Active' kind='boolean' only %}
@@ -32,6 +45,44 @@
                 {% include 'includes/detail_field.html' with name='notes' label='Notes' full=True only %}
             </dl>
         </section>
+
+        <section class="user-form-card mb-6 space-y-4">
+            <h2 class="section-title">Due Summary &amp; Clear Due</h2>
+            <div id="party-due-box" class="text-sm text-stone-600">Loading due summary...</div>
+            <form id="clear-due-form" class="flex flex-wrap gap-2 text-sm">
+                <select name="direction" class="form-input w-36"><option value="receivable">Receivable</option><option value="payable">Payable</option></select>
+                <input type="number" name="account" class="form-input w-32" placeholder="Account ID" required min="1">
+                <input type="number" step="0.01" name="amount" class="form-input w-36" placeholder="Amount" required min="0.01">
+                <button type="submit" class="primary-button">Clear Due</button>
+            </form>
+            <p id="clear-due-msg" class="text-xs text-stone-500"></p>
+        </section>
+
+        {% if deposits_url %}
+        <section class="user-form-card mb-6 space-y-3">
+            <h2 class="section-title">Customer Deposits &amp; Reward Points</h2>
+            <div class="grid gap-4 sm:grid-cols-2">
+                <div>
+                    <form id="deposit-form" class="flex flex-wrap gap-2 text-sm mb-2">
+                        <input type="number" name="account" class="form-input w-28" placeholder="Account ID" required min="1">
+                        <input type="number" step="0.01" name="amount" class="form-input w-28" placeholder="Deposit amt" required min="0.01">
+                        <button type="submit" class="erp-toolbar-btn">Add Deposit</button>
+                    </form>
+                    <div id="deposit-list" class="text-xs text-stone-600"></div>
+                </div>
+                <div id="points-list" class="text-xs text-stone-600"></div>
+            </div>
+        </section>
+        {% endif %}
+
+        {% if create_login_url %}
+        <section class="user-form-card mb-6">
+            <h2 class="section-title mb-2">Customer Portal Login</h2>
+            <button type="button" id="create-login-btn" class="erp-toolbar-btn">Create / Link Portal User</button>
+            <p id="create-login-msg" class="mt-2 text-xs text-stone-500"></p>
+        </section>
+        {% endif %}
+
         {% include 'includes/detail_audit.html' %}
     </div>
     <noscript><p class="form-error">Enable JavaScript to load {{ resource.singular }} details.</p></noscript>

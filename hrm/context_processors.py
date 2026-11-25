@@ -33,5 +33,14 @@ def hrm_navigation(request):
     salary = menu((*SALARY_RESOURCES, PAYROLL_RUN_RESOURCE, *PAYROLL_INPUT_RESOURCES))
     if request.user.has_perms(PAYROLL_DETAIL):
         salary.append({'key': 'payroll-report', 'label': 'Payroll reports', 'list_url': reverse('hrm_pages:payroll-report')})
-    return {'hrm_menu': menu(EMPLOYEE_RESOURCES), 'hrm_attendance_menu': menu(ATTENDANCE_RESOURCES),
+    emp_menu = menu(EMPLOYEE_RESOURCES)
+    if request.user.has_perm('hrm.view_employee'):
+        emp_menu.append({
+            'key': 'workforce-console',
+            'label': 'Workforce & Leave M5',
+            'list_url': reverse('hrm_pages:workforce-console'),
+            'add_url': '',
+            'can_add': False,
+        })
+    return {'hrm_menu': emp_menu, 'hrm_attendance_menu': menu(ATTENDANCE_RESOURCES),
             'hrm_leave_menu': leave, 'hrm_salary_menu': salary, 'hrm_loan_menu': menu(LOAN_RESOURCES)}

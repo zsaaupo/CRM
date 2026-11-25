@@ -28,6 +28,25 @@
         <div class="users-pagination" data-catalog-pagination hidden><p data-catalog-range></p><div class="flex gap-2"><button type="button" class="secondary-button" data-catalog-previous>Previous</button><button type="button" class="secondary-button" data-catalog-next>Next</button></div></div>
         <noscript><p class="form-error p-6">Enable JavaScript to load this list.</p></noscript>
     </section>
+    <section class="erp-card mt-5 flex flex-wrap items-center justify-between gap-3 text-xs">
+        <div class="flex flex-wrap gap-2">
+            <a href="{{ list_api_url }}{% if '?' in list_api_url %}&{% else %}?{% endif %}export=csv" class="erp-toolbar-btn">Export CSV</a>
+            <a href="{{ list_api_url }}{% if '?' in list_api_url %}&{% else %}?{% endif %}export=xlsx" class="erp-toolbar-btn">Export XLSX</a>
+            <a href="{{ list_api_url }}{% if '?' in list_api_url %}&{% else %}?{% endif %}export=pdf" class="erp-toolbar-btn">Export PDF</a>
+        </div>
+        <form id="master-csv-import" class="flex flex-wrap items-center gap-2">
+            {% csrf_token %}
+            <select name="kind" class="form-input w-40">
+                <option value="products">Products CSV</option><option value="parties">Parties CSV</option>
+                <option value="warehouses">Warehouses CSV</option><option value="categories">Categories CSV</option>
+                <option value="brands">Brands CSV</option><option value="units">Units CSV</option>
+                <option value="tax_rules">Tax Rules CSV</option><option value="billers">Billers CSV</option>
+            </select>
+            <input type="file" name="file" accept=".csv,.xlsx" class="form-input w-56" required>
+            <button type="submit" class="erp-toolbar-btn">Preview &amp; Import</button>
+            <span id="master-csv-msg" class="text-stone-500"></span>
+        </form>
+    </section>
     {{ columns|json_script:"catalog-columns" }}
     {% if can_delete %}
     <dialog class="role-dialog" data-catalog-delete-dialog aria-labelledby="catalog-delete-title" aria-describedby="catalog-delete-description">
@@ -42,4 +61,24 @@
     {% endif %}
 </div>
 {% endblock %}
-{% block workspace_js %}<script type="module" src="{% static 'inventory/js/catalog_list.js' %}"></script>{% endblock %}
+{% block workspace_js %}<script type="module" src="{% static 'inventory/js/catalog_list.js' %}"></script>
+<script type="module">
+import { postFormData, postJSON } from "/static/js/api.js";
+document.getElementById("master-csv-import")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const form = e.currentTarget;
+    const fd = new FormData(form);
+    const kind = fd.get("kind");
+    const csrf = form.querySelector("input[name=csrfmiddlewaretoken]")?.value || "";
+    const msg = document.getElementById("master-csv-msg");
+    try {
+        const prev = await postFormData(`/common/api/imports/${kind}/preview/`, fd, csrf);
+        if (prev.id && (prev.dry_run_result?.errors || []).length === 0) {
+            await postJSON(`/common/api/imports/${prev.id}/commit/`, { request_key: crypto.randomUUID() }, csrf);
+            window.location.reload();
+        } else {
+            msg.textContent = `Preview errors: ${(prev.dry_run_result?.errors || []).length}`;
+        }
+    } catch (err) { msg.textContent = err.message || "Import failed."; }
+});
+</script>{% endblock %}

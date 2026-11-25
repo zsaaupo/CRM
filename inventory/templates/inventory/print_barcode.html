@@ -1,30 +1,77 @@
 {% extends "layouts/dashboard.html" %}
 
 {% block content %}
-<section class="card">
-  <h1>{{ page_label }}</h1>
-  <form id="barcode-form" method="post" action="{{ barcode_pdf_url }}">
-    {% csrf_token %}
-    <div>
-      <label for="layout">Label layout</label>
-      <select name="layout" id="layout">
-        <option value="a4_20">20 per A4 sheet</option>
-        <option value="a4_24" selected>24 per A4 sheet</option>
-        <option value="a4_30">30 per A4 sheet</option>
-        <option value="a4_40">40 per A4 sheet</option>
-        <option value="thermal">Thermal roll</option>
-      </select>
-    </div>
-    <div>
-      <label>Products</label>
-      <select name="product" id="product">
-        {% for p in products %}
-        <option value="{{ p.pk }}">{{ p.sku }} &mdash; {{ p.name }} ({{ p.barcode_symbology }})</option>
-        {% endfor %}
-      </select>
-      <input type="number" name="copies" id="copies" value="1" min="1" max="500">
-    </div>
-    <button type="submit">Generate Barcode PDF</button>
-  </form>
-</section>
+<div class="workspace-content" id="barcode-app" data-pdf-url="{{ barcode_pdf_url }}" data-presets-url="/settings/api/barcodes/" data-csrf="{{ csrf_token }}">
+  <div class="mb-6">
+    <h1 class="text-2xl font-semibold text-stone-900">{{ page_label }}</h1>
+    <p class="text-sm text-stone-500">Select product, label layout (or Barcode Setting preset), and copies to generate print-ready barcode labels.</p>
+  </div>
+  <section class="erp-card max-w-2xl">
+    <form id="barcode-form" class="space-y-4 text-sm">
+      <div>
+        <label class="form-label" for="layout">Label layout / preset</label>
+        <select name="layout" id="layout" class="form-input">
+          <option value="a4_20">20 per A4 sheet</option>
+          <option value="a4_24" selected>24 per A4 sheet</option>
+          <option value="a4_30">30 per A4 sheet</option>
+          <option value="a4_40">40 per A4 sheet</option>
+          <option value="thermal">Thermal roll</option>
+        </select>
+      </div>
+      <div>
+        <label class="form-label" for="product">Product</label>
+        <select name="product" id="product" class="form-input">
+          {% for p in products %}
+          <option value="{{ p.pk }}">{{ p.sku }} &mdash; {{ p.name }} ({{ p.barcode_symbology }})</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="form-label" for="copies">Copies</label>
+        <input type="number" name="copies" id="copies" class="form-input" value="1" min="1" max="500">
+      </div>
+      <div class="flex gap-3">
+        <button type="submit" class="primary-button">Generate Barcode PDF</button>
+      </div>
+      <p id="barcode-msg" class="text-xs text-stone-600"></p>
+    </form>
+  </section>
+</div>
+{% endblock %}
+
+{% block workspace_js %}
+<script type="module">
+import { getJSON } from "/static/js/api.js";
+const app = document.getElementById("barcode-app");
+(async () => {
+    try {
+        const res = await getJSON(app.dataset.presetsUrl);
+        const sel = document.getElementById("layout");
+        for (const p of (res.results || [])) {
+            const opt = document.createElement("option");
+            opt.value = p.name;
+            opt.textContent = `${p.name} (${p.paper}, ${p.rows}x${p.columns})`;
+            sel.appendChild(opt);
+        }
+    } catch {}
+})();
+document.getElementById("barcode-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const msg = document.getElementById("barcode-msg");
+    msg.textContent = "Generating PDF...";
+    const resp = await fetch(app.dataset.pdfUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-CSRFToken": app.dataset.csrf },
+        credentials: "same-origin",
+        body: JSON.stringify({
+            layout: document.getElementById("layout").value,
+            items: [{ product: Number(document.getElementById("product").value), copies: Number(document.getElementById("copies").value || 1) }],
+        }),
+    });
+    if (!resp.ok) { msg.textContent = "Failed to generate barcode PDF."; return; }
+    const blob = await resp.blob();
+    window.open(URL.createObjectURL(blob), "_blank");
+    msg.textContent = "Opened PDF.";
+});
+</script>
 {% endblock %}

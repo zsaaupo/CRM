@@ -88,6 +88,13 @@ class SalesDetailPageView(WarehouseScopePageMixin, ProtectedAccountPageView):
             context['return_url'] = f"{reverse('sale_pages:create-return')}?sales_order={self.kwargs['pk']}"
         if has_role_permissions(self.request.user, SALES_PAYMENT_VIEW):
             context['payments_url'] = reverse('sale_pages:sales-payment-list', args=[self.kwargs['pk']])
+        if has_role_permissions(self.request.user, ('sale.view_salesorder', 'sale.add_salesorder')):
+            context['duplicate_url'] = reverse('sale:sales-order-duplicate', args=[self.kwargs['pk']])
+        context['whatsapp_api_url'] = reverse('sale:sales-order-whatsapp', args=[self.kwargs['pk']])
+        context['receipt_pdf_url'] = reverse('report:pos-receipt-pdf', args=[self.kwargs['pk']])
+        context['packing_slips_url'] = reverse('sale:packing-slip-list')
+        context['deliveries_url'] = reverse('sale:delivery-list')
+        context['challans_url'] = reverse('sale:challan-list')
         if has_role_permissions(self.request.user, QUOTE_VIEW):
             scope = warehouse_scope(self.request.user)
             quotes = SalesQuotation.objects.filter(sales_order_id=self.kwargs['pk'])
@@ -309,6 +316,10 @@ class QuotationDetailPageView(QuotationPageView):
             )
         if record.issued_at and has_role_permissions(user, QUOTE_DETAIL):
             context['pdf_url'] = reverse('report:quotation-pdf', args=[record.pk])
+        if has_role_permissions(user, ('sale.view_salesquotation', 'purchase.add_purchaseorder')):
+            from people.models import Party
+            context['convert_purchase_url'] = reverse('sale:quotation-convert-purchase', args=[record.pk])
+            context['purchase_suppliers'] = Party.objects.filter(is_supplier=True, is_active=True).order_by('name')
         return context
 
 

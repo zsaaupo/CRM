@@ -2,11 +2,21 @@
 {% load static %}
 {% block title %}Sales details | eManager{% endblock %}
 {% block content %}
-<div class="workspace-content" data-record-detail data-api-url="{{ detail_api_url }}" data-title-field="order_number" data-login-url="{% url 'account_pages:login' %}">
+<div class="workspace-content" data-record-detail data-api-url="{{ detail_api_url }}" data-title-field="order_number" data-login-url="{% url 'account_pages:login' %}"
+     data-sale-id="{{ view.kwargs.pk }}"
+     data-duplicate-url="{{ duplicate_url }}"
+     data-whatsapp-url="{{ whatsapp_api_url }}"
+     data-packing-slips-url="{{ packing_slips_url }}"
+     data-deliveries-url="{{ deliveries_url }}"
+     data-challans-url="{{ challans_url }}"
+     data-csrf="{{ csrf_token }}">
     <div class="page-heading">
         <div class="min-w-0 max-w-full"><p class="page-eyebrow">Sales</p><h1 class="page-title break-all"><span data-record-title>Sales details</span><span class="text-emerald-600">.</span></h1><p class="page-description">Order information, products and totals.</p></div>
         <div class="flex flex-wrap gap-3">
             {% include 'report/includes/download_button.html' %}
+            <a href="{{ receipt_pdf_url }}" target="_blank" class="secondary-button">Receipt PDF</a>
+            <button type="button" id="sale-whatsapp-btn" class="secondary-button">WhatsApp</button>
+            {% if duplicate_url %}<button type="button" id="sale-duplicate-btn" class="secondary-button">Duplicate</button>{% endif %}
             <a href="{{ list_url }}" class="secondary-button">Back to sales <span aria-hidden="true">&rarr;</span></a>
             {% if payments_url %}<a href="{{ payments_url }}" class="secondary-button" data-sale-payments hidden>Payments</a>{% endif %}
             {% if quotation_url %}<a href="{{ quotation_url }}" class="secondary-button">Source quotation</a>{% endif %}
@@ -54,6 +64,14 @@
             {% include 'includes/detail_field.html' with name='shipping_cost' label='Shipping cost' kind='money' only %}
             {% include 'includes/detail_field.html' with name='grand_total' label='Grand total' kind='money' only %}
         </dl></section>
+        <section id="sale-shipping-panel" class="user-form-card mb-6 space-y-3" hidden>
+            <h2 class="section-title">Fulfillment, Packing Slips &amp; Deliveries</h2>
+            <div class="flex flex-wrap gap-2">
+                <button type="button" id="sale-pack-btn" class="erp-toolbar-btn">Create Packing Slip</button>
+                <button type="button" id="sale-deliver-btn" class="erp-toolbar-btn">Create Delivery</button>
+            </div>
+            <p id="sale-ship-msg" class="text-xs text-stone-600"></p>
+        </section>
         {% include 'includes/detail_audit.html' %}
     </div>
     <noscript><p class="form-error">Enable JavaScript to load sale details.</p></noscript>

@@ -2,10 +2,11 @@
 {% load static %}
 {% block title %}Purchase details | eManager{% endblock %}
 {% block content %}
-<div class="workspace-content" data-record-detail data-api-url="{{ detail_api_url }}" data-title-field="order_number" data-login-url="{% url 'account_pages:login' %}">
+<div class="workspace-content" data-record-detail data-api-url="{{ detail_api_url }}" data-title-field="order_number" data-login-url="{% url 'account_pages:login' %}"
+     data-duplicate-url="{{ duplicate_url }}" data-receipt-url="{{ partial_receipt_url }}" data-csrf="{{ csrf_token }}">
     <div class="page-heading">
         <div class="min-w-0 max-w-full"><p class="page-eyebrow">Purchase</p><h1 class="page-title break-all"><span data-record-title>Purchase details</span><span class="text-emerald-600">.</span></h1><p class="page-description">Order information, purchased products and totals.</p></div>
-        <div class="flex flex-wrap gap-3">{% include 'report/includes/download_button.html' %}<a href="{{ list_url }}" class="secondary-button">Back to purchases <span aria-hidden="true">&rarr;</span></a>{% if return_url %}<a href="{{ return_url }}" class="primary-button compact-primary" data-purchase-return hidden>Create return</a>{% endif %}</div>
+        <div class="flex flex-wrap gap-3">{% include 'report/includes/download_button.html' %}{% if payments_url %}<a href="{{ payments_url }}" class="secondary-button">Payments</a>{% endif %}{% if duplicate_url %}<button type="button" id="po-duplicate-btn" class="secondary-button">Duplicate</button>{% endif %}<a href="{{ list_url }}" class="secondary-button">Back to purchases <span aria-hidden="true">&rarr;</span></a>{% if return_url %}<a href="{{ return_url }}" class="primary-button compact-primary" data-purchase-return hidden>Create return</a>{% endif %}</div>
     </div>
     {% include 'includes/detail_status.html' %}
     <div data-record-content hidden>
@@ -45,6 +46,19 @@
             {% include 'includes/detail_field.html' with name='grand_total' label='Grand total' kind='money' only %}
             {% include 'includes/detail_field.html' with name='payment_amount' label='Paid amount ('|add:base_currency|add:')' only %}
         </dl></section>
+        {% if partial_receipt_url %}
+        <section id="po-receipt-panel" class="user-form-card mb-6 space-y-3" hidden>
+            <h2 class="section-title">Partial Receipt</h2>
+            <form id="po-receipt-form" class="flex flex-wrap gap-2 text-sm">
+                <input type="number" name="order_line" class="form-input w-28" placeholder="Line ID" required min="1">
+                <input type="number" step="0.0001" name="quantity" class="form-input w-28" placeholder="Qty" required min="0.0001">
+                <input type="text" name="batch_number" class="form-input w-32" placeholder="Batch (opt)">
+                <input type="date" name="expiry_date" class="form-input w-40">
+                <button type="submit" class="primary-button">Receive Goods</button>
+            </form>
+            <p id="po-receipt-msg" class="text-xs text-stone-500"></p>
+        </section>
+        {% endif %}
         {% include 'includes/detail_audit.html' %}
     </div>
     <noscript><p class="form-error">Enable JavaScript to load purchase details.</p></noscript>

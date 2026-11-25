@@ -2,10 +2,11 @@
 {% load static %}
 {% block title %}Transfer details | eManager{% endblock %}
 {% block content %}
-<div class="workspace-content" data-record-detail data-api-url="{{ detail_api_url }}" data-title-field="transfer_number" data-login-url="{% url 'account_pages:login' %}">
+<div class="workspace-content" data-record-detail data-api-url="{{ detail_api_url }}" data-title-field="transfer_number" data-login-url="{% url 'account_pages:login' %}"
+     data-dispatch-url="{{ dispatch_url }}" data-receive-url="{{ receive_url }}" data-csrf="{{ csrf_token }}">
     <div class="page-heading">
         <div class="min-w-0 max-w-full"><p class="page-eyebrow">Warehouses</p><h1 class="page-title break-all"><span data-record-title>Transfer details</span><span class="text-emerald-600">.</span></h1><p class="page-description">Product movement between warehouses.</p></div>
-        <div class="flex gap-3">{% include 'report/includes/download_button.html' %}<a href="{{ list_url }}" class="secondary-button">Back to transfers <span aria-hidden="true">&rarr;</span></a></div>
+        <div class="flex flex-wrap gap-3">{% include 'report/includes/download_button.html' %}<button type="button" id="tr-dispatch-btn" class="secondary-button" hidden>Dispatch (Send)</button><button type="button" id="tr-receive-btn" class="primary-button compact-primary" hidden>Receive Transfer</button><a href="{{ list_url }}" class="secondary-button">Back to transfers <span aria-hidden="true">&rarr;</span></a></div>
     </div>
     {% include 'includes/detail_status.html' %}
     <div data-record-content hidden>

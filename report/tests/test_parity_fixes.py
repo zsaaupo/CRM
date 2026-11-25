@@ -221,13 +221,28 @@ class ParityGapFixesTests(TestCase):
             self.assertIn(key, dash.data)
 
         self.client.force_login(self.su)
+        wh2 = WareHouse.objects.create(name='Parity WH2', code='PAR2', address='Sylhet', phone='01712')
+        so_ui = SalesOrder.objects.create(customer=self.cust, warehouse=self.wh, currency=self.bdt, exchange_rate=Decimal('1'), settlement_mode='deferred')
+        po_ui = PurchaseOrder.objects.create(supplier=self.sup, warehouse=self.wh, currency=self.bdt, exchange_rate=Decimal('1'), settlement_mode='deferred')
+        from sale.models import SalesQuotation
+        from warehouse.models import WarehouseTransfer
+        q_ui = SalesQuotation.objects.create(customer=self.cust, warehouse=self.wh, currency=self.bdt, exchange_rate=Decimal('1'))
+        tr_ui = WarehouseTransfer.objects.create(source_warehouse=self.wh, destination_warehouse=wh2)
         for url in [
             reverse('dashboard'),
             reverse('pos'),
             reverse('warehouse_pages:adjustment-list'),
             reverse('warehouse_pages:stock-count-list'),
+            reverse('warehouse_pages:transfer-detail', args=[tr_ui.pk]),
             reverse('manufacturing_pages:home'),
             reverse('tasks_pages:list'),
+            reverse('hrm_pages:workforce-console'),
+            reverse('inventory_pages:print-barcode'),
+            reverse('people_pages:customer-list'),
+            reverse('people_pages:customer-detail', args=[self.cust.pk]),
+            reverse('sale_pages:sale-detail', args=[so_ui.pk]),
+            reverse('sale_pages:quotation-detail', args=[q_ui.pk]),
+            reverse('purchase_pages:purchase-detail', args=[po_ui.pk]),
             reverse('report_pages:analytics', args=['summary']),
             reverse('common_pages:general-settings'),
             reverse('common_pages:audit-logs'),

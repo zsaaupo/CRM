@@ -69,3 +69,18 @@ export function initializeQuotationDetail(panel) {
 
 const panel = document.querySelector("[data-quotation-detail]");
 if (panel) initializeQuotationDetail(panel);
+
+document.getElementById("quo-convert-po-btn")?.addEventListener("click", async (e) => {
+    const btn = e.currentTarget;
+    const msg = document.getElementById("quo-po-msg");
+    try {
+        const res = await postJSON(btn.dataset.url, {
+            supplier: Number(document.getElementById("quo-sup-select").value),
+            cost_basis: document.getElementById("quo-cost-basis").value,
+            request_key: crypto.randomUUID(),
+        }, btn.dataset.csrf);
+        window.location.assign(`/purchase/purchase-orders/${res.purchase_order_id}/`);
+    } catch (err) {
+        msg.textContent = err.message || "Could not convert quotation to purchase.";
+    }
+});

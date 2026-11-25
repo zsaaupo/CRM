@@ -18,6 +18,33 @@
         <div><label class="form-label" data-line-label="unit">Unit</label><input class="form-input" data-line-unit-label readonly><input type="hidden" data-line-field="unit"><p class="form-error" data-line-error="unit" hidden></p></div>
         {% include 'sale/includes/line_field.html' with name='quantity' label='Quantity' value='1' minimum='0.000001' step='0.000001' only %}
     </div></fieldset></template>
+    {% if page_mode == 'transfer-add' %}
+    <section class="user-form-card mt-6 space-y-3">
+        <h2 class="section-title">Import Transfer from CSV</h2>
+        <p class="text-xs text-stone-500">Columns: <code>product_code, quantity, product_unit, product_cost, tax_name</code></p>
+        <form id="tr-csv-import-form" class="flex flex-wrap gap-2 text-sm">
+            <input type="number" name="source_warehouse" class="form-input w-36" placeholder="Source WH ID" required min="1">
+            <input type="number" name="destination_warehouse" class="form-input w-40" placeholder="Destination WH ID" required min="1">
+            <input type="file" name="file" accept=".csv" class="form-input w-64" required>
+            <button type="submit" class="secondary-button">Import Transfer</button>
+        </form>
+        <p id="tr-csv-msg" class="text-xs text-stone-500"></p>
+    </section>
+    {% endif %}
 </div>
 {% endblock %}
-{% block workspace_js %}<script type="module" src="{% static 'warehouse/js/transfer_form.js' %}"></script>{% endblock %}
+{% block workspace_js %}<script type="module" src="{% static 'warehouse/js/transfer_form.js' %}"></script>
+<script type="module">
+import { postFormData } from "/static/js/api.js";
+document.getElementById("tr-csv-import-form")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    const csrf = document.querySelector("input[name=csrfmiddlewaretoken]")?.value || "";
+    try {
+        const res = await postFormData("/warehouse/api/transfers/import-csv/", fd, csrf);
+        window.location.assign(`/warehouse/transfers/${res.id || res.warehouse_transfer?.id}/`);
+    } catch (err) {
+        document.getElementById("tr-csv-msg").textContent = err.message || "Import failed.";
+    }
+});
+</script>{% endblock %}
