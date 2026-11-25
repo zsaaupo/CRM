@@ -26,7 +26,7 @@ from account.permissions import has_role_permissions
 from .models import SalesOrder, SalesOrderItem, SalesQuotation, SalesQuotationItem, quotation_valid_until
 from .services import (
     ACTION_PERMISSIONS, ITEM_VIEW, QUOTE_ADD, QUOTE_DETAIL, QuotationBusy, SaleBusy, Status,
-    apply_quotation_action, available_actions, complete_sale, delete_order, lock_order,
+    apply_quotation_action, available_actions, complete_sale, delete_order, duplicate_sales_order, lock_order,
     lock_quotation, require_draft, require_permissions,
 )
 from .serializers import (
@@ -137,7 +137,15 @@ class SaleCompleteAPIView(SalesConcurrencyMixin, WarehouseScopeAPIMixin, BaseAPI
     def post(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        order, completed_now = complete_sale(request.user, serializer.validated_data['sale_id'])
+        data = serializer.validated_data
+        order, completed_now = complete_sale(
+            request.user,
+            data['sale_id'],
+            settlement_mode=data.get('settlement_mode'),
+            tenders=data.get('tenders') or None,
+            request_key=data.get('request_key'),
+            payment_date=data.get('payment_date'),
+        )
         return Response({
             'message': 'Sale completed and stock updated.' if completed_now else 'Sale was already completed.',
             'completed_now': completed_now,
@@ -206,7 +214,7 @@ class QuotationSerializer(CatalogSerializer):
     class Meta:
         model = SalesQuotation
         fields = [
-            'id', 'quotation_number', 'customer', 'customer_name', 'warehouse', 'warehouse_name', 'order_date',
+            'id', 'quotation_number', 'customer', 'customer_name', 'supplier', 'biller', 'warehouse', 'warehouse_name', 'order_date',
             'valid_until', 'expected_delivery_date', 'currency', 'exchange_rate', 'customer_reference',
             'billing_address', 'shipping_address', 'shipping_cost', 'notes', 'terms', 'status', 'status_name', 'is_locked',
             'issued_at', 'issued_by', 'responded_at', 'responded_by', 'subtotal', 'tax_total', 'grand_total', *AUDIT_FIELDS[1:],
@@ -287,10 +295,33 @@ class QuotationLineInput(SalesOrderLineSerializer):
 
     class Meta(SalesOrderLineSerializer.Meta):
         model = SalesQuotationItem
+        fields = ['id', 'line_number', 'product', 'description', 'unit', 'quantity', 'unit_price',
+                  'discount_amount', 'tax_rate', 'tax_method']
+
+    def validate(self, attrs):
+        for field in ('discount_amount', 'tax_rate'):
+            attrs.setdefault(field, 0)
+        attrs.setdefault('description', '')
+        candidate = SalesQuotationItem(**{name: value for name, value in attrs.items() if name != 'id'})
+        try:
+            candidate.full_clean(exclude=[self.parent_field, *AUDIT_FIELDS])
+        except Exception as exc:
+            from django.core.exceptions import ValidationError as DjangoValidationError
+            if isinstance(exc, DjangoValidationError):
+                errors = exc.message_dict if hasattr(exc, 'message_dict') else {'__all__': exc.messages}
+                raise serializers.ValidationError({
+                    'non_field_errors' if name == '__all__' else name: messages
+                    for name, messages in errors.items()
+                }) from exc
+            raise
+        return attrs
 
 
 class QuotationWriteSerializer(WarehouseScopedSerializerMixin, QuotationSerializer):
     customer = serializers.PrimaryKeyRelatedField(queryset=Party.objects.filter(is_customer=True, is_active=True))
+    supplier = serializers.PrimaryKeyRelatedField(
+        queryset=Party.objects.filter(is_supplier=True, is_active=True), required=False, allow_null=True,
+    )
     warehouse = serializers.PrimaryKeyRelatedField(queryset=WareHouse.objects.filter(is_active=True), required=False)
     currency = serializers.SlugRelatedField(slug_field='code', queryset=Currency.objects.all())
     items = QuotationLineInput(many=True, required=False, allow_empty=False, write_only=True)
@@ -410,6 +441,22 @@ class QuotationActionAPIView(QuotationConcurrencyMixin, BaseAPIMixin, APIView):
             payment_account = serializers.IntegerField(min_value=1, max_value=2**63 - 1).run_validation(
                 request.data['payment_account'],
             )
-        quotation = apply_quotation_action(request.user, pk, action, payment_account=payment_account)
+        settlement_mode = request.data.get('settlement_mode') if action == 'convert' else None
+        quotation = apply_quotation_action(
+            request.user, pk, action, payment_account=payment_account, settlement_mode=settlement_mode,
+        )
         data = QuotationDetailSerializer(quotation, context={'request': request}).data
         return Response({'sales_quotation': data, 'quotation_url': reverse('sale_pages:quotation-detail', args=[quotation.pk])})
+
+
+@method_decorator(never_cache, name='dispatch')
+class SaleDuplicateAPIView(SalesConcurrencyMixin, WarehouseScopeAPIMixin, BaseAPIMixin, APIView):
+    required_permissions = ('sale.view_salesorder', 'sale.add_salesorder')
+    http_method_names = ['post', 'options']
+
+    def post(self, request, pk):
+        clone = duplicate_sales_order(request.user, pk)
+        return Response({
+            'id': clone.pk,
+            'sales_order': SalesOrderDetailSerializer(clone, context={'request': request}).data,
+        }, status=201)

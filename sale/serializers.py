@@ -5,7 +5,7 @@ from rest_framework import serializers
 from rest_framework.exceptions import NotFound
 
 from accounting.serializers import PaymentAccountField
-from common.models import TradeStatus
+from common.models import SettlementMode, TradeStatus
 from common.serializers import AUDIT_FIELDS, CatalogSerializer
 from inventory.models import Currency
 from people.models import Party
@@ -21,7 +21,7 @@ class SalesOrderSerializer(WarehouseScopedSerializerMixin, CatalogSerializer):
     )
     customer_name = serializers.CharField(source='customer.name', read_only=True, default=None)
     customer_code = serializers.CharField(source='customer.code', read_only=True, default=None)
-    payment_account = PaymentAccountField()
+    payment_account = PaymentAccountField(required=False, allow_null=True)
     payment_account_name = serializers.CharField(source='payment_account.name', read_only=True, default=None)
     currency = serializers.SlugRelatedField(slug_field='code', queryset=Currency.objects.all())
     status = serializers.SlugRelatedField(slug_field='code', queryset=TradeStatus.objects.all(), required=False)
@@ -34,12 +34,26 @@ class SalesOrderSerializer(WarehouseScopedSerializerMixin, CatalogSerializer):
         fields = [
             'id', 'order_number', 'customer', 'customer_name', 'customer_code', 'order_date', 'expected_delivery_date', 'currency',
             'exchange_rate', 'status', 'warehouse', 'warehouse_name', 'payment_account', 'payment_account_name',
+            'settlement_mode', 'payment_status', 'recognized_total_base',
+            'order_discount_type', 'order_discount_value', 'order_discount_amount',
+            'order_tax_rule', 'order_tax_rate', 'order_tax_amount',
+            'biller', 'biller_name_snapshot', 'attachment', 'staff_note', 'sale_note',
             'customer_reference',
             'billing_address', 'shipping_address', 'shipping_cost', 'notes', 'confirmed_at', 'fulfilled_at', 'is_completed',
             'subtotal', 'tax_total', 'grand_total', *AUDIT_FIELDS[1:],
         ]
         read_only_fields = [*AUDIT_FIELDS, 'order_number', 'confirmed_at', 'fulfilled_at', 'is_completed',
-                            'subtotal', 'tax_total', 'grand_total']
+                            'payment_status', 'recognized_total_base', 'order_discount_amount', 'order_tax_amount',
+                            'biller_name_snapshot', 'subtotal', 'tax_total', 'grand_total']
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        mode = attrs.get('settlement_mode', self.instance.settlement_mode if self.instance else SettlementMode.AUTO_FULL)
+        account = attrs.get('payment_account', self.instance.payment_account if self.instance else None)
+        if mode == SettlementMode.AUTO_FULL and account is None:
+            if self.instance is None or 'payment_account' in attrs or 'settlement_mode' in attrs:
+                raise serializers.ValidationError({'payment_account': ['Choose a payment account.']})
+        return attrs
 
     @transaction.atomic
     def update(self, instance, validated_data):
@@ -62,10 +76,14 @@ class SalesOrderItemSerializer(WarehouseScopedSerializerMixin, CatalogSerializer
         model = SalesOrderItem
         fields = [
             'id', 'sales_order', 'line_number', 'product', 'description', 'unit',
-            'quantity', 'unit_price', 'discount_amount', 'tax_rate', 'net_amount',
+            'quantity', 'unit_conversion_factor', 'base_quantity', 'batch', 'serial_numbers',
+            'unit_price', 'discount_amount', 'tax_rate', 'tax_method',
+            'allocated_order_discount', 'allocated_order_tax', 'net_amount',
             'tax_amount', 'line_total', 'product_name', 'product_sku', 'unit_name', 'unit_code', *AUDIT_FIELDS[1:],
         ]
-        read_only_fields = [*AUDIT_FIELDS, 'net_amount', 'tax_amount', 'line_total']
+        read_only_fields = [*AUDIT_FIELDS, 'unit_conversion_factor', 'base_quantity',
+                            'allocated_order_discount', 'allocated_order_tax',
+                            'net_amount', 'tax_amount', 'line_total']
 
     def validate_sales_order(self, value):
         if self.instance and value.pk != self.instance.sales_order_id:
@@ -103,6 +121,10 @@ class SalesOrderItemFilterSerializer(serializers.Serializer):
 class SaleCompleteSerializer(serializers.Serializer):
     sale_id = serializers.IntegerField(min_value=1, max_value=9223372036854775807)
     is_completed = serializers.BooleanField(required=True)
+    settlement_mode = serializers.ChoiceField(choices=SettlementMode.choices, required=False)
+    tenders = serializers.ListField(child=serializers.DictField(), required=False, default=list)
+    request_key = serializers.UUIDField(required=False)
+    payment_date = serializers.DateField(required=False)
 
     def validate_is_completed(self, value):
         if value is not True:
@@ -119,12 +141,13 @@ class SalesOrderLineSerializer(serializers.ModelSerializer):
     class Meta:
         model = SalesOrderItem
         fields = ['id', 'line_number', 'product', 'description', 'unit', 'quantity', 'unit_price',
-                  'discount_amount', 'tax_rate']
+                  'discount_amount', 'tax_rate', 'tax_method', 'batch', 'serial_numbers']
 
     def validate(self, attrs):
         for field in ('discount_amount', 'tax_rate'):
             attrs.setdefault(field, 0)
         attrs.setdefault('description', '')
+        attrs.setdefault('serial_numbers', [])
         candidate = self.Meta.model(**{name: value for name, value in attrs.items() if name != 'id'})
         try:
             candidate.full_clean(exclude=[self.parent_field, *AUDIT_FIELDS])
@@ -231,4 +254,14 @@ def replace_sales_lines(document, items, actor, require_permission):
             relation.related_model.objects.create(
                 **{relation.field.name: document}, create_by=actor, modified_by=actor, **values)
         elif item['id'] in changed:
-            document.items.filter(pk=item['id']).update(**values, modified_by=actor, updated_at=now)
+            obj = existing[item['id']]
+            for k, v in values.items():
+                setattr(obj, k, v)
+            obj.sync_base_quantity()
+            document.items.filter(pk=item['id']).update(
+                **values,
+                unit_conversion_factor=obj.unit_conversion_factor,
+                base_quantity=obj.base_quantity,
+                modified_by=actor,
+                updated_at=now,
+            )

@@ -1,5 +1,7 @@
 from django.urls import path
 
+from .page_views import PrintBarcodePageView
+
 from .catalog import RESOURCES
 from .page_views import InventoryAddPageView, InventoryEditPageView, InventoryListPageView, ProductDetailPageView
 
@@ -7,6 +9,7 @@ from .page_views import InventoryAddPageView, InventoryEditPageView, InventoryLi
 app_name = 'inventory_pages'
 
 urlpatterns = [
+    path('products/print-barcode/', PrintBarcodePageView.as_view(), name='print-barcode'),
     path('products/<int:pk>/', ProductDetailPageView.as_view(), name='product-detail'),
 ]
 for resource in RESOURCES:

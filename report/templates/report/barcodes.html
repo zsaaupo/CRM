@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Barcode Labels</title>
+<style>
+  @page { size: {{ preset.page_size }}; margin: 6mm; }
+  body { margin: 0; font-family: sans-serif; color: #111; }
+  .sheet {
+    display: grid;
+    grid-template-columns: repeat({{ preset.cols }}, 1fr);
+    gap: 3mm;
+  }
+  .label {
+    border: 0.5pt dashed #d1d5db;
+    padding: 2mm;
+    text-align: center;
+    page-break-inside: avoid;
+    overflow: hidden;
+  }
+  .biz { font-weight: 600; margin-bottom: 1mm; }
+  .pname { font-weight: 500; margin-bottom: 1mm; }
+  .svg-wrap { margin: 1mm auto; max-width: 100%; }
+  .code-text { font-size: 8pt; font-family: monospace; letter-spacing: 0.5pt; }
+  .price { font-weight: 700; margin-top: 1mm; }
+  .promo { color: #b91c1c; font-weight: 700; }
+  .strike { text-decoration: line-through; color: #6b7280; font-weight: 400; margin-right: 4px; }
+</style>
+</head>
+<body>
+<div class="sheet">
+{% for label in labels %}
+  <div class="label">
+    {% if fields.business_name.show %}
+      <div class="biz" style="font-size:{{ fields.business_name.size }}pt;">{{ label.business_name }}</div>
+    {% endif %}
+    {% if fields.product_name.show %}
+      <div class="pname" style="font-size:{{ fields.product_name.size }}pt;">{{ label.name }}</div>
+    {% endif %}
+    <div class="svg-wrap">{{ label.svg|safe }}</div>
+    <div class="code-text">{{ label.code }}</div>
+    {% if fields.price.show or fields.promo_price.show %}
+      <div class="price" style="font-size:{{ fields.price.size }}pt;">
+        {% if fields.promo_price.show and label.promo_price %}
+          {% if fields.price.show %}<span class="strike">{{ label.price }}</span>{% endif %}
+          <span class="promo" style="font-size:{{ fields.promo_price.size }}pt;">{{ label.promo_price }}</span>
+        {% elif fields.price.show %}
+          {{ label.price }}
+        {% endif %}
+      </div>
+    {% endif %}
+  </div>
+{% endfor %}
+</div>
+</body>
+</html>

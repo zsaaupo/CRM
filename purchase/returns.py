@@ -4,15 +4,17 @@ from collections import defaultdict
 from decimal import Decimal, InvalidOperation, localcontext
 
 from django.db import IntegrityError, OperationalError, transaction
-from django.db.models import F
+from django.db.models import F, Q
 from django.utils import timezone
 from rest_framework.exceptions import APIException, NotFound, PermissionDenied, ValidationError
 
 from account.permissions import has_role_permissions
 from accounting.services import post_purchase_return_refund, return_refund_amount
-from inventory.models import Product
-from warehouse.models import Stock, WareHouse
+from common.money import q_cost, q_qty
+from inventory.models import Product, require_convertible_unit
+from warehouse.models import StockMovement, WareHouse
 from warehouse.scope import lock_warehouse_scope, scoped_queryset
+from warehouse.services import post_stock_movement
 
 from .models import PurchaseOrder, PurchaseReturn, PurchaseReturnItem
 
@@ -43,7 +45,13 @@ def require_permissions(user, *permissions):
 
 
 def received_orders(scope):
-    return scoped_queryset(PurchaseOrder.objects.filter(is_received=True, warehouse__isnull=False), scope)
+    return scoped_queryset(
+        PurchaseOrder.objects.filter(
+            Q(is_received=True) | Q(receipt_state=PurchaseOrder.ReceiptState.PARTIAL),
+            warehouse__isnull=False,
+        ),
+        scope,
+    )
 
 
 def scoped_returns(queryset, scope):
@@ -85,26 +93,48 @@ def validate_items(order, quantities, products=None, *, previous=None):
         product = line.product if products is None else products[line.product_id]
         if not product.is_returnable:
             raise ValidationError({'items': f'Line {line.line_number}: {product.name} is marked as non-returnable.'})
-        if product.unit_id != line.unit_id:
-            raise ValidationError({'items': f'Line {line.line_number}: the original purchase unit must match the product unit.'})
-        remaining = line.quantity - returned[pk]
+        require_convertible_unit(line.unit, product.unit, field='items')
+        received_cap = (
+            line.received_quantity
+            if (order.receipt_state == PurchaseOrder.ReceiptState.PARTIAL or line.received_quantity > 0)
+            else line.quantity
+        )
+        remaining = received_cap - returned[pk]
         if not quantity.is_finite() or quantity <= 0 or quantity > remaining:
             raise ValidationError({'items': f'Line {line.line_number}: enter a positive quantity up to {max(remaining, 0)}.'})
     return received
 
 
 def deduct_stock(warehouse, quantities, products, user, now):
-    username = user.get_username()
-    for product_id, quantity in sorted(quantities.items()):
-        stock = Stock.objects.select_for_update().filter(warehouse=warehouse, product_id=product_id).first()
-        updated = stock is not None and Stock.objects.filter(pk=stock.pk, quantity__gte=quantity).update(
-            quantity=F('quantity') - quantity, updated_at=now, modified_by=username)
-        if not updated:
-            raise ValidationError({'quantity': f'Insufficient stock for {products[product_id].name} in the receiving warehouse.'})
-        expected = stock.quantity - quantity
-        stock.refresh_from_db(fields=['quantity'])
-        if stock.quantity != expected:
-            raise ValidationError({'quantity': 'The database cannot store the resulting stock quantity accurately.'})
+    pass
+
+
+def _deduct_return_lines(record, order, warehouse, quantities, received, user):
+    for line_id in sorted(quantities, key=lambda lid: (received[lid].product_id, lid)):
+        qty = quantities[line_id]
+        po_line = received[line_id]
+        product = po_line.product
+        if product.product_type_id in ('service', 'digital'):
+            continue
+        factor = getattr(po_line, 'unit_conversion_factor', Decimal('1')) or Decimal('1')
+        base_qty = q_qty(qty * factor)
+        out_cost = po_line.unit_cost_base
+        if out_cost is None and po_line.quantity:
+            out_cost = q_cost((po_line.net_amount / (po_line.quantity * factor)) * order.exchange_rate)
+        post_stock_movement(
+            warehouse_id=warehouse.pk,
+            product_id=po_line.product_id,
+            kind=StockMovement.Kind.PURCHASE_RETURN,
+            quantity_delta=-base_qty,
+            unit_cost_base=out_cost,
+            batch_id=po_line.batch_id,
+            movement_date=record.return_date,
+            reference_type='purchase_return',
+            reference_id=record.pk,
+            reference_line_id=line_id,
+            posting_key=f'purchase_return:{record.pk}:line:{line_id}',
+            actor=user,
+        )
 
 
 def complete_return(user, pk):
@@ -141,10 +171,7 @@ def complete_return(user, pk):
                 pk__in=product_ids).order_by('pk')}
             previous = returned_quantities(order, exclude_return=pk)
             received = validate_items(order, quantities, products=products, previous=previous)
-            stock_quantities = defaultdict(Decimal)
-            for line_id, quantity in quantities.items():
-                stock_quantities[received[line_id].product_id] += quantity
-            deduct_stock(warehouse, stock_quantities, products, user, now)
+            _deduct_return_lines(record, order, warehouse, quantities, received, user)
             post_purchase_return_refund(record, scope, user, date=timezone.localdate(now),
                                         amount=return_refund_amount(order, quantities, previous))
             return record, True

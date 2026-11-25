@@ -2,7 +2,36 @@ from django.contrib import admin
 
 from common.admin import AuditedAdmin
 
-from .models import Lead, Party
+from .models import Biller, BillerWarehouse, CustomerGroup, CustomerPointLedger, Lead, Party
+
+
+@admin.register(CustomerGroup)
+class CustomerGroupAdmin(AuditedAdmin):
+    list_display = ['name', 'percentage', 'price_basis', 'is_active']
+    search_fields = ['name']
+    list_filter = ['price_basis', 'is_active']
+
+
+@admin.register(Biller)
+class BillerAdmin(AuditedAdmin):
+    list_display = ['name', 'company_name', 'phone', 'email', 'is_active', 'is_deleted']
+    search_fields = ['name', 'company_name', 'phone', 'email']
+    list_filter = ['is_active', 'is_deleted']
+
+    def get_queryset(self, request):
+        return self.model.all_objects.all()
+
+    def delete_model(self, request, obj):
+        obj.delete(actor=request.user.get_username())
+
+    def delete_queryset(self, request, queryset):
+        queryset.delete(actor=request.user.get_username())
+
+
+@admin.register(BillerWarehouse)
+class BillerWarehouseAdmin(AuditedAdmin):
+    list_display = ['biller', 'warehouse']
+    list_select_related = ['biller', 'warehouse']
 
 
 @admin.register(Lead)
@@ -20,6 +49,7 @@ class PartyAdmin(admin.ModelAdmin):
     search_fields = ['code', 'name', 'contact_person', 'phone', 'email']
     list_filter = ['is_deleted', 'is_customer', 'is_supplier', 'is_active']
     readonly_fields = ['created_at', 'updated_at', 'create_by', 'modified_by',
+                       'deposit_balance', 'reward_points',
                        'is_deleted', 'deleted_at', 'deleted_by']
 
     def get_queryset(self, request):
@@ -56,3 +86,19 @@ class PartyAdmin(admin.ModelAdmin):
 
     def delete_queryset(self, request, queryset):
         queryset.delete(actor=request.user.get_username())
+
+
+@admin.register(CustomerPointLedger)
+class CustomerPointLedgerAdmin(admin.ModelAdmin):
+    list_display = ['customer', 'reason', 'points_delta', 'sales_order', 'expires_at', 'request_key']
+    list_filter = ['reason']
+    list_select_related = ['customer', 'sales_order']
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False

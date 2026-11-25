@@ -3,5 +3,11 @@
         <span class="flex h-8 w-8 items-center justify-center rounded-lg bg-stone-900 text-sm text-white" aria-hidden="true">e</span>
         <span>eManager<span class="text-emerald-600">.</span></span>
     </a>
+    {% if user.is_authenticated %}
+    <div class="flex items-center gap-3 text-sm">
+        <a href="{% url 'pos' %}" class="rounded-lg border border-stone-200 px-3 py-1.5 font-medium text-stone-700 hover:bg-stone-100">POS</a>
+        <a href="/settings/audit-logs/" class="rounded-lg border border-stone-200 px-3 py-1.5 text-stone-600 hover:bg-stone-100">Alerts ({{ unread_notifications|default:0 }})</a>
+    </div>
+    {% endif %}
     {% block header_actions %}{% endblock %}
 </header>

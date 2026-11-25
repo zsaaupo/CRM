@@ -1,5 +1,7 @@
 from django.urls import path
 
+from .page_views import StockAdjustmentPageView, StockCountPageView
+
 from .page_views import (
     StockDetailPageView, StockListPageView, WarehouseReportPageView,
     WareHouseAddPageView, WareHouseEditPageView, WareHouseListPageView,
@@ -10,6 +12,8 @@ from .page_views import (
 app_name = 'warehouse_pages'
 
 urlpatterns = [
+    path('adjustments/', StockAdjustmentPageView.as_view(), name='adjustment-list'),
+    path('stock-counts/', StockCountPageView.as_view(), name='stock-count-list'),
     path('report/', WarehouseReportPageView.as_view(), name='report'),
     path('transfers/', TransferListPageView.as_view(), name='transfer-list'),
     path('transfers/add/', TransferAddPageView.as_view(), name='add-transfer'),

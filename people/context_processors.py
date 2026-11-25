@@ -16,6 +16,20 @@ def people_navigation(request):
              'add_url': reverse(f'people_pages:add-{role}')}
             for role in ('supplier', 'customer')
         ]
+    if user.has_perm('people.view_biller'):
+        people_menu.append({
+            'role': 'biller', 'label': 'Biller list', 'add_label': 'Add biller',
+            'can_add': user.has_perm('people.manage_biller'),
+            'list_url': reverse('people_pages:biller-list'),
+            'add_url': reverse('people_pages:add-biller'),
+        })
+    if user.has_perm('people.view_customergroup'):
+        people_menu.append({
+            'role': 'customer-group', 'label': 'Customer groups', 'add_label': 'Add group',
+            'can_add': user.has_perm('people.manage_customer_group'),
+            'list_url': reverse('people_pages:customer-group-list'),
+            'add_url': reverse('people_pages:add-customer-group'),
+        })
 
     can_view_lead = user.has_perm('people.view_lead')
     return {

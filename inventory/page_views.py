@@ -111,3 +111,20 @@ class InventoryEditPageView(InventoryAddPageView):
         if self.resource_key == 'product':
             context['options_api_url'] = reverse('inventory:product-edit-options', args=[self.kwargs['pk']])
         return context
+
+
+class PrintBarcodePageView(ProtectedAccountPageView):
+    template_name = 'inventory/print_barcode.html'
+    permission_required = ('inventory.view_product',)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        from .models import Product
+        context.update({
+            'page_section': 'inventory',
+            'page_mode': 'print-barcode',
+            'page_label': 'Print barcode labels',
+            'products': Product.objects.order_by('name', 'pk').values('pk', 'sku', 'name', 'barcode', 'barcode_symbology'),
+            'barcode_pdf_url': reverse('report:barcodes-pdf'),
+        })
+        return context

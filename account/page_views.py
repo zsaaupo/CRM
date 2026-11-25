@@ -57,6 +57,16 @@ class DashboardPageView(ProtectedAccountPageView):
     template_name = 'account/dashboard.html'
     extra_context = {'page_label': 'Dashboard', 'page_section': 'dashboard'}
 
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        from common.models import NotificationRecipient
+        ctx['dashboard_api_url'] = reverse('report:dashboard-api')
+        ctx['pos_url'] = reverse('pos')
+        ctx['unread_notifications'] = NotificationRecipient.objects.filter(
+            user=self.request.user, read_at__isnull=True,
+        ).count()
+        return ctx
+
 
 class ProfilePageView(ProtectedAccountPageView):
     template_name = 'account/profile.html'

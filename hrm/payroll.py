@@ -221,6 +221,12 @@ def calculate_employee(employee, start, end, currency, holidays, divisor):
         if unpaid:
             lines.append({'code': 'unpaid-leave', 'name': 'Approved unpaid leave', 'type': DEDUCTION,
                           'amount': deduction, 'calculation_inputs': unpaid})
+        from .leave_policies import compute_late_policy_deduction
+        late_ded, late_info = compute_late_policy_deduction(employee, payable_days, holidays, divisor, min(payable_days).replace(day=1))
+        if late_info and late_ded > 0:
+            lines.append({'code': 'late-policy', 'name': 'Attendance policy deduction', 'type': DEDUCTION,
+                          'amount': late_ded, 'calculation_inputs': [late_info]})
+            result['calculation_inputs']['late_policy'] = late_info
         for loan in employee.due_payroll_loans:
             for installment in loan.payroll_installments:
                 lines.append({'code': f'loan-{installment.pk}', 'name': f'Loan installment {loan.reference}', 'type': DEDUCTION,
@@ -304,6 +310,12 @@ def save_payroll(month, currency, token, actor):
     existing = PayrollRun.objects.select_for_update().filter(period=period, currency_id=currency).first()
     if existing and existing.status not in RECALCULABLE:
         raise PayrollConflict('This payroll run is locked.')
+
+    from .leave_policies import freeze_payroll_month_policy
+    try:
+        freeze_payroll_month_policy(month, actor)
+    except ValueError as exc:
+        raise PayrollConflict(str(exc)) from exc
 
     preview = preview_payroll(month, currency)
     if not preview['can_calculate']:

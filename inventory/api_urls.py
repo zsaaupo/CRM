@@ -1,6 +1,12 @@
 from django.urls import path
 
 from .api_views import (
+    ProductComboItemDetailAPIView, ProductComboItemListCreateAPIView, ResolveProductPriceAPIView,
+    TaxRuleDetailAPIView, TaxRuleListAPIView, TaxRuleListCreateAPIView, TaxRuleUpdateAPIView,
+    WarehouseProductPriceListCreateAPIView,
+)
+
+from .api_views import (
     BrandUpdateAPIView, CurrencyUpdateAPIView, ProductCategoryUpdateAPIView,
     ProductTypeUpdateAPIView, ProductUpdateAPIView, StatusUpdateAPIView, UnitOfMeasureUpdateAPIView,
     ProductOptionsAPIView, ProductEditOptionsAPIView,
@@ -19,6 +25,14 @@ from .api_views import (
 app_name = 'inventory'
 
 urlpatterns = [
+    path('tax-rules/', TaxRuleListCreateAPIView.as_view(), name='tax-rule-list'),
+    path('tax-rules/list/', TaxRuleListAPIView.as_view(), name='tax-rule-list-view'),
+    path('tax-rules/<int:pk>/', TaxRuleDetailAPIView.as_view(), name='tax-rule-detail'),
+    path('tax-rules/<int:pk>/update/', TaxRuleUpdateAPIView.as_view(), name='tax-rule-update'),
+    path('products/<int:product_id>/combo-items/', ProductComboItemListCreateAPIView.as_view(), name='product-combo-list'),
+    path('products/<int:product_id>/combo-items/<int:pk>/', ProductComboItemDetailAPIView.as_view(), name='product-combo-detail'),
+    path('products/<int:product_id>/warehouse-prices/', WarehouseProductPriceListCreateAPIView.as_view(), name='product-wh-price-list'),
+    path('products/resolve-price/', ResolveProductPriceAPIView.as_view(), name='product-resolve-price'),
     path('products/<int:pk>/options/', ProductEditOptionsAPIView.as_view(), name='product-edit-options'),
     path('products/<int:pk>/update/', ProductUpdateAPIView.as_view(), name='product-update'),
     path('categories/<int:pk>/update/', ProductCategoryUpdateAPIView.as_view(), name='category-update'),

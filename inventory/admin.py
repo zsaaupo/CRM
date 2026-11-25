@@ -1,7 +1,10 @@
 from django.contrib import admin
 from django.core.exceptions import PermissionDenied
 
-from .models import Brand, Currency, Product, ProductCategory, ProductType, UnitOfMeasure
+from .models import (
+    Brand, Currency, Product, ProductCategory, ProductComboItem, ProductType,
+    TaxRule, UnitOfMeasure, WarehouseProductPrice,
+)
 
 
 class CatalogAdmin(admin.ModelAdmin):
@@ -80,7 +83,27 @@ class ProductAdmin(CatalogAdmin):
     fieldsets = [
         ('Identification', {'fields': ('sku', 'name', 'barcode', 'public_id', 'product_type', 'status')}),
         ('Classification and content', {'fields': ('category', 'brand', 'unit', 'variant_of', 'description', 'image', 'manufacturer', 'manufacturer_part_number', 'attributes')}),
-        ('Pricing and tax', {'fields': ('currency', 'cost_price', 'sale_price', 'minimum_sale_price', 'Whole_sale_price', 'product_tax', 'is_returnable')}),
+        ('Pricing and tax', {'fields': ('currency', 'cost_price', 'sale_price', 'minimum_sale_price', 'Whole_sale_price', 'product_tax', 'tax_rule', 'tax_method', 'is_returnable')}),
+        ('Units, supply, tracking & promo', {'fields': ('sale_unit', 'purchase_unit', 'supply_method', 'barcode_symbology', 'embedded_barcode', 'alert_quantity', 'daily_sale_objective', 'is_featured', 'has_batch_expiry', 'has_imei_serial', 'is_promo', 'promo_price', 'promo_start_date', 'promo_end_date')}),
         ('Audit', {'fields': ('create_by', 'modified_by', 'created_at', 'updated_at'), 'classes': ('collapse',)}),
     ]
+
+
+@admin.register(TaxRule)
+class TaxRuleAdmin(CatalogAdmin):
+    list_display = ['name', 'rate', 'is_active']
+    search_fields = ['name']
+    list_filter = ['is_active']
+
+
+@admin.register(ProductComboItem)
+class ProductComboItemAdmin(CatalogAdmin):
+    list_display = ['combo_product', 'component_product', 'quantity', 'unit_price']
+    list_select_related = ['combo_product', 'component_product']
+
+
+@admin.register(WarehouseProductPrice)
+class WarehouseProductPriceAdmin(CatalogAdmin):
+    list_display = ['warehouse', 'product', 'sale_price', 'wholesale_price', 'alert_quantity', 'effective_from', 'effective_to']
+    list_select_related = ['warehouse', 'product']
 

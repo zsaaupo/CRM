@@ -2,19 +2,20 @@
 
 from calendar import monthrange
 from decimal import Decimal
+import uuid
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.core.validators import MinValueValidator
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.db.models import F, Q
 from django.db.models.functions import Lower, Trim
 from django.utils import timezone
 
-from common.models import TimeStampedModel, Status
+from common.models import AppendOnlyManager, TimeStampedModel, Status
 
 from .managers import EmployeeManager, EmployeeQuerySet
-from .validators import validate_working_days
+from .validators import validate_weekday_list, validate_working_days
 
 
 class HRMLookup(TimeStampedModel):
@@ -96,6 +97,8 @@ class Employee(TimeStampedModel):
         related_name='employees', help_text='Worksite reference only; this does not grant warehouse access.')
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True,
         related_name='employee', help_text='Optional login link, managed separately from employee details and role assignment.')
+    device_id = models.CharField(max_length=64, blank=True, default='', db_index=True,
+        help_text='Biometric / attendance terminal employee identifier.')
     is_archived = models.BooleanField(default=False, editable=False, db_index=True)
     archived_at = models.DateTimeField(null=True, blank=True, editable=False)
     archived_by = models.CharField(max_length=255, null=True, blank=True, editable=False)
@@ -113,6 +116,8 @@ class Employee(TimeStampedModel):
                                    name='hrm_employee_dates_valid'),
             models.CheckConstraint(condition=Q(reports_to__isnull=True) | ~Q(reports_to=F('pk')),
                                    name='hrm_employee_not_own_manager'),
+            models.UniqueConstraint(fields=['device_id'], condition=~Q(device_id=''),
+                                    name='hrm_employee_device_id_unique'),
         ]
 
     def clean(self):
@@ -182,6 +187,11 @@ class WorkSchedule(HRMLookup):
     end_time = models.TimeField(help_text='An earlier end time means the shift ends the next day.')
     break_minutes = models.PositiveSmallIntegerField(default=0)
     grace_minutes = models.PositiveSmallIntegerField(default=0, help_text='Allowed minutes after the scheduled start.')
+    early_leave_threshold_minutes = models.PositiveSmallIntegerField(default=0)
+    checkout_window_end_minutes = models.PositiveSmallIntegerField(
+        default=240, help_text='Allowed minutes after scheduled end_time for punch-out matching.',
+    )
+    overnight = models.BooleanField(default=False)
 
     class Meta(HRMLookup.Meta):
         abstract = False
@@ -190,17 +200,35 @@ class WorkSchedule(HRMLookup):
             models.CheckConstraint(condition=~Q(start_time=F('end_time')), name='hrm_schedule_times_differ'),
         ]
 
+    @property
+    def is_overnight_shift(self):
+        return bool(self.overnight or (self.start_time and self.end_time and self.end_time < self.start_time))
+
     def clean(self):
         super().clean()
         if self.start_time is None or self.end_time is None:
             return
         if self.start_time == self.end_time:
             raise ValidationError({'end_time': 'The shift start and end times must differ.'})
+        if self.end_time < self.start_time:
+            self.overnight = True
         start = self.start_time.hour * 3600 + self.start_time.minute * 60 + self.start_time.second
         end = self.end_time.hour * 3600 + self.end_time.minute * 60 + self.end_time.second
         duration_seconds = (end - start) % (24 * 3600)
         if self.break_minutes is not None and self.break_minutes * 60 >= duration_seconds:
             raise ValidationError({'break_minutes': 'The break must be shorter than the shift.'})
+
+
+class ScheduleBreak(TimeStampedModel):
+    schedule = models.ForeignKey(WorkSchedule, on_delete=models.CASCADE, related_name='breaks')
+    start_time = models.TimeField()
+    end_time = models.TimeField()
+
+    class Meta:
+        ordering = ['schedule_id', 'start_time', 'pk']
+
+    def __str__(self):
+        return f'{self.schedule.code}: {self.start_time}-{self.end_time}'
 
 
 class EmployeeScheduleAssignment(TimeStampedModel):
@@ -325,6 +353,12 @@ class Attendance(TimeStampedModel):
 
 class LeaveType(HRMLookup):
     is_paid = models.BooleanField(help_text='Whether time off under this leave type is paid.')
+    annual_quota = models.DecimalField(
+        max_digits=7, decimal_places=2, default=Decimal('0'), validators=[MinValueValidator(0)],
+    )
+    carry_forward_limit = models.DecimalField(
+        max_digits=7, decimal_places=2, default=Decimal('0'), validators=[MinValueValidator(0)],
+    )
 
     class Meta(HRMLookup.Meta):
         abstract = False
@@ -830,3 +864,281 @@ class LoanInstallment(TimeStampedModel):
         existing = type(self).objects.filter(loan=loan).exclude(pk=self.pk).values_list('amount', flat=True)
         if self.amount is not None and sum(existing, self.amount) > loan.principal:
             raise ValidationError({'amount': 'The total scheduled installments cannot exceed the loan principal.'})
+
+
+# HR-01: Promotions, Notices, Device Attendance Import, Working Calendar
+
+
+class EmployeePromotion(TimeStampedModel):
+    employee = models.ForeignKey(Employee, on_delete=models.PROTECT, related_name='promotions')
+    previous_designation = models.ForeignKey(Designation, on_delete=models.PROTECT, null=True, blank=True, related_name='+')
+    new_designation = models.ForeignKey(Designation, on_delete=models.PROTECT, null=True, blank=True, related_name='+')
+    previous_department = models.ForeignKey(Department, on_delete=models.PROTECT, null=True, blank=True, related_name='+')
+    new_department = models.ForeignKey(Department, on_delete=models.PROTECT, null=True, blank=True, related_name='+')
+    effective_date = models.DateField(db_index=True)
+    salary_increment_amount = models.DecimalField(max_digits=18, decimal_places=4, default=Decimal('0'))
+    reason = models.CharField(max_length=255, blank=True)
+    notes = models.TextField(blank=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True, related_name='+')
+    applied_at = models.DateTimeField(null=True, blank=True, editable=False)
+
+    class Meta:
+        ordering = ['-effective_date', '-pk']
+        permissions = [('approve_promotion', 'Can approve and apply employee promotions')]
+
+    def __str__(self):
+        return f'{self.employee} @ {self.effective_date}'
+
+
+class Notice(TimeStampedModel):
+    title = models.CharField(max_length=200)
+    body = models.TextField()
+    target_department = models.ForeignKey(Department, on_delete=models.PROTECT, null=True, blank=True, related_name='notices')
+    target_warehouse = models.ForeignKey('warehouse.WareHouse', on_delete=models.PROTECT, null=True, blank=True, related_name='notices')
+    publish_date = models.DateField(default=timezone.localdate)
+    expiry_date = models.DateField(null=True, blank=True)
+    attachment = models.FileField(upload_to='hrm_notices/', blank=True)
+    is_active = models.BooleanField(default=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True, related_name='+')
+
+    class Meta:
+        ordering = ['-publish_date', '-pk']
+        permissions = [('publish_notice', 'Can publish or archive HR notices')]
+
+    def __str__(self):
+        return self.title
+
+
+class AttendanceImportBatch(TimeStampedModel):
+    class Status(models.TextChoices):
+        PREVIEWED = 'previewed', 'Previewed'
+        COMMITTED = 'committed', 'Committed'
+        FAILED = 'failed', 'Failed'
+
+    file = models.FileField(upload_to='attendance_imports/', blank=True)
+    date_format = models.CharField(max_length=64, default='%Y-%m-%d %H:%M:%S')
+    timezone = models.CharField(max_length=64, blank=True, default='')
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.PREVIEWED)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True, related_name='+')
+    committed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-created_at', '-pk']
+        permissions = [('import_attendance', 'Can preview and import device attendance')]
+
+
+class AttendanceImportRow(TimeStampedModel):
+    class Status(models.TextChoices):
+        MATCHED = 'matched', 'Matched'
+        UNMATCHED = 'unmatched', 'Unmatched'
+        AMBIGUOUS = 'ambiguous', 'Ambiguous'
+        DUPLICATE = 'duplicate', 'Duplicate'
+        APPLIED = 'applied', 'Applied'
+
+    batch = models.ForeignKey(AttendanceImportBatch, on_delete=models.CASCADE, related_name='rows')
+    device_employee_id = models.CharField(max_length=64)
+    raw_timestamp = models.CharField(max_length=64)
+    parsed_ts = models.DateTimeField(null=True, blank=True)
+    punch_kind = models.CharField(max_length=16, blank=True, default='')
+    employee = models.ForeignKey(Employee, on_delete=models.PROTECT, null=True, blank=True, related_name='import_rows')
+    work_date = models.DateField(null=True, blank=True)
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.MATCHED)
+    fingerprint = models.CharField(max_length=64, db_index=True)
+    notes = models.CharField(max_length=255, blank=True)
+
+    class Meta:
+        ordering = ['parsed_ts', 'pk']
+
+
+class WorkingCalendar(TimeStampedModel):
+    effective_from = models.DateField(unique=True)
+    weekly_off_days = models.JSONField(default=list, validators=[validate_weekday_list])
+
+    class Meta:
+        ordering = ['-effective_from', '-pk']
+
+
+# HR-02: Leave Policies, Balances, Carryover, Late & Payroll Month Policy
+
+
+class LeavePolicy(TimeStampedModel):
+    leave_type = models.ForeignKey(LeaveType, on_delete=models.PROTECT, related_name='policies')
+    effective_from = models.DateField()
+    annual_quota = models.DecimalField(max_digits=7, decimal_places=2, validators=[MinValueValidator(0)])
+    carry_forward_limit = models.DecimalField(max_digits=7, decimal_places=2, default=Decimal('0'), validators=[MinValueValidator(0)])
+    carry_expiry_month_day = models.CharField(max_length=5, default='03-31')
+
+    class Meta:
+        ordering = ['leave_type_id', '-effective_from']
+        constraints = [
+            models.UniqueConstraint(fields=['leave_type', 'effective_from'], name='hrm_leave_policy_unique'),
+        ]
+
+
+class LeaveBalance(TimeStampedModel):
+    employee = models.ForeignKey(Employee, on_delete=models.PROTECT, related_name='leave_balances')
+    leave_type = models.ForeignKey(LeaveType, on_delete=models.PROTECT, related_name='balances')
+    year = models.PositiveIntegerField()
+    allocated = models.DecimalField(max_digits=8, decimal_places=2, default=Decimal('0'))
+    carried = models.DecimalField(max_digits=8, decimal_places=2, default=Decimal('0'))
+    carry_used = models.DecimalField(max_digits=8, decimal_places=2, default=Decimal('0'))
+    used = models.DecimalField(max_digits=8, decimal_places=2, default=Decimal('0'))
+    expired = models.DecimalField(max_digits=8, decimal_places=2, default=Decimal('0'))
+    prior_year_known = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ['-year', 'employee_id', 'leave_type_id']
+        permissions = [('allocate_leave', 'Can allocate annual leave balances')]
+        constraints = [
+            models.UniqueConstraint(fields=['employee', 'leave_type', 'year'], name='hrm_leave_balance_unique'),
+            models.CheckConstraint(condition=Q(allocated__gte=0, carried__gte=0, carry_used__gte=0, used__gte=0, expired__gte=0),
+                                   name='hrm_leave_balance_nonneg'),
+        ]
+
+    @property
+    def remaining_carry(self):
+        return max(Decimal('0'), Decimal(self.carried) - Decimal(self.carry_used) - Decimal(self.expired))
+
+    @property
+    def current_used(self):
+        return max(Decimal('0'), Decimal(self.used) - Decimal(self.carry_used))
+
+    @property
+    def remaining_current(self):
+        return max(Decimal('0'), Decimal(self.allocated) - self.current_used)
+
+    def available_on(self, as_of_date, carry_expiry_month_day='03-31'):
+        mm, dd = (int(p) for p in (carry_expiry_month_day or '03-31').split('-'))
+        expiry_cutoff = as_of_date.replace(year=self.year, month=mm, day=dd)
+        if as_of_date <= expiry_cutoff:
+            return self.remaining_carry + self.remaining_current
+        return self.remaining_current
+
+
+class LeaveBalanceEntry(TimeStampedModel):
+    class Kind(models.TextChoices):
+        ALLOCATION = 'allocation', 'Allocation'
+        CARRY = 'carry', 'Carry forward'
+        USAGE = 'usage', 'Usage'
+        REVERSAL = 'reversal', 'Reversal'
+        EXPIRY = 'expiry', 'Expiry'
+
+    balance = models.ForeignKey(LeaveBalance, on_delete=models.PROTECT, related_name='entries')
+    kind = models.CharField(max_length=16, choices=Kind.choices, db_index=True)
+    days = models.DecimalField(max_digits=8, decimal_places=2)
+    leave_request = models.ForeignKey(LeaveRequest, on_delete=models.PROTECT, null=True, blank=True, related_name='balance_entries')
+    breakdown = models.JSONField(default=dict)
+    effective_date = models.DateField()
+    request_key = models.CharField(max_length=128, unique=True)
+
+    objects = AppendOnlyManager()
+
+    class Meta:
+        ordering = ['effective_date', 'pk']
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            raise ValueError('LeaveBalanceEntry is append-only.')
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValueError('LeaveBalanceEntry is append-only.')
+
+
+class LatePolicy(TimeStampedModel):
+    default_check_in = models.TimeField()
+    default_check_out = models.TimeField()
+    grace_minutes = models.PositiveSmallIntegerField(default=15)
+    monthly_late_allowance = models.PositiveSmallIntegerField(default=3)
+    late_marks_per_leave_day = models.PositiveSmallIntegerField(default=3, validators=[MinValueValidator(1)])
+    early_leave_threshold_minutes = models.PositiveSmallIntegerField(default=30)
+    effective_from = models.DateField(unique=True)
+
+    class Meta:
+        ordering = ['-effective_from', '-pk']
+
+
+class PayrollMonthPolicy(TimeStampedModel):
+    month = models.DateField(unique=True)
+    snapshot = models.JSONField(default=dict)
+    calc_version = models.CharField(max_length=16, default='v1')
+    frozen_at = models.DateTimeField(null=True, blank=True)
+    frozen_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True, related_name='+')
+
+    class Meta:
+        ordering = ['-month']
+        constraints = [models.CheckConstraint(condition=Q(month__day=1), name='hrm_month_policy_first_day')]
+
+
+# HR-03: Salary Advances, Increments, Manual Payroll Vouchers
+
+
+class SalaryAdvance(TimeStampedModel):
+    class Status(models.TextChoices):
+        REQUESTED = 'requested', 'Requested'
+        APPROVED = 'approved', 'Approved'
+        REJECTED = 'rejected', 'Rejected'
+        DISBURSED = 'disbursed', 'Disbursed'
+
+    employee = models.ForeignKey(Employee, on_delete=models.PROTECT, related_name='salary_advances')
+    currency = models.ForeignKey('inventory.Currency', to_field='code', on_delete=models.PROTECT, default='BDT', related_name='+')
+    requested_amount = models.DecimalField(max_digits=18, decimal_places=4, validators=[MinValueValidator(Decimal('0.0001'))])
+    approved_amount = models.DecimalField(max_digits=18, decimal_places=4, null=True, blank=True)
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.REQUESTED, db_index=True)
+    installment_count = models.PositiveSmallIntegerField(default=1, validators=[MinValueValidator(1)])
+    repayment_start_month = models.DateField()
+    reason = models.TextField(blank=True)
+    approved_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True, related_name='+')
+    approved_at = models.DateTimeField(null=True, blank=True)
+    disbursed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True, related_name='+')
+    disbursed_at = models.DateTimeField(null=True, blank=True)
+    account = models.ForeignKey('accounting.FinancialAccount', on_delete=models.PROTECT, null=True, blank=True, related_name='salary_advances')
+    loan = models.OneToOneField(EmployeeLoan, on_delete=models.PROTECT, null=True, blank=True, related_name='salary_advance')
+    external_paid_marker = models.BooleanField(default=False)
+    external_reference = models.CharField(max_length=120, blank=True)
+    request_key = models.UUIDField(null=True, blank=True, unique=True)
+
+    class Meta:
+        ordering = ['-created_at', '-pk']
+        permissions = [
+            ('approve_advance', 'Can approve or reject salary advances'),
+            ('disburse_advance', 'Can disburse salary advances'),
+        ]
+        constraints = [
+            models.CheckConstraint(condition=Q(repayment_start_month__day=1), name='hrm_salary_adv_month_first'),
+            models.CheckConstraint(condition=Q(requested_amount__gt=0), name='hrm_salary_adv_req_pos'),
+        ]
+
+
+class SalaryIncrement(TimeStampedModel):
+    employee = models.ForeignKey(Employee, on_delete=models.PROTECT, related_name='salary_increments')
+    compensation = models.ForeignKey(EmployeeCompensation, on_delete=models.PROTECT, related_name='increments')
+    previous_amount = models.DecimalField(max_digits=18, decimal_places=4)
+    new_amount = models.DecimalField(max_digits=18, decimal_places=4)
+    effective_date = models.DateField()
+    reason = models.CharField(max_length=255, blank=True)
+
+    class Meta:
+        ordering = ['-effective_date', '-pk']
+
+
+class ManualPayrollVoucher(TimeStampedModel):
+    employee = models.ForeignKey(Employee, on_delete=models.PROTECT, related_name='manual_vouchers')
+    payment_date = models.DateField()
+    account = models.ForeignKey('accounting.FinancialAccount', on_delete=models.PROTECT, related_name='manual_payroll_vouchers')
+    amount = models.DecimalField(max_digits=18, decimal_places=4, validators=[MinValueValidator(Decimal('0.0001'))])
+    method = models.CharField(max_length=16, choices=SalaryPayment.Method.choices, default=SalaryPayment.Method.CASH)
+    note = models.TextField(blank=True)
+    period = models.ForeignKey(PayrollPeriod, on_delete=models.PROTECT, null=True, blank=True, related_name='manual_vouchers')
+    reference = models.CharField(max_length=120, blank=True)
+    payslip = models.ForeignKey(Payslip, on_delete=models.PROTECT, null=True, blank=True, related_name='reconciled_vouchers')
+    reconciled_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True, related_name='+')
+    reconciled_at = models.DateTimeField(null=True, blank=True)
+    request_key = models.UUIDField(unique=True, default=uuid.uuid4)
+
+    class Meta:
+        ordering = ['-payment_date', '-pk']
+        permissions = [('manage_manual_payroll', 'Can create and reconcile manual payroll vouchers')]
+        constraints = [
+            models.CheckConstraint(condition=Q(amount__gt=0), name='hrm_manual_voucher_amount_pos'),
+        ]

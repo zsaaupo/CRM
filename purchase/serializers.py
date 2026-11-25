@@ -7,7 +7,7 @@ from rest_framework import serializers
 from rest_framework.exceptions import NotFound, PermissionDenied
 
 from accounting.serializers import PaymentAccountField
-from common.models import TradeStatus
+from common.models import SettlementMode, TradeStatus
 from common.serializers import AUDIT_FIELDS, CatalogSerializer
 from inventory.models import Currency
 from people.models import Party
@@ -24,7 +24,7 @@ class PurchaseOrderSerializer(WarehouseScopedSerializerMixin, CatalogSerializer)
     )
     supplier_name = serializers.CharField(source='supplier.name', read_only=True, default=None)
     supplier_code = serializers.CharField(source='supplier.code', read_only=True, default=None)
-    payment_account = PaymentAccountField()
+    payment_account = PaymentAccountField(required=False, allow_null=True)
     payment_account_name = serializers.CharField(source='payment_account.name', read_only=True, default=None)
     currency = serializers.SlugRelatedField(slug_field='code', queryset=Currency.objects.all())
     status = serializers.SlugRelatedField(slug_field='code', queryset=TradeStatus.objects.all(), required=False)
@@ -38,15 +38,29 @@ class PurchaseOrderSerializer(WarehouseScopedSerializerMixin, CatalogSerializer)
         self.instance = instance
         return super().update(instance, self.validate(validated_data))
 
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        mode = attrs.get('settlement_mode', self.instance.settlement_mode if self.instance else SettlementMode.AUTO_FULL)
+        account = attrs.get('payment_account', self.instance.payment_account if self.instance else None)
+        if mode == SettlementMode.AUTO_FULL and account is None:
+            if self.instance is None or 'payment_account' in attrs or 'settlement_mode' in attrs:
+                raise serializers.ValidationError({'payment_account': ['Choose a payment account.']})
+        return attrs
+
     class Meta:
         model = PurchaseOrder
         fields = [
             'id', 'order_number', 'supplier', 'supplier_name', 'supplier_code', 'order_date', 'expected_date', 'currency',
             'exchange_rate', 'status', 'warehouse', 'warehouse_name', 'payment_account', 'payment_account_name',
+            'settlement_mode', 'payment_status', 'recognized_total_base', 'receipt_state',
+            'order_discount_type', 'order_discount_value', 'order_discount_amount',
+            'order_tax_rule', 'order_tax_rate', 'order_tax_amount', 'attachment', 'staff_note',
             'is_received', 'supplier_reference', 'shipping_cost', 'notes',
             'subtotal', 'tax_total', 'grand_total', *AUDIT_FIELDS[1:],
         ]
-        read_only_fields = [*AUDIT_FIELDS, 'order_number', 'is_received', 'subtotal', 'tax_total', 'grand_total']
+        read_only_fields = [*AUDIT_FIELDS, 'order_number', 'is_received', 'receipt_state', 'payment_status',
+                            'recognized_total_base', 'order_discount_amount', 'order_tax_amount',
+                            'subtotal', 'tax_total', 'grand_total']
 
 
 class PurchaseOrderItemSerializer(WarehouseScopedSerializerMixin, CatalogSerializer):
@@ -81,10 +95,14 @@ class PurchaseOrderItemSerializer(WarehouseScopedSerializerMixin, CatalogSeriali
         model = PurchaseOrderItem
         fields = [
             'id', 'purchase_order', 'line_number', 'product', 'description', 'unit',
-            'quantity', 'unit_price', 'discount_amount', 'tax_rate', 'net_amount',
+            'quantity', 'unit_conversion_factor', 'base_quantity', 'received_quantity',
+            'batch', 'serial_numbers', 'unit_price', 'discount_amount', 'tax_rate', 'tax_method',
+            'allocated_order_discount', 'allocated_order_tax', 'net_amount',
             'tax_amount', 'line_total', 'product_name', 'product_sku', 'unit_name', 'unit_code', *AUDIT_FIELDS[1:],
         ]
-        read_only_fields = [*AUDIT_FIELDS, 'net_amount', 'tax_amount', 'line_total']
+        read_only_fields = [*AUDIT_FIELDS, 'unit_conversion_factor', 'base_quantity', 'received_quantity',
+                            'allocated_order_discount', 'allocated_order_tax',
+                            'net_amount', 'tax_amount', 'line_total']
 
 
 class PurchaseOrderDetailSerializer(PurchaseOrderSerializer):
@@ -105,11 +123,34 @@ class PurchaseOrderItemFilterSerializer(serializers.Serializer):
 class PurchaseReceiveSerializer(serializers.Serializer):
     purchase_id = serializers.IntegerField(min_value=1, max_value=9223372036854775807)
     is_received = serializers.BooleanField()
+    settlement_mode = serializers.ChoiceField(choices=SettlementMode.choices, required=False)
+    tenders = serializers.ListField(child=serializers.DictField(), required=False, default=list)
+    request_key = serializers.UUIDField(required=False)
+    payment_date = serializers.DateField(required=False)
 
     def validate_is_received(self, value):
         if value is not True:
             raise serializers.ValidationError('Set is_received to true to receive the purchase.')
         return value
+
+
+class PurchaseReceiptLineInputSerializer(serializers.Serializer):
+    order_line = serializers.IntegerField(min_value=1, max_value=9223372036854775807)
+    quantity = serializers.DecimalField(max_digits=18, decimal_places=6, min_value=Decimal('0.000001'))
+    unit = serializers.IntegerField(min_value=1, required=False, allow_null=True)
+    batch_number = serializers.CharField(max_length=100, required=False, allow_blank=True, default='')
+    expiry_date = serializers.DateField(required=False, allow_null=True)
+    serials = serializers.ListField(child=serializers.CharField(), required=False, default=list)
+
+
+class PurchasePartialReceiptSerializer(serializers.Serializer):
+    request_key = serializers.UUIDField()
+    receipt_date = serializers.DateField(default=timezone.localdate)
+    lines = PurchaseReceiptLineInputSerializer(many=True, allow_empty=False)
+    settlement_mode = serializers.ChoiceField(choices=SettlementMode.choices, required=False)
+    tenders = serializers.ListField(child=serializers.DictField(), required=False, default=list)
+    payment_date = serializers.DateField(required=False)
+    notes = serializers.CharField(required=False, allow_blank=True, default='')
 
 
 class PurchaseOrderLineSerializer(serializers.ModelSerializer):
@@ -209,7 +250,16 @@ class PurchaseOrderCreateSerializer(PurchaseOrderSerializer):
                 values = {key: value for key, value in item.items() if key != 'id'}
                 if 'id' in item:
                     if item['id'] in changed:
-                        order.items.filter(pk=item['id']).update(**values, modified_by=actor, updated_at=timezone.now())
+                        obj = existing[item['id']]
+                        for k, v in values.items():
+                            setattr(obj, k, v)
+                        from inventory.models import check_units_convertible
+                        factor = check_units_convertible(obj.unit, obj.product.unit)
+                        base_qty = (Decimal(obj.quantity) * factor).quantize(Decimal('0.000001'))
+                        order.items.filter(pk=item['id']).update(
+                            **values, unit_conversion_factor=factor, base_quantity=base_qty,
+                            modified_by=actor, updated_at=timezone.now(),
+                        )
                 else:
                     PurchaseOrderItem.objects.create(purchase_order=order, create_by=actor, modified_by=actor, **values)
         return super().update(order, validated_data)

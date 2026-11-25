@@ -1,0 +1,37 @@
+{
+  "sale_auto": {
+    "subtotal": "270.0000",
+    "tax_total": "27.0000",
+    "grand_total": "307.0000",
+    "stock_after": "7.000000",
+    "account_balance_after": "1307.0000"
+  },
+  "sale_return": {
+    "refund_amount": "99.0000",
+    "stock_after": "8.000000",
+    "account_balance_after": "1208.0000"
+  },
+  "purchase_auto": {
+    "subtotal": "500.0000",
+    "tax_total": "25.0000",
+    "grand_total": "540.0000",
+    "stock_after": "13.000000",
+    "account_balance_after": "668.0000"
+  },
+  "purchase_return": {
+    "refund_amount": "210.0000",
+    "stock_after": "11.000000",
+    "account_balance_after": "878.0000"
+  },
+  "mixed_currency_sale": {
+    "exchange_rate": "120.00000000",
+    "grand_total_order_ccy": "10.0000",
+    "payment_base_ccy": "1200.0000"
+  },
+  "payroll_run": {
+    "basic_salary": "30000.0000",
+    "gross_pay": "45000.0000",
+    "total_deductions": "0.0000",
+    "net_pay": "45000.0000"
+  }
+}

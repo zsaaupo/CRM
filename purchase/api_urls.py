@@ -1,9 +1,10 @@
 from django.urls import path
 
 from .api_views import (
-    PurchaseOrderDetailAPIView, PurchaseOrderItemDetailAPIView, PurchaseOrderItemListAPIView,
+    PurchaseDuplicateAPIView, PurchaseOrderDetailAPIView, PurchaseOrderItemDetailAPIView, PurchaseOrderItemListAPIView,
     PurchaseOrderItemListCreateAPIView, PurchaseOrderItemUpdateAPIView, PurchaseOrderListAPIView,
-    PurchaseOptionsAPIView, PurchaseEditOptionsAPIView, PurchaseOrderListCreateAPIView, PurchaseOrderUpdateAPIView, PurchaseReceiveAPIView,
+    PurchaseOptionsAPIView, PurchaseEditOptionsAPIView, PurchaseOrderListCreateAPIView, PurchaseOrderUpdateAPIView,
+    PurchaseReceiptCreateAPIView, PurchaseReceiveAPIView,
 )
 from .return_api import (
     PurchaseReturnCompleteAPIView, PurchaseReturnDetailAPIView, PurchaseReturnListAPIView,
@@ -20,6 +21,8 @@ urlpatterns = [
     path('purchase-orders/', PurchaseOrderListCreateAPIView.as_view(), name='purchase-order-list'),
     path('purchase-orders/list/', PurchaseOrderListAPIView.as_view(), name='purchase-order-list-view'),
     path('purchase-orders/<int:pk>/', PurchaseOrderDetailAPIView.as_view(), name='purchase-order-detail'),
+    path('purchase-orders/<int:pk>/receipts/', PurchaseReceiptCreateAPIView.as_view(), name='purchase-order-receipts'),
+    path('purchase-orders/<int:pk>/duplicate/', PurchaseDuplicateAPIView.as_view(), name='purchase-order-duplicate'),
     path('purchase-orders/<int:pk>/update/', PurchaseOrderUpdateAPIView.as_view(), name='purchase-order-update'),
     path('purchase-order-items/', PurchaseOrderItemListCreateAPIView.as_view(), name='purchase-order-item-list'),
     path('purchase-order-items/list/', PurchaseOrderItemListAPIView.as_view(), name='purchase-order-item-list-view'),

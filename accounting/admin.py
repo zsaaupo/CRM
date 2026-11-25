@@ -7,8 +7,8 @@ from warehouse.admin import WarehouseScopedAdmin
 from warehouse.scope import scoped_queryset
 
 from .models import (
-    AccountTransaction, AccountTransfer, Expense, ExpenseCategory, ExpensePayment, FinancialAccount, PurchasePayment,
-    Income, IncomeCategory, IncomePayment, SalesPayment,
+    AccountTransaction, AccountTransfer, DepositEntry, Expense, ExpenseCategory, ExpensePayment, FinancialAccount,
+    PartySettlement, PurchasePayment, Income, IncomeCategory, IncomePayment, SalesPayment,
 )
 from .services import (
     INCOME_PAYMENT_VIEW, PAYMENT_VIEW, PURCHASE_PAYMENT_VIEW, SALES_PAYMENT_VIEW, STATEMENT_VIEW, TRANSFER_VIEW, available_payment_accounts, lock_rows,
@@ -150,3 +150,20 @@ class PurchasePaymentAdmin(PostedFinanceAdmin):
 
     def scope_queryset(self, queryset, scope):
         return scoped_queryset(super().scope_queryset(queryset, scope), scope, 'account__warehouse_id')
+
+
+@admin.register(PartySettlement)
+class PartySettlementAdmin(PostedFinanceAdmin):
+    view_permissions = ('accounting.clear_due',)
+    warehouse_lookup = 'account__warehouse_id'
+    list_display = ['pk', 'party', 'kind', 'total', 'method', 'payment_date']
+    list_select_related = ['party', 'account']
+    search_fields = ['party__name', 'note']
+
+
+@admin.register(DepositEntry)
+class DepositEntryAdmin(PostedFinanceAdmin):
+    view_permissions = ('accounting.add_deposit',)
+    warehouse_lookup = 'account__warehouse_id'
+    list_display = ['customer', 'kind', 'amount', 'source', 'account', 'sales_payment', 'request_key']
+    list_select_related = ['customer', 'account', 'sales_payment']

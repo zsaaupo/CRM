@@ -6,7 +6,10 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from .access import check_assignment_scope, lock_assignment_write
-from .models import Stock, RoleWarehouseAccess, WareHouse, WarehouseTransfer, WarehouseTransferItem
+from .models import (
+    Stock, StockAdjustment, StockAdjustmentItem, StockBatch, StockCount, StockCountLine,
+    StockSerial, RoleWarehouseAccess, WareHouse, WarehouseTransfer, WarehouseTransferItem,
+)
 from .scope import WarehouseScopedSerializerMixin, lock_warehouse_scope, warehouse_scope
 from .services import check_transfer_warehouses, lock_transfer, require_transfer_permission, TransferCompleted
 
@@ -41,6 +44,30 @@ class StockFilterSerializer(serializers.Serializer):
     product = serializers.IntegerField(min_value=1, max_value=9223372036854775807, required=False)
 
 
+class StockBatchReadSerializer(serializers.ModelSerializer):
+    warehouse_name = serializers.CharField(source='warehouse.name', read_only=True)
+    product_sku = serializers.CharField(source='product.sku', read_only=True)
+    product_name = serializers.CharField(source='product.name', read_only=True)
+
+    class Meta:
+        model = StockBatch
+        fields = ['id', 'warehouse', 'warehouse_name', 'product', 'product_sku', 'product_name',
+                  'batch_number', 'expiry_date', 'quantity', 'unit_cost', *AUDIT_FIELDS[1:]]
+        read_only_fields = fields
+
+
+class StockSerialReadSerializer(serializers.ModelSerializer):
+    warehouse_name = serializers.CharField(source='warehouse.name', read_only=True, default=None)
+    product_sku = serializers.CharField(source='product.sku', read_only=True)
+    batch_number = serializers.CharField(source='batch.batch_number', read_only=True, default=None)
+
+    class Meta:
+        model = StockSerial
+        fields = ['id', 'warehouse', 'warehouse_name', 'product', 'product_sku', 'batch',
+                  'batch_number', 'serial_number', 'status', *AUDIT_FIELDS[1:]]
+        read_only_fields = fields
+
+
 class WarehouseTransferLineSerializer(serializers.ModelSerializer):
     id = serializers.IntegerField(required=False, min_value=1)
     product_name = serializers.CharField(source='product.name', read_only=True)
@@ -50,7 +77,12 @@ class WarehouseTransferLineSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = WarehouseTransferItem
-        fields = ['id', 'line_number', 'product', 'product_name', 'product_sku', 'unit', 'unit_name', 'unit_code', 'quantity']
+        fields = [
+            'id', 'line_number', 'product', 'product_name', 'product_sku', 'unit', 'unit_name', 'unit_code',
+            'quantity', 'unit_conversion_factor', 'base_quantity', 'batch', 'serial_numbers',
+            'unit_cost', 'tax_rate', 'tax_amount', 'subtotal', 'sent_qty', 'received_qty', 'in_transit_qty',
+        ]
+        read_only_fields = ['unit_conversion_factor', 'base_quantity', 'sent_qty', 'received_qty', 'in_transit_qty']
 
     def validate(self, attrs):
         candidate = WarehouseTransferItem(**attrs)
@@ -72,10 +104,13 @@ class WarehouseTransferSerializer(CatalogSerializer):
 
     class Meta:
         model = WarehouseTransfer
-        fields = ['id', 'transfer_number', 'source_warehouse', 'source_warehouse_name',
-                  'destination_warehouse', 'destination_warehouse_name', 'transfer_date', 'notes',
-                  'is_completed', 'item_count', 'product_summary', 'items', *AUDIT_FIELDS[1:]]
-        read_only_fields = [*AUDIT_FIELDS, 'transfer_number', 'is_completed']
+        fields = [
+            'id', 'transfer_number', 'source_warehouse', 'source_warehouse_name',
+            'destination_warehouse', 'destination_warehouse_name', 'transfer_date', 'notes',
+            'status', 'is_completed', 'sent_at', 'received_at', 'shipping_cost', 'attachment',
+            'item_count', 'product_summary', 'items', *AUDIT_FIELDS[1:],
+        ]
+        read_only_fields = [*AUDIT_FIELDS, 'transfer_number', 'status', 'is_completed', 'sent_at', 'received_at']
 
     def get_item_count(self, record):
         return len(record.items.all())
@@ -172,7 +207,17 @@ class WarehouseTransferSerializer(CatalogSerializer):
                 if 'id' not in item:
                     WarehouseTransferItem.objects.create(transfer=self.instance, create_by=actor, modified_by=actor, **values)
                 elif item['id'] in changed:
-                    self.instance.items.filter(pk=item['id']).update(**values, modified_by=actor, updated_at=timezone.now())
+                    obj = existing[item['id']]
+                    for k, v in values.items():
+                        setattr(obj, k, v)
+                    from inventory.models import check_units_convertible
+                    from common.money import q_qty
+                    factor = check_units_convertible(obj.unit, obj.product.unit)
+                    base_qty = q_qty(obj.quantity * factor)
+                    self.instance.items.filter(pk=item['id']).update(
+                        **values, unit_conversion_factor=factor, base_quantity=base_qty,
+                        modified_by=actor, updated_at=timezone.now(),
+                    )
         record = super().update(self.instance, validated_data)
         return self.loaded_record(record)
 
@@ -231,3 +276,95 @@ class RoleWarehouseAccessFilterSerializer(serializers.Serializer):
     role = serializers.IntegerField(min_value=1, max_value=9223372036854775807, required=False)
     warehouse = serializers.IntegerField(min_value=1, max_value=9223372036854775807, required=False)
     all_warehouses = serializers.BooleanField(required=False)
+
+
+class StockAdjustmentItemSerializer(serializers.ModelSerializer):
+    id = serializers.IntegerField(required=False, min_value=1)
+    product_sku = serializers.CharField(source='product.sku', read_only=True)
+    product_name = serializers.CharField(source='product.name', read_only=True)
+    unit_code = serializers.CharField(source='unit.code', read_only=True)
+
+    class Meta:
+        model = StockAdjustmentItem
+        fields = [
+            'id', 'product', 'product_sku', 'product_name', 'batch', 'action',
+            'quantity', 'unit', 'unit_conversion_factor', 'base_quantity', 'unit_cost',
+        ]
+        read_only_fields = ['unit_conversion_factor', 'base_quantity']
+
+    def validate(self, attrs):
+        candidate = StockAdjustmentItem(**{k: v for k, v in attrs.items() if k != 'id'})
+        try:
+            candidate.clean()
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(exc.message_dict if hasattr(exc, 'message_dict') else exc.messages) from exc
+        return attrs
+
+
+class StockAdjustmentSerializer(WarehouseScopedSerializerMixin, CatalogSerializer):
+    warehouse_name = serializers.CharField(source='warehouse.name', read_only=True)
+    items = StockAdjustmentItemSerializer(many=True, required=False, allow_empty=False)
+
+    class Meta:
+        model = StockAdjustment
+        fields = [
+            'id', 'reference_number', 'warehouse', 'warehouse_name', 'adjustment_date',
+            'attachment', 'note', 'reason', 'status', 'request_key', 'posted_at',
+            'items', *AUDIT_FIELDS[1:],
+        ]
+        read_only_fields = [*AUDIT_FIELDS, 'reference_number', 'status', 'request_key', 'posted_at']
+
+    @transaction.atomic
+    def create(self, validated_data):
+        items = validated_data.pop('items', [])
+        if not items:
+            raise serializers.ValidationError({'items': 'Add at least one adjustment line.'})
+        adj = super().create(validated_data)
+        actor = adj.create_by
+        for it in items:
+            values = {k: v for k, v in it.items() if k != 'id'}
+            StockAdjustmentItem.objects.create(adjustment=adj, create_by=actor, modified_by=actor, **values)
+        return adj
+
+    @transaction.atomic
+    def update(self, instance, validated_data):
+        if instance.status == StockAdjustment.Status.POSTED:
+            from common.exceptions import StateConflict
+            raise StateConflict('Posted adjustments are read-only.')
+        items = validated_data.pop('items', None)
+        adj = super().update(instance, validated_data)
+        if items is not None:
+            adj.items.all().delete()
+            actor = self.context['request'].user.get_username()
+            for it in items:
+                values = {k: v for k, v in it.items() if k != 'id'}
+                StockAdjustmentItem.objects.create(adjustment=adj, create_by=actor, modified_by=actor, **values)
+        return adj
+
+
+class StockCountLineSerializer(serializers.ModelSerializer):
+    product_sku = serializers.CharField(source='product.sku', read_only=True)
+    product_name = serializers.CharField(source='product.name', read_only=True)
+    batch_number = serializers.CharField(source='batch.batch_number', read_only=True, default=None)
+
+    class Meta:
+        model = StockCountLine
+        fields = [
+            'id', 'product', 'product_sku', 'product_name', 'batch', 'batch_number',
+            'expected_qty', 'counted_qty', 'movement_since_snapshot', 'variance_qty', 'needs_recount',
+        ]
+        read_only_fields = fields
+
+
+class StockCountSerializer(serializers.ModelSerializer):
+    warehouse_name = serializers.CharField(source='warehouse.name', read_only=True)
+    lines = StockCountLineSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = StockCount
+        fields = [
+            'id', 'reference_number', 'warehouse', 'warehouse_name', 'count_type',
+            'categories', 'brands', 'snapshot_at', 'initial_file', 'final_file',
+            'status', 'adjustment', 'reconcile_intervening', 'lines', *AUDIT_FIELDS[1:],
+        ]
+        read_only_fields = fields

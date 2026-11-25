@@ -1,0 +1,29 @@
+{% extends "layouts/dashboard.html" %}
+{% block content %}
+<div class="pos-layout">
+  <section class="pos-left">
+    <h1>{{ page_label }}</h1>
+    <div id="pos-header">
+      <button type="button" id="open-register-btn" data-url="{{ register_open_url }}">Open Register</button>
+      <input type="text" id="pos-barcode-input" placeholder="Scan barcode or SKU">
+    </div>
+    <table id="pos-cart">
+      <thead><tr><th>Product</th><th>Price</th><th>Qty</th><th>SubTotal</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <div id="pos-summary">
+      <span>Coupon</span> <input type="text" id="pos-coupon" placeholder="Coupon code">
+    </div>
+    <div id="pos-tenders">
+      <button type="button" data-method="cash">Cash</button>
+      <button type="button" data-method="card">Card</button>
+      <button type="button" data-method="cheque">Cheque</button>
+      <button type="button" data-method="gift_card">Gift Card</button>
+      <button type="button" data-method="deposit">Deposit</button>
+      <button type="button" id="pos-draft-btn" data-url="{{ drafts_api_url }}">Draft</button>
+      <button type="button" id="pos-recent-btn" data-url="{{ recent_orders_url }}">Recent Transaction</button>
+    </div>
+  </section>
+  <section class="pos-right" id="pos-product-grid" data-url="{{ products_api_url }}"></section>
+</div>
+{% endblock %}

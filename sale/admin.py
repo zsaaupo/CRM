@@ -66,3 +66,133 @@ class SalesQuotationItemAdmin(WarehouseScopedAdmin):
     list_display = ['quotation', 'line_number', 'product', 'unit', 'quantity', 'unit_price']
     search_fields = ['quotation__quotation_number', 'product__name', 'product__sku']
     list_select_related = ['quotation', 'product', 'unit']
+
+
+
+from .models import (
+    CashRegisterSession, Challan, ChallanItem, Coupon, CouponRedemption, Courier,
+    Delivery, DeliveryItem, Discount, DiscountPlan, GiftCard, GiftCardEntry,
+    PackingSlip, PackingSlipItem, PosDraft, QuotationConversion, RegisterMovement,
+)
+
+
+@admin.register(QuotationConversion)
+class QuotationConversionAdmin(admin.ModelAdmin):
+    list_display = ['quotation_revision', 'kind', 'target_type', 'target_id', 'created_by', 'created_at']
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(CashRegisterSession)
+class CashRegisterSessionAdmin(admin.ModelAdmin):
+    list_display = ['pk', 'user', 'warehouse', 'status', 'opening_cash', 'closing_cash_expected', 'variance', 'opened_at']
+    list_filter = ['status', 'warehouse']
+
+
+@admin.register(RegisterMovement)
+class RegisterMovementAdmin(admin.ModelAdmin):
+    list_display = ['session', 'kind', 'amount', 'account', 'request_key']
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(PosDraft)
+class PosDraftAdmin(admin.ModelAdmin):
+    list_display = ['pk', 'user', 'warehouse', 'customer', 'updated_at']
+
+
+@admin.register(DiscountPlan)
+class DiscountPlanAdmin(admin.ModelAdmin):
+    list_display = ['name', 'is_active']
+
+
+@admin.register(Discount)
+class DiscountAdmin(admin.ModelAdmin):
+    list_display = ['plan', 'name', 'discount_type', 'value', 'valid_from', 'valid_till', 'is_active']
+
+
+@admin.register(Coupon)
+class CouponAdmin(admin.ModelAdmin):
+    list_display = ['code', 'coupon_type', 'amount', 'quantity', 'used_count', 'expired_date', 'is_active']
+
+
+@admin.register(CouponRedemption)
+class CouponRedemptionAdmin(admin.ModelAdmin):
+    list_display = ['coupon', 'sales_order', 'customer', 'amount']
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(GiftCard)
+class GiftCardAdmin(admin.ModelAdmin):
+    list_display = ['card_no', 'amount', 'balance', 'customer', 'expired_date', 'is_active']
+
+
+@admin.register(GiftCardEntry)
+class GiftCardEntryAdmin(admin.ModelAdmin):
+    list_display = ['gift_card', 'kind', 'amount', 'sales_payment', 'request_key']
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(Courier)
+class CourierAdmin(admin.ModelAdmin):
+    list_display = ['name', 'phone', 'is_active']
+
+
+@admin.register(Delivery)
+class DeliveryAdmin(admin.ModelAdmin):
+    list_display = ['reference_number', 'sales_order', 'courier', 'status', 'created_at']
+
+
+@admin.register(DeliveryItem)
+class DeliveryItemAdmin(admin.ModelAdmin):
+    list_display = ['delivery', 'sales_order_item', 'quantity']
+
+
+@admin.register(PackingSlip)
+class PackingSlipAdmin(admin.ModelAdmin):
+    list_display = ['reference_number', 'sales_order', 'delivery', 'status']
+
+
+@admin.register(PackingSlipItem)
+class PackingSlipItemAdmin(admin.ModelAdmin):
+    list_display = ['packing_slip', 'sales_order_item', 'quantity']
+
+
+@admin.register(Challan)
+class ChallanAdmin(admin.ModelAdmin):
+    list_display = ['reference_number', 'courier', 'status', 'closing_date', 'amount']
+
+
+@admin.register(ChallanItem)
+class ChallanItemAdmin(admin.ModelAdmin):
+    list_display = ['challan', 'packing_slip', 'sales_order', 'is_open']

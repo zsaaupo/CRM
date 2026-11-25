@@ -40,7 +40,8 @@ class PurchaseListPageView(WarehouseScopePageMixin, ProtectedAccountPageView):
                 for key, label, kind in [
                     ('order_number', 'Order number', 'text'), ('supplier_name', 'Supplier', 'text'),
                     ('order_date', 'Order date', 'text'), ('expected_date', 'Expected date', 'text'),
-                    ('status', 'Status', 'status'), ('grand_total', 'Total', 'price'),
+                    ('status', 'Status', 'status'), ('payment_status', 'Payment status', 'text'),
+                    ('grand_total', 'Total', 'price'),
                     ('actions', 'Actions', 'edit'),
                 ]
             ],
@@ -76,6 +77,8 @@ class PurchaseDetailPageView(WarehouseScopePageMixin, ProtectedAccountPageView):
             context['product_url_template'] = reverse('inventory_pages:product-detail', args=[0])
         if has_role_permissions(self.request.user, RETURN_CREATE):
             context['return_url'] = f"{reverse('purchase_pages:create-return')}?purchase_order={self.kwargs['pk']}"
+        if has_role_permissions(self.request.user, ('purchase.view_purchaseorder', 'accounting.view_financialaccount', 'accounting.view_purchasepayment')):
+            context['payments_url'] = reverse('purchase_pages:purchase-payment-list', args=[self.kwargs['pk']])
         return context
 
 
@@ -91,6 +94,10 @@ class PurchaseCreatePageView(WarehouseScopePageMixin, ProtectedAccountPageView):
             'create_api_url': reverse('purchase:purchase-order-list'),
             'options_api_url': reverse('purchase:purchase-options'),
             'base_currency': settings.INVENTORY_BASE_CURRENCY,
+            'enable_in_house_production': has_role_permissions(
+                self.request.user, ('manufacturing.view_productionorder',)
+            ),
+            'manufacturing_url': reverse('manufacturing_pages:home'),
         })
         return context
 

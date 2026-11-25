@@ -222,3 +222,33 @@ class TransferDetailPageView(WarehouseScopePageMixin, ProtectedAccountPageView):
             'detail_api_url': reverse('warehouse:transfer-detail', args=[self.kwargs['pk']]),
         })
         return context
+
+
+class StockAdjustmentPageView(WarehouseScopePageMixin, ProtectedAccountPageView):
+    template_name = 'warehouse/adjustments.html'
+    permission_required = ('warehouse.view_stockadjustment',)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context.update({
+            'page_section': 'warehouses',
+            'page_mode': 'adjustment-list',
+            'page_label': 'Stock adjustments',
+            'api_url': reverse('warehouse:adjustment-list'),
+        })
+        return context
+
+
+class StockCountPageView(WarehouseScopePageMixin, ProtectedAccountPageView):
+    template_name = 'warehouse/stock_counts.html'
+    permission_required = ('warehouse.manage_stock_count',)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context.update({
+            'page_section': 'warehouses',
+            'page_mode': 'stock-count-list',
+            'page_label': 'Physical stock counts',
+            'api_url': reverse('warehouse:stock-count-list'),
+        })
+        return context

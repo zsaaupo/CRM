@@ -5,7 +5,10 @@ from django.conf import settings
 from rest_framework import serializers
 
 from common.serializers import AUDIT_FIELDS, CatalogSerializer
-from .models import Brand, Currency, Product, ProductCategory, ProductType, UnitOfMeasure
+from .models import (
+    Brand, Currency, Product, ProductCategory, ProductComboItem,
+    ProductType, TaxRule, UnitOfMeasure, WarehouseProductPrice,
+)
 
 
 class ProductCategorySerializer(CatalogSerializer):
@@ -23,9 +26,39 @@ class BrandSerializer(CatalogSerializer):
 
 
 class UnitOfMeasureSerializer(CatalogSerializer):
+    factor = serializers.DecimalField(max_digits=18, decimal_places=6, read_only=True)
+
     class Meta:
         model = UnitOfMeasure
-        fields = ['id', 'name', 'code', 'is_active', *AUDIT_FIELDS[1:]]
+        fields = ['id', 'name', 'code', 'base_unit', 'operator', 'operation_value', 'factor', 'is_active', *AUDIT_FIELDS[1:]]
+        read_only_fields = [*AUDIT_FIELDS, 'factor']
+
+
+class TaxRuleSerializer(CatalogSerializer):
+    class Meta:
+        model = TaxRule
+        fields = ['id', 'name', 'rate', 'is_active', *AUDIT_FIELDS[1:]]
+        read_only_fields = AUDIT_FIELDS
+
+
+class ProductComboItemSerializer(CatalogSerializer):
+    component_sku = serializers.CharField(source='component_product.sku', read_only=True)
+    component_name = serializers.CharField(source='component_product.name', read_only=True)
+
+    class Meta:
+        model = ProductComboItem
+        fields = ['id', 'combo_product', 'component_product', 'component_sku', 'component_name',
+                  'quantity', 'unit_price', *AUDIT_FIELDS[1:]]
+        read_only_fields = AUDIT_FIELDS
+
+
+class WarehouseProductPriceSerializer(CatalogSerializer):
+    warehouse_name = serializers.CharField(source='warehouse.name', read_only=True)
+
+    class Meta:
+        model = WarehouseProductPrice
+        fields = ['id', 'warehouse', 'warehouse_name', 'product', 'sale_price', 'wholesale_price',
+                  'alert_quantity', 'effective_from', 'effective_to', *AUDIT_FIELDS[1:]]
         read_only_fields = AUDIT_FIELDS
 
 
@@ -73,11 +106,14 @@ class ProductSerializer(CatalogSerializer):
     class Meta:
         model = Product
         fields = [
-            'id', 'public_id', 'sku', 'name', 'barcode', 'product_type', 'status',
-            'category', 'brand', 'unit', 'variant_of', 'description', 'image',
-            'manufacturer', 'manufacturer_part_number', 'attributes', 'currency',
-            'cost_price', 'sale_price', 'minimum_sale_price', 'Whole_sale_price',
-            'product_tax', 'is_returnable', *AUDIT_FIELDS[1:],
+            'id', 'public_id', 'sku', 'name', 'barcode', 'barcode_symbology', 'embedded_barcode',
+            'product_type', 'supply_method', 'status', 'category', 'brand', 'unit', 'sale_unit',
+            'purchase_unit', 'variant_of', 'description', 'image', 'manufacturer',
+            'manufacturer_part_number', 'attributes', 'currency', 'cost_price', 'sale_price',
+            'minimum_sale_price', 'Whole_sale_price', 'product_tax', 'tax_rule', 'tax_method',
+            'alert_quantity', 'daily_sale_objective', 'is_featured', 'has_batch_expiry',
+            'has_imei_serial', 'is_promo', 'promo_price', 'promo_start_date', 'promo_end_date',
+            'is_returnable', *AUDIT_FIELDS[1:],
         ]
         read_only_fields = [*AUDIT_FIELDS, 'public_id']
 

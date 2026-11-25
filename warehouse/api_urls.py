@@ -1,4 +1,13 @@
 from django.urls import path
+
+from .api_views import (
+    OpeningStockPostAPIView, StockAdjustmentDetailAPIView, StockAdjustmentListCreateAPIView,
+    StockAdjustmentPostAPIView, StockAdjustmentUpdateAPIView, StockBatchListAPIView,
+    StockCountDetailAPIView, StockCountFinalFileAPIView, StockCountFinalizeAPIView,
+    StockCountInitialFileAPIView, StockCountListCreateAPIView, StockSerialListAPIView,
+    StockValuationChartAPIView, WarehouseTransferDispatchAPIView,
+    WarehouseTransferImportCSVAPIView, WarehouseTransferReceiveAPIView,
+)
 from .activity import REPORTS
 
 from .api_views import (
@@ -16,6 +25,22 @@ from .api_views import (
 app_name = 'warehouse'
 
 urlpatterns = [
+    path('batches/', StockBatchListAPIView.as_view(), name='batch-list'),
+    path('serials/', StockSerialListAPIView.as_view(), name='serial-list'),
+    path('opening-stock/', OpeningStockPostAPIView.as_view(), name='opening-stock'),
+    path('stock-chart/', StockValuationChartAPIView.as_view(), name='stock-chart'),
+    path('adjustments/', StockAdjustmentListCreateAPIView.as_view(), name='adjustment-list'),
+    path('adjustments/<int:pk>/', StockAdjustmentDetailAPIView.as_view(), name='adjustment-detail'),
+    path('adjustments/<int:pk>/update/', StockAdjustmentUpdateAPIView.as_view(), name='adjustment-update'),
+    path('adjustments/<int:pk>/post/', StockAdjustmentPostAPIView.as_view(), name='adjustment-post'),
+    path('stock-counts/', StockCountListCreateAPIView.as_view(), name='stock-count-list'),
+    path('stock-counts/<int:pk>/', StockCountDetailAPIView.as_view(), name='stock-count-detail'),
+    path('stock-counts/<int:pk>/initial-file/', StockCountInitialFileAPIView.as_view(), name='stock-count-initial-file'),
+    path('stock-counts/<int:pk>/final-file/', StockCountFinalFileAPIView.as_view(), name='stock-count-final-file'),
+    path('stock-counts/<int:pk>/finalize/', StockCountFinalizeAPIView.as_view(), name='stock-count-finalize'),
+    path('transfers/<int:pk>/dispatch/', WarehouseTransferDispatchAPIView.as_view(), name='transfer-dispatch'),
+    path('transfers/<int:pk>/receive/', WarehouseTransferReceiveAPIView.as_view(), name='transfer-receive'),
+    path('transfers/import-csv/', WarehouseTransferImportCSVAPIView.as_view(), name='transfer-import-csv'),
     *[path(f'reports/<int:warehouse_id>/{key}/', view.as_view(), name=f'report-{key}')
       for key, (_, view, _) in REPORTS.items()],
     path('transfers/options/', TransferOptionsAPIView.as_view(), name='transfer-options'),

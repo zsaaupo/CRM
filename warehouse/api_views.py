@@ -1,3 +1,4 @@
+from common.io_utils import ExportListMixin
 from common.view import (
     BaseAPIMixin, BaseDetailAPIView, BaseListAPIView, BaseListCreateAPIView,
     BaseUpdateAPIView,
@@ -17,14 +18,23 @@ from django.shortcuts import get_object_or_404
 from account.permissions import has_role_permissions
 
 from .access import WarehouseAccessBusy, lock_assignment_write, managed_assignments
-from .models import Stock, RoleWarehouseAccess, WareHouse, WarehouseTransfer, WarehouseTransferItem
+from .adjustments import post_stock_adjustment
+from .counts import create_stock_count, finalize_stock_count, import_count_final_file
+from .models import (
+    Stock, StockAdjustment, StockAdjustmentItem, StockBatch, StockCount, StockCountLine, StockSerial,
+    RoleWarehouseAccess, WareHouse, WarehouseTransfer, WarehouseTransferItem,
+)
+from .opening import post_opening_stock
 from .scope import HasWarehouseAccess, WarehouseScopeAPIMixin, all_warehouse_access, scoped_queryset, warehouse_scope
 from .serializers import (
-    StockFilterSerializer, StockReadSerializer, RoleWarehouseAccessFilterSerializer,
-    RoleWarehouseAccessSerializer, WareHouseSerializer,
-    WarehouseTransferSerializer, TransferCompleteSerializer,
+    StockAdjustmentSerializer, StockBatchReadSerializer, StockCountSerializer, StockFilterSerializer,
+    StockReadSerializer, StockSerialReadSerializer, RoleWarehouseAccessFilterSerializer,
+    RoleWarehouseAccessSerializer, WareHouseSerializer, WarehouseTransferSerializer, TransferCompleteSerializer,
 )
-from .services import TransferBusy, complete_transfer, lock_transfer, transfer_queryset
+from .services import (
+    TransferBusy, complete_transfer, dispatch_transfer, import_transfer_csv, lock_transfer,
+    receive_transfer, stock_valuation_chart, transfer_queryset,
+)
 
 
 class WarehouseRecordScopeMixin(WarehouseScopeAPIMixin):
@@ -54,11 +64,17 @@ class WareHouseUpdateAPIView(WarehouseRecordScopeMixin, BaseUpdateAPIView):
     queryset = WareHouse.objects.all()
 
 
-class StockListAPIView(WarehouseScopeAPIMixin, BaseListAPIView):
+class StockListAPIView(ExportListMixin, WarehouseScopeAPIMixin, BaseListAPIView):
     serializer_class = StockReadSerializer
     queryset = Stock.objects.select_related('warehouse', 'product__unit')
     search_fields = ['warehouse__name', 'warehouse__code', 'product__name', 'product__sku']
     ordering = ['warehouse__name', 'product__name', 'pk']
+    export_filename = 'stock'
+    export_title = 'Warehouse Stock'
+    export_columns = [
+        ('Warehouse', 'warehouse.name'), ('SKU', 'product.sku'),
+        ('Product', 'product.name'), ('Quantity', 'quantity'), ('Average Cost', 'average_cost'),
+    ]
 
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -72,6 +88,296 @@ class StockDetailAPIView(WarehouseScopeAPIMixin, BaseAPIMixin, RetrieveAPIView):
     serializer_class = StockReadSerializer
     queryset = StockListAPIView.queryset
     http_method_names = ['get', 'head', 'options']
+
+
+class StockBatchListAPIView(WarehouseScopeAPIMixin, BaseListAPIView):
+    serializer_class = StockBatchReadSerializer
+    queryset = StockBatch.objects.select_related('warehouse', 'product')
+    search_fields = ['batch_number', 'product__sku', 'product__name', 'warehouse__name']
+    ordering = ['expiry_date', 'batch_number', 'pk']
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        wh = self.request.query_params.get('warehouse')
+        prod = self.request.query_params.get('product')
+        exp_before = self.request.query_params.get('expiry_before')
+        exp_after = self.request.query_params.get('expiry_after')
+        if wh and wh.isdigit():
+            qs = qs.filter(warehouse_id=int(wh))
+        if prod and prod.isdigit():
+            qs = qs.filter(product_id=int(prod))
+        if exp_before:
+            qs = qs.filter(expiry_date__lte=exp_before)
+        if exp_after:
+            qs = qs.filter(expiry_date__gte=exp_after)
+        return qs
+
+
+class StockSerialListAPIView(WarehouseScopeAPIMixin, BaseListAPIView):
+    serializer_class = StockSerialReadSerializer
+    queryset = StockSerial.objects.select_related('warehouse', 'product', 'batch')
+    search_fields = ['serial_number', 'product__sku', 'product__name']
+    ordering = ['product__sku', 'serial_number', 'pk']
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        wh = self.request.query_params.get('warehouse')
+        prod = self.request.query_params.get('product')
+        st = self.request.query_params.get('status')
+        if wh and wh.isdigit():
+            qs = qs.filter(warehouse_id=int(wh))
+        if prod and prod.isdigit():
+            qs = qs.filter(product_id=int(prod))
+        if st:
+            qs = qs.filter(status=st)
+        return qs
+
+
+class OpeningStockPostAPIView(WarehouseScopeAPIMixin, BaseAPIMixin, APIView):
+    required_permissions = ('warehouse.view_stock',)
+    http_method_names = ['post', 'options']
+
+    def post(self, request):
+        from rest_framework import status as http_status
+        rows = request.data.get('rows') or []
+        req_key = request.data.get('request_key')
+        if not req_key:
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError({'request_key': 'request_key UUID is required.'})
+        from uuid import UUID
+        try:
+            key_uuid = UUID(str(req_key))
+        except ValueError as exc:
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError({'request_key': 'Invalid UUID.'}) from exc
+        data, created = post_opening_stock(request.user, rows, key_uuid, request=request)
+        return Response({**data, 'idempotent_replay': not created}, status=http_status.HTTP_200_OK)
+
+
+class StockAdjustmentAPIMixin(WarehouseScopeAPIMixin):
+    serializer_class = StockAdjustmentSerializer
+    queryset = StockAdjustment.objects.select_related('warehouse').prefetch_related('items__product', 'items__unit')
+    response_key = 'stock_adjustment'
+    search_fields = ['reference_number', 'reason', 'note', 'warehouse__name']
+    ordering = ['-adjustment_date', '-pk']
+
+
+class StockAdjustmentListCreateAPIView(StockAdjustmentAPIMixin, BaseListCreateAPIView):
+    pass
+
+
+class StockAdjustmentDetailAPIView(StockAdjustmentAPIMixin, BaseDetailAPIView):
+    def perform_destroy(self, instance):
+        if instance.status == StockAdjustment.Status.POSTED:
+            from common.exceptions import StateConflict
+            raise StateConflict('Posted stock adjustments cannot be deleted.')
+        super().perform_destroy(instance)
+
+
+class StockAdjustmentUpdateAPIView(StockAdjustmentAPIMixin, BaseUpdateAPIView):
+    pass
+
+
+class StockAdjustmentPostAPIView(WarehouseScopeAPIMixin, BaseAPIMixin, APIView):
+    required_permissions = ()
+    http_method_names = ['post', 'options']
+
+    def initial(self, request, *args, **kwargs):
+        self.permission_classes = [IsAuthenticated]
+        return super().initial(request, *args, **kwargs)
+
+    def post(self, request, pk):
+        from uuid import UUID
+        from rest_framework.exceptions import ValidationError
+        req_key = request.data.get('request_key')
+        try:
+            key_uuid = UUID(str(req_key)) if req_key else None
+        except ValueError as exc:
+            raise ValidationError({'request_key': 'Invalid UUID.'}) from exc
+        if key_uuid is None:
+            raise ValidationError({'request_key': 'request_key UUID is required.'})
+        adj, created = post_stock_adjustment(request.user, pk, key_uuid)
+        data = StockAdjustmentSerializer(adj).data
+        data['idempotent_replay'] = not created
+        return Response(data)
+
+
+class StockCountListCreateAPIView(WarehouseScopeAPIMixin, BaseAPIMixin, APIView):
+    required_permissions = ('warehouse.manage_stock_count',)
+    http_method_names = ['get', 'post', 'head', 'options']
+
+    def get(self, request):
+        scope = warehouse_scope(request.user)
+        qs = scoped_queryset(
+            StockCount.objects.select_related('warehouse').prefetch_related('lines__product', 'lines__batch'),
+            scope,
+        )
+        return Response({'results': StockCountSerializer(qs[:100], many=True).data})
+
+    def post(self, request):
+        from rest_framework import status as http_status
+        wh_id = request.data.get('warehouse')
+        if not wh_id:
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError({'warehouse': 'Choose a warehouse.'})
+        sc = create_stock_count(
+            request.user, int(wh_id),
+            count_type=request.data.get('count_type') or StockCount.CountType.FULL,
+            category_ids=request.data.get('categories') or None,
+            brand_ids=request.data.get('brands') or None,
+        )
+        return Response(StockCountSerializer(sc).data, status=http_status.HTTP_201_CREATED)
+
+
+class StockCountDetailAPIView(WarehouseScopeAPIMixin, BaseAPIMixin, APIView):
+    required_permissions = ('warehouse.manage_stock_count',)
+    http_method_names = ['get', 'head', 'options']
+
+    def get(self, request, pk):
+        scope = warehouse_scope(request.user)
+        qs = scoped_queryset(
+            StockCount.objects.select_related('warehouse').prefetch_related('lines__product', 'lines__batch'),
+            scope,
+        )
+        sc = get_object_or_404(qs, pk=pk)
+        return Response(StockCountSerializer(sc).data)
+
+
+class StockCountInitialFileAPIView(WarehouseScopeAPIMixin, BaseAPIMixin, APIView):
+    required_permissions = ('warehouse.manage_stock_count',)
+    http_method_names = ['get', 'head', 'options']
+
+    def get(self, request, pk):
+        from django.http import HttpResponse
+        scope = warehouse_scope(request.user)
+        sc = get_object_or_404(scoped_queryset(StockCount.objects.all(), scope), pk=pk)
+        if not sc.initial_file:
+            from rest_framework.exceptions import NotFound
+            raise NotFound('Initial count file not available.')
+        sc.initial_file.open('rb')
+        content = sc.initial_file.read()
+        sc.initial_file.close()
+        resp = HttpResponse(content, content_type='text/csv; charset=utf-8')
+        resp['Content-Disposition'] = f'attachment; filename="{sc.reference_number}_initial.csv"'
+        return resp
+
+
+class StockCountFinalFileAPIView(WarehouseScopeAPIMixin, BaseAPIMixin, APIView):
+    required_permissions = ('warehouse.manage_stock_count',)
+    http_method_names = ['post', 'options']
+
+    def post(self, request, pk):
+        from rest_framework.exceptions import ValidationError
+        upload = request.FILES.get('file')
+        if upload is not None:
+            sc = import_count_final_file(request.user, pk, upload, filename=upload.name)
+        elif 'csv' in request.data:
+            sc = import_count_final_file(request.user, pk, str(request.data['csv']), filename='final.csv')
+        else:
+            raise ValidationError({'file': 'Upload a final count CSV file or pass "csv".'})
+        return Response(StockCountSerializer(sc).data)
+
+
+class StockCountFinalizeAPIView(WarehouseScopeAPIMixin, BaseAPIMixin, APIView):
+    required_permissions = ('warehouse.manage_stock_count',)
+    http_method_names = ['post', 'options']
+
+    def post(self, request, pk):
+        from uuid import UUID
+        from rest_framework.exceptions import ValidationError
+        req_key = request.data.get('request_key')
+        try:
+            key_uuid = UUID(str(req_key)) if req_key else None
+        except ValueError as exc:
+            raise ValidationError({'request_key': 'Invalid UUID.'}) from exc
+        if key_uuid is None:
+            raise ValidationError({'request_key': 'request_key UUID is required.'})
+        reconcile = bool(request.data.get('reconcile_intervening', False))
+        sc, created = finalize_stock_count(request.user, pk, key_uuid, reconcile_intervening=reconcile)
+        data = StockCountSerializer(sc).data
+        data['idempotent_replay'] = not created
+        return Response(data)
+
+
+class WarehouseTransferDispatchAPIView(WarehouseScopeAPIMixin, BaseAPIMixin, APIView):
+    http_method_names = ['post', 'options']
+
+    def initial(self, request, *args, **kwargs):
+        from rest_framework.permissions import IsAuthenticated
+        self.permission_classes = [IsAuthenticated]
+        return super().initial(request, *args, **kwargs)
+
+    def post(self, request, pk):
+        record, dispatched_now = dispatch_transfer(request.user, pk, request_key=request.data.get('request_key'))
+        data = WarehouseTransferSerializer(record, context={'request': request}).data
+        data['dispatched_now'] = dispatched_now
+        return Response(data)
+
+
+class WarehouseTransferReceiveAPIView(WarehouseScopeAPIMixin, BaseAPIMixin, APIView):
+    http_method_names = ['post', 'options']
+
+    def initial(self, request, *args, **kwargs):
+        from rest_framework.permissions import IsAuthenticated
+        self.permission_classes = [IsAuthenticated]
+        return super().initial(request, *args, **kwargs)
+
+    def post(self, request, pk):
+        record, received_now = receive_transfer(
+            request.user, pk,
+            request_key=request.data.get('request_key'),
+            lines=request.data.get('lines'),
+            allow_partial=bool(request.data.get('allow_partial', False)),
+        )
+        data = WarehouseTransferSerializer(record, context={'request': request}).data
+        data['received_now'] = received_now
+        return Response(data)
+
+
+class WarehouseTransferImportCSVAPIView(WarehouseScopeAPIMixin, BaseAPIMixin, APIView):
+    http_method_names = ['post', 'options']
+
+    def initial(self, request, *args, **kwargs):
+        from rest_framework.permissions import IsAuthenticated
+        self.permission_classes = [IsAuthenticated]
+        return super().initial(request, *args, **kwargs)
+
+    def post(self, request):
+        from decimal import Decimal
+        from rest_framework import status as http_status
+        from rest_framework.exceptions import ValidationError
+        upload = request.FILES.get('file')
+        csv_text = upload if upload is not None else request.data.get('csv')
+        if csv_text is None:
+            raise ValidationError({'file': 'Upload a CSV file or pass "csv".'})
+        src = request.data.get('source_warehouse')
+        dst = request.data.get('destination_warehouse')
+        if not src or not dst:
+            raise ValidationError({'warehouse': 'source_warehouse and destination_warehouse are required.'})
+        record = import_transfer_csv(
+            request.user,
+            source_warehouse_id=int(src),
+            destination_warehouse_id=int(dst),
+            csv_content=csv_text,
+            filename=upload.name if upload is not None else 'transfer.csv',
+            status=request.data.get('status') or WarehouseTransfer.Status.PENDING,
+            shipping_cost=Decimal(str(request.data.get('shipping_cost') or '0')),
+            notes=request.data.get('notes') or '',
+            attachment=request.FILES.get('attachment'),
+        )
+        return Response(
+            WarehouseTransferSerializer(record, context={'request': request}).data,
+            status=http_status.HTTP_201_CREATED,
+        )
+
+
+class StockValuationChartAPIView(WarehouseScopeAPIMixin, BaseAPIMixin, APIView):
+    required_permissions = ('warehouse.view_stock',)
+    http_method_names = ['get', 'head', 'options']
+
+    def get(self, request):
+        as_of = request.query_params.get('as_of') or None
+        return Response(stock_valuation_chart(request.user, as_of=as_of))
 
 
 class WarehouseTransferAPIMixin:

@@ -46,6 +46,8 @@ INSTALLED_APPS = [
     'report',
     'hrm',
     'accounting',
+    'manufacturing',
+    'tasks',
 ]
 
 MIDDLEWARE = [
@@ -78,6 +80,7 @@ TEMPLATES = [
                 'hrm.context_processors.hrm_navigation',
                 'accounting.context_processors.expense_navigation',
                 'common.context_processors.settings_navigation',
+                'common.context_processors.general_settings',
                 'report.context_processors.report_actions',
             ],
         },

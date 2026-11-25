@@ -1,6 +1,8 @@
 from django.urls import path
 
 from .page_views import (
+    BillerAddPageView, BillerEditPageView, BillerPageView,
+    CustomerGroupAddPageView, CustomerGroupEditPageView, CustomerGroupPageView,
     LeadAddPageView, LeadDetailPageView, LeadEditPageView, LeadPageView,
     PartyAddPageView, PartyDetailPageView, PartyEditPageView, PartyListPageView,
 )
@@ -13,6 +15,12 @@ urlpatterns = [
     path('leads/add/', LeadAddPageView.as_view(), name='add-lead'),
     path('leads/<int:pk>/', LeadDetailPageView.as_view(), name='lead-detail'),
     path('leads/<int:pk>/edit/', LeadEditPageView.as_view(), name='edit-lead'),
+    path('billers/', BillerPageView.as_view(), name='biller-list'),
+    path('billers/add/', BillerAddPageView.as_view(), name='add-biller'),
+    path('billers/<int:pk>/edit/', BillerEditPageView.as_view(), name='edit-biller'),
+    path('customer-groups/', CustomerGroupPageView.as_view(), name='customer-group-list'),
+    path('customer-groups/add/', CustomerGroupAddPageView.as_view(), name='add-customer-group'),
+    path('customer-groups/<int:pk>/edit/', CustomerGroupEditPageView.as_view(), name='edit-customer-group'),
 ]
 for role in ('supplier', 'customer'):
     urlpatterns += [

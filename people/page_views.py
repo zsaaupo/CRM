@@ -159,3 +159,112 @@ class PartyEditPageView(PartyAddPageView):
 class PartyDetailPageView(PartyPageView):
     template_name = 'people/detail.html'
     mode = 'detail'
+
+
+class BillerPageView(ProtectedAccountPageView):
+    template_name = 'inventory/list.html'
+    mode = 'list'
+
+    def get_permission_required(self):
+        permissions = ['people.view_biller']
+        if self.mode in ('add', 'edit'):
+            permissions.append('people.manage_biller')
+        return permissions
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        user = self.request.user
+        heading = {'list': 'Biller list', 'add': 'Add biller', 'edit': 'Edit biller'}[self.mode]
+        context.update({
+            'page_section': 'people', 'section_label': 'People', 'people_role': 'biller',
+            'page_mode': self.mode, 'page_label': heading, 'form_heading': heading,
+            'resource': {'singular': 'biller', 'plural': 'billers'},
+            'list_url': reverse('people_pages:biller-list'),
+            'add_url': reverse('people_pages:add-biller'),
+            'list_api_url': reverse('people:biller-list'),
+            'create_api_url': reverse('people:biller-list'),
+            'fields_template': 'people/fields.html',
+            'can_add': user.has_perm('people.manage_biller'),
+            'can_delete': user.has_perm('people.manage_biller'),
+            'columns': [
+                {'key': key, 'label': label, 'type': kind}
+                for key, label, kind in [
+                    ('name', 'Name', 'text'), ('company_name', 'Company', 'text'),
+                    ('phone', 'Phone', 'text'), ('email', 'Email', 'text'),
+                    ('is_active', 'Status', 'status'), ('actions', 'Actions', 'edit'),
+                ]
+            ],
+        })
+        if user.has_perm('people.manage_biller'):
+            context['edit_url_template'] = reverse('people_pages:edit-biller', args=[0])
+            context['delete_url_template'] = reverse('people:biller-detail', args=[0])
+        if self.mode == 'edit':
+            context.update({
+                'form_method': 'PATCH',
+                'detail_api_url': reverse('people:biller-detail', args=[self.kwargs['pk']]),
+                'create_api_url': reverse('people:biller-detail', args=[self.kwargs['pk']]),
+            })
+        return context
+
+
+class BillerAddPageView(BillerPageView):
+    template_name = 'inventory/add.html'
+    mode = 'add'
+
+
+class BillerEditPageView(BillerAddPageView):
+    mode = 'edit'
+
+
+class CustomerGroupPageView(ProtectedAccountPageView):
+    template_name = 'inventory/list.html'
+    mode = 'list'
+
+    def get_permission_required(self):
+        permissions = ['people.view_customergroup']
+        if self.mode in ('add', 'edit'):
+            permissions.append('people.manage_customer_group')
+        return permissions
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        user = self.request.user
+        heading = {'list': 'Customer groups', 'add': 'Add customer group', 'edit': 'Edit customer group'}[self.mode]
+        context.update({
+            'page_section': 'people', 'section_label': 'People', 'people_role': 'customer-group',
+            'page_mode': self.mode, 'page_label': heading, 'form_heading': heading,
+            'resource': {'singular': 'customer group', 'plural': 'customer groups'},
+            'list_url': reverse('people_pages:customer-group-list'),
+            'add_url': reverse('people_pages:add-customer-group'),
+            'list_api_url': reverse('people:customer-group-list'),
+            'create_api_url': reverse('people:customer-group-list'),
+            'can_add': user.has_perm('people.manage_customer_group'),
+            'can_delete': user.has_perm('people.manage_customer_group'),
+            'columns': [
+                {'key': key, 'label': label, 'type': kind}
+                for key, label, kind in [
+                    ('name', 'Name', 'text'), ('price_basis', 'Price basis', 'text'),
+                    ('percentage', 'Percentage', 'text'), ('is_active', 'Status', 'status'),
+                    ('actions', 'Actions', 'edit'),
+                ]
+            ],
+        })
+        if user.has_perm('people.manage_customer_group'):
+            context['edit_url_template'] = reverse('people_pages:edit-customer-group', args=[0])
+            context['delete_url_template'] = reverse('people:customer-group-detail', args=[0])
+        if self.mode == 'edit':
+            context.update({
+                'form_method': 'PATCH',
+                'detail_api_url': reverse('people:customer-group-detail', args=[self.kwargs['pk']]),
+                'create_api_url': reverse('people:customer-group-detail', args=[self.kwargs['pk']]),
+            })
+        return context
+
+
+class CustomerGroupAddPageView(CustomerGroupPageView):
+    template_name = 'inventory/add.html'
+    mode = 'add'
+
+
+class CustomerGroupEditPageView(CustomerGroupAddPageView):
+    mode = 'edit'

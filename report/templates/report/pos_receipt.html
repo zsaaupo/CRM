@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Receipt {{ order.order_number }}</title>
+<style>
+  {% if fmt == '58mm' %}
+    @page { size: 58mm auto; margin: 2mm; }
+    body { font-size: 8pt; width: 54mm; }
+  {% elif fmt == '80mm' %}
+    @page { size: 80mm auto; margin: 3mm; }
+    body { font-size: 9pt; width: 74mm; }
+  {% else %}
+    @page { size: A4 portrait; margin: 12mm; }
+    body { font-size: 10pt; }
+  {% endif %}
+  body { margin: 0; font-family: "Noto Sans Bengali", "DejaVu Sans", sans-serif; color: #111; }
+  .center { text-align: center; }
+  .wrap { overflow-wrap: anywhere; word-break: break-word; }
+  table { width: 100%; border-collapse: collapse; margin-top: 6px; }
+  th, td { padding: 3px 2px; border-bottom: 0.5pt dashed #ccc; vertical-align: top; }
+  .num { text-align: right; white-space: nowrap; }
+  .totals td { border-bottom: none; font-weight: 600; }
+</style>
+</head>
+<body>
+  <div class="center">
+    <strong>{{ company_name }}</strong>
+    <div>{{ order.order_number }} &middot; {{ order.order_date }}</div>
+    {% if order.customer %}<div class="wrap">{{ order.customer.name }}</div>{% endif %}
+  </div>
+  <table>
+    <thead>
+      <tr><th>Item</th><th class="num">Qty</th><th class="num">Total</th></tr>
+    </thead>
+    <tbody>
+      {% for it in items %}
+      <tr>
+        <td class="wrap">
+          {{ it.product.name }}
+          {% if it.applied_discount_name %}<div><small>Rule: {{ it.applied_discount_name }}</small></div>{% endif %}
+        </td>
+        <td class="num">{{ it.quantity }}</td>
+        <td class="num">{{ it.line_total }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <table class="totals">
+    <tr><td>Subtotal</td><td class="num">{{ order.currency_id }} {{ order.subtotal }}</td></tr>
+    <tr><td>Discount</td><td class="num">{{ order.currency_id }} {{ order.order_discount_amount }}</td></tr>
+    <tr><td>Tax</td><td class="num">{{ order.currency_id }} {{ order.tax_total }}</td></tr>
+    <tr><td>Grand Total</td><td class="num">{{ order.currency_id }} {{ order.grand_total }}</td></tr>
+  </table>
+</body>
+</html>

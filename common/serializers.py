@@ -3,7 +3,7 @@ from copy import copy
 from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 
-from .models import TradeStatus
+from .models import ImportJob, TradeStatus
 
 
 AUDIT_FIELDS = ['id', 'created_at', 'updated_at', 'create_by', 'modified_by']
@@ -41,3 +41,15 @@ class TradeStatusSerializer(CatalogSerializer):
         model = TradeStatus
         fields = ['id', 'name', 'code', 'description', 'is_active', *AUDIT_FIELDS[1:]]
         read_only_fields = AUDIT_FIELDS
+
+
+class ImportJobSerializer(serializers.ModelSerializer):
+    created_by_username = serializers.CharField(source='created_by.username', read_only=True, default=None)
+
+    class Meta:
+        model = ImportJob
+        fields = [
+            'id', 'kind', 'status', 'dry_run_result', 'committed_result',
+            'created_by', 'created_by_username', 'request_key', 'created_at', 'updated_at',
+        ]
+        read_only_fields = fields

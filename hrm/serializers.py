@@ -101,7 +101,7 @@ class EmployeeSerializer(CatalogSerializer):
     class Meta:
         model = Employee
         fields = [
-            'id', 'employee_code', 'full_name', 'image', 'work_email', 'work_phone',
+            'id', 'employee_code', 'full_name', 'image', 'work_email', 'work_phone', 'device_id',
             'department', 'department_name', 'designation', 'designation_name',
             'employment_type', 'employment_type_name', 'status', 'status_name',
             'joining_date', 'leaving_date', 'reports_to', 'workplace', 'warehouse', 'warehouse_name', 'user',
@@ -135,7 +135,10 @@ class EmployeeFilterSerializer(serializers.Serializer):
 class WorkScheduleSerializer(HRMLookupSerializer):
     class Meta:
         model = WorkSchedule
-        fields = [*LOOKUP_FIELDS, 'working_days', 'start_time', 'end_time', 'break_minutes', 'grace_minutes']
+        fields = [
+            *LOOKUP_FIELDS, 'working_days', 'start_time', 'end_time', 'break_minutes', 'grace_minutes',
+            'early_leave_threshold_minutes', 'checkout_window_end_minutes', 'overnight',
+        ]
         read_only_fields = AUDIT_FIELDS
 
 
@@ -247,7 +250,7 @@ class HolidayFilterSerializer(AttendanceDateFilterSerializer):
 class LeaveTypeSerializer(HRMLookupSerializer):
     class Meta:
         model = LeaveType
-        fields = [*LOOKUP_FIELDS, 'is_paid']
+        fields = [*LOOKUP_FIELDS, 'is_paid', 'annual_quota', 'carry_forward_limit']
         read_only_fields = AUDIT_FIELDS
 
 
@@ -387,6 +390,28 @@ class EmployeeCompensationSerializer(EmployeeRecordSerializer):
                 and structure.currency_id != instance.salary_structure.currency_id):
             raise serializers.ValidationError({'basic_salary': 'Enter the basic salary in the new structure currency.'})
         return super().validate_for_save(attrs)
+
+    @transaction.atomic
+    def create(self, validated_data):
+        obj = super().create(validated_data)
+        prev = (
+            EmployeeCompensation.objects.filter(employee=obj.employee, effective_from__lt=obj.effective_from)
+            .order_by('-effective_from', '-pk')
+            .first()
+        )
+        if prev is not None and prev.basic_salary != obj.basic_salary:
+            from .models import SalaryIncrement
+            SalaryIncrement.objects.create(
+                employee=obj.employee,
+                compensation=obj,
+                previous_amount=prev.basic_salary,
+                new_amount=obj.basic_salary,
+                effective_date=obj.effective_from,
+                reason='Compensation schedule change',
+                create_by=obj.create_by,
+                modified_by=obj.modified_by,
+            )
+        return obj
 
     class Meta:
         model = EmployeeCompensation

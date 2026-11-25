@@ -38,6 +38,15 @@ from .payroll_api import (
 from .payroll_inputs import PayrollAdjustmentReviewAPIView, input_urls
 from .payroll_reports import PayrollReportAPIView
 from .payroll_workflow import RUN_ACTIONS
+from .hr_api import (
+    AttendanceImportCommitAPIView, AttendanceImportPreviewAPIView, CalendarMonthAPIView,
+    LatePolicyListCreateAPIView, LeaveBalanceAllocateAPIView, LeaveBalanceExpireCarryAPIView,
+    LeaveBalanceListAPIView, LeavePolicyListCreateAPIView, ManualPayrollListCreateAPIView,
+    ManualPayrollReconcileAPIView, NoticeDetailAPIView, NoticeListCreateAPIView,
+    PayrollMonthPolicyAPIView, PromotionApplyDueAPIView, PromotionListCreateAPIView,
+    SalaryAdvanceActionAPIView, SalaryAdvanceListCreateAPIView, SalaryIncrementListAPIView,
+    WorkingCalendarListCreateAPIView,
+)
 
 
 app_name = 'hrm'
@@ -153,3 +162,27 @@ urlpatterns = [
 urlpatterns += [path(f'payroll-runs/<int:pk>/{action}/', PayrollRunTransitionAPIView.as_view(action=action),
                      name=f'payroll-run-{action}') for action in RUN_ACTIONS]
 urlpatterns += input_urls((*PAYROLL_INPUT_RESOURCES, *LOAN_RESOURCES))
+urlpatterns += [
+    path('promotions/', PromotionListCreateAPIView.as_view(), name='promotion-list'),
+    path('promotions/apply-due/', PromotionApplyDueAPIView.as_view(), name='promotion-apply-due'),
+    path('notices/', NoticeListCreateAPIView.as_view(), name='notice-list'),
+    path('notices/<int:pk>/', NoticeDetailAPIView.as_view(), name='notice-detail'),
+    path('attendance/import/preview/', AttendanceImportPreviewAPIView.as_view(), name='attendance-import-preview'),
+    path('attendance/import/commit/', AttendanceImportCommitAPIView.as_view(), name='attendance-import-commit'),
+    path('working-calendar/', WorkingCalendarListCreateAPIView.as_view(), name='working-calendar-list'),
+    path('calendar/', CalendarMonthAPIView.as_view(), name='calendar-month'),
+    path('leave-policies/', LeavePolicyListCreateAPIView.as_view(), name='leave-policy-list'),
+    path('leave-balances/', LeaveBalanceListAPIView.as_view(), name='leave-balance-list'),
+    path('leave-balances/allocate/', LeaveBalanceAllocateAPIView.as_view(), name='leave-balance-allocate'),
+    path('leave-balances/expire-carry/', LeaveBalanceExpireCarryAPIView.as_view(), name='leave-balance-expire-carry'),
+    path('late-policy/', LatePolicyListCreateAPIView.as_view(), name='late-policy-list'),
+    path('payroll/month-policy/', PayrollMonthPolicyAPIView.as_view(), name='payroll-month-policy'),
+    path('salary-advances/', SalaryAdvanceListCreateAPIView.as_view(), name='salary-advance-list'),
+    path('salary-advances/<int:pk>/approve/', SalaryAdvanceActionAPIView.as_view(action='approve'), name='salary-advance-approve'),
+    path('salary-advances/<int:pk>/reject/', SalaryAdvanceActionAPIView.as_view(action='reject'), name='salary-advance-reject'),
+    path('salary-advances/<int:pk>/mark-paid/', SalaryAdvanceActionAPIView.as_view(action='mark-paid'), name='salary-advance-mark-paid'),
+    path('salary-advances/<int:pk>/disburse/', SalaryAdvanceActionAPIView.as_view(action='disburse'), name='salary-advance-disburse'),
+    path('salary-increments/', SalaryIncrementListAPIView.as_view(), name='salary-increment-list'),
+    path('manual-payroll/', ManualPayrollListCreateAPIView.as_view(), name='manual-payroll-list'),
+    path('manual-payroll/<int:pk>/reconcile/', ManualPayrollReconcileAPIView.as_view(), name='manual-payroll-reconcile'),
+]

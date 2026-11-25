@@ -15,6 +15,7 @@ from rest_framework.views import APIView
 
 from common.serializers import AUDIT_FIELDS, CatalogSerializer
 from common.view import BaseAPIMixin, BaseDetailAPIView, BaseListAPIView, BaseListCreateAPIView, BasePagination
+from purchase.returns import received_orders
 from sale.returns import completed_orders
 from warehouse.models import WareHouse
 from warehouse.scope import (
@@ -23,13 +24,14 @@ from warehouse.scope import (
 
 from .models import (
     MIN_AMOUNT, AccountTransaction, AccountTransfer, Expense, ExpenseCategory, ExpensePayment, FinancialAccount,
-    Income, IncomeCategory, IncomePayment, SalesPayment, TransferType,
+    Income, IncomeCategory, IncomePayment, PaymentMethod, PurchasePayment, SalesPayment, TransferType,
 )
 from .services import (
-    ACCOUNT_VIEW, EXPENSE_COMPLETE, PAYMENT_VIEW, SALES_PAYMENT_VIEW, STATEMENT_VIEW, TRANSFER_VIEW, ExpenseCompleted,
-    INCOME_PAYMENT_VIEW, IncomeCompleted, accounts_with_balances, available_payment_accounts, complete_income_expense,
-    lock_income_expense, lock_rows, paid_amount,
-    payment_account_options, post_transfer,
+    ACCOUNT_VIEW, EXPENSE_COMPLETE, PAYMENT_VIEW, PURCHASE_PAYMENT_VIEW, SALES_PAYMENT_VIEW, STATEMENT_VIEW,
+    TRANSFER_VIEW, ExpenseCompleted, INCOME_PAYMENT_VIEW, IncomeCompleted, accounts_with_balances,
+    available_payment_accounts, complete_income_expense, confirm_clear_due, lock_income_expense, lock_rows,
+    paid_amount, party_due_summary, payment_account_options, post_purchase_payment, post_sales_payment,
+    post_transfer, preview_clear_due, reverse_payment,
 )
 from .serializers import PaymentAccountField
 
@@ -71,8 +73,8 @@ class ExpenseSerializer(WarehouseScopedSerializerMixin, CatalogSerializer):
     class Meta:
         model = Expense
         fields = [*AUDIT_FIELDS, 'date', 'category', 'category_name', 'warehouse', 'warehouse_name', 'amount',
-                  'currency', 'has_payment_history', 'payment_account', 'payment_account_name', 'is_completed',
-                  'completed_at']
+                  'currency', 'has_payment_history', 'payment_account', 'payment_account_name', 'note', 'reference',
+                  'is_completed', 'completed_at']
         read_only_fields = [*AUDIT_FIELDS, 'is_completed', 'completed_at']
 
     def validate(self, attrs):
@@ -280,7 +282,8 @@ class FinancialAccountSerializer(WarehouseScopedSerializerMixin, CatalogSerializ
     class Meta:
         model = FinancialAccount
         fields = [*AUDIT_FIELDS, 'name', 'type', 'type_label', 'warehouse', 'warehouse_name', 'currency',
-                  'opening_balance', 'balance', 'is_active']
+                  'opening_balance', 'account_number', 'account_holder', 'bank_name', 'is_default', 'note',
+                  'balance', 'is_active']
         read_only_fields = [*AUDIT_FIELDS, 'currency']
 
     def get_balance(self, account):
@@ -336,10 +339,15 @@ class AccountTransactionSerializer(serializers.ModelSerializer):
             return f'{row.purchase_payment.type_label} {row.purchase_payment.number}'
         if row.sales_payment_id:
             return f'{row.sales_payment.type_label} {row.sales_payment.number}'
-        return f'Transfer {row.transfer.number}' if row.transfer_id else f'Expense payment {row.expense_payment.number}'
+        if row.transfer_id:
+            return f'Transfer {row.transfer.number}'
+        if row.expense_payment_id:
+            return f'Expense payment {row.expense_payment.number}'
+        return f'{row.get_source_kind_display()} #{row.source_ref_id}'
 
     def get_reference(self, row):
-        return (row.transfer or row.expense_payment or row.income_payment or row.sales_payment or row.purchase_payment).reference
+        linked = row.transfer or row.expense_payment or row.income_payment or row.sales_payment or row.purchase_payment
+        return linked.reference if linked is not None else row.source_reference
 
 
 class AccountTransactionListAPIView(WarehouseScopeAPIMixin, BaseListAPIView):
@@ -579,23 +587,238 @@ class IncomePaymentListAPIView(WarehouseScopeAPIMixin, BaseListAPIView):
         return super().get_queryset().filter(income=income)
 
 
+class TenderInputSerializer(serializers.Serializer):
+    method = serializers.ChoiceField(choices=PaymentMethod.choices)
+    account = serializers.IntegerField(min_value=1, max_value=2**63 - 1, required=False, allow_null=True)
+    account_id = serializers.IntegerField(min_value=1, max_value=2**63 - 1, required=False, allow_null=True)
+    amount = serializers.DecimalField(max_digits=15, decimal_places=4)
+    cheque_number = serializers.CharField(max_length=60, required=False, allow_blank=True, default='')
+    card_last4 = serializers.CharField(max_length=4, required=False, allow_blank=True, default='')
+    gift_card_id = serializers.IntegerField(min_value=1, required=False, allow_null=True)
+    note = serializers.CharField(required=False, allow_blank=True, default='')
+
+
+class OrderPaymentCreateSerializer(serializers.Serializer):
+    request_key = serializers.UUIDField()
+    payment_date = serializers.DateField(default=timezone.localdate)
+    tenders = TenderInputSerializer(many=True, allow_empty=False)
+    route_excess_to_deposit = serializers.BooleanField(required=False, default=False)
+
+
 class SalesPaymentSerializer(PaymentSerializer):
     type_label = serializers.CharField()
+    account_name = serializers.CharField(source='account.name', default=None)
+    currency = serializers.CharField(source='sales_order.currency_id')
 
     class Meta:
         model = SalesPayment
-        fields = [*AUDIT_FIELDS, 'name', 'sales_order', 'sales_return', 'type_label', *PaymentSerializer.payment_fields]
+        fields = [*AUDIT_FIELDS, 'name', 'sales_order', 'sales_return', 'type_label', 'cheque_number',
+                  'card_last4', 'gift_card', 'note', 'is_reversal', 'reversed_payment', 'refund_of',
+                  'origin', 'settlement', *PaymentSerializer.payment_fields]
         read_only_fields = fields
 
 
-class SalesPaymentListAPIView(WarehouseScopeAPIMixin, BaseListAPIView):
-    queryset = SalesPayment.objects.select_related('account')
+class SalesPaymentListCreateAPIView(WarehouseScopeAPIMixin, BaseListCreateAPIView):
+    queryset = SalesPayment.objects.select_related('account', 'sales_order')
     serializer_class = SalesPaymentSerializer
-    warehouse_lookup = 'account__warehouse_id'
-    required_permissions = SALES_PAYMENT_VIEW
+    warehouse_lookup = 'sales_order__warehouse_id'
+    required_permissions = {
+        'GET': SALES_PAYMENT_VIEW,
+        'POST': ('sale.view_salesorder', 'accounting.add_sales_payment'),
+    }
     search_fields = ['reference', 'account__name']
     ordering = ['-pk']
 
     def get_queryset(self):
         order = get_object_or_404(completed_orders(self.request.warehouse_scope), pk=self.kwargs['sales_order_pk'])
         return super().get_queryset().filter(sales_order=order)
+
+    def create(self, request, *args, **kwargs):
+        serializer = OrderPaymentCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        result = post_sales_payment(
+            request.user,
+            self.kwargs['sales_order_pk'],
+            data['tenders'],
+            data['payment_date'],
+            data['request_key'],
+            route_excess_to_deposit=data['route_excess_to_deposit'],
+        )
+        return Response(result, status=status.HTTP_200_OK)
+
+
+class PurchasePaymentSerializer(PaymentSerializer):
+    type_label = serializers.CharField()
+    account_name = serializers.CharField(source='account.name', default=None)
+    currency = serializers.CharField(source='purchase_order.currency_id')
+
+    class Meta:
+        model = PurchasePayment
+        fields = [*AUDIT_FIELDS, 'name', 'purchase_order', 'purchase_return', 'type_label', 'cheque_number',
+                  'card_last4', 'note', 'is_reversal', 'reversed_payment', 'refund_of',
+                  'origin', 'settlement', *PaymentSerializer.payment_fields]
+        read_only_fields = fields
+
+
+class PurchasePaymentListCreateAPIView(WarehouseScopeAPIMixin, BaseListCreateAPIView):
+    queryset = PurchasePayment.objects.select_related('account', 'purchase_order')
+    serializer_class = PurchasePaymentSerializer
+    warehouse_lookup = 'purchase_order__warehouse_id'
+    required_permissions = {
+        'GET': PURCHASE_PAYMENT_VIEW,
+        'POST': ('purchase.view_purchaseorder', 'accounting.add_purchase_payment'),
+    }
+    search_fields = ['reference', 'account__name']
+    ordering = ['-pk']
+
+    def get_queryset(self):
+        order = get_object_or_404(received_orders(self.request.warehouse_scope), pk=self.kwargs['purchase_order_pk'])
+        return super().get_queryset().filter(purchase_order=order)
+
+    def create(self, request, *args, **kwargs):
+        serializer = OrderPaymentCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        result = post_purchase_payment(
+            request.user,
+            self.kwargs['purchase_order_pk'],
+            data['tenders'],
+            data['payment_date'],
+            data['request_key'],
+        )
+        return Response(result, status=status.HTTP_200_OK)
+
+
+class PaymentReverseSerializer(serializers.Serializer):
+    request_key = serializers.UUIDField()
+    reason = serializers.CharField(max_length=255, allow_blank=False)
+    kind = serializers.ChoiceField(choices=[('sales', 'Sales'), ('purchase', 'Purchase')], required=False)
+
+
+@method_decorator(never_cache, name='dispatch')
+class PaymentReverseAPIView(WarehouseScopeAPIMixin, BaseAPIMixin, GenericAPIView):
+    serializer_class = PaymentReverseSerializer
+    required_permissions = ('accounting.reverse_payment',)
+    http_method_names = ['post', 'options']
+    default_kind = None
+
+    def post(self, request, pk):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        result = reverse_payment(
+            request.user, pk, data['request_key'], data['reason'],
+            kind=data.get('kind') or self.default_kind,
+        )
+        return Response(result, status=status.HTTP_200_OK)
+
+
+class PartyDueSummaryFilterSerializer(serializers.Serializer):
+    as_of = serializers.DateField(required=False)
+    warehouse_id = serializers.IntegerField(min_value=1, required=False)
+
+
+@method_decorator(never_cache, name='dispatch')
+class PartyDueSummaryAPIView(WarehouseScopeAPIMixin, BaseAPIMixin, APIView):
+    required_permissions = ('people.view_party',)
+    http_method_names = ['get', 'head', 'options']
+
+    def get(self, request, pk):
+        flt = PartyDueSummaryFilterSerializer(data=request.query_params)
+        flt.is_valid(raise_exception=True)
+        data = flt.validated_data
+        return Response(party_due_summary(
+            pk, as_of=data.get('as_of'), scope=request.warehouse_scope, warehouse_id=data.get('warehouse_id'),
+        ))
+
+
+class ClearDuePreviewSerializer(serializers.Serializer):
+    amount = serializers.DecimalField(max_digits=15, decimal_places=4, min_value=MIN_AMOUNT)
+    direction = serializers.ChoiceField(choices=[('receipt', 'Receipt'), ('disbursement', 'Disbursement')])
+
+
+class ClearDueConfirmSerializer(ClearDuePreviewSerializer):
+    account = serializers.IntegerField(min_value=1, max_value=2**63 - 1)
+    method = serializers.ChoiceField(choices=PaymentMethod.choices)
+    payment_date = serializers.DateField(default=timezone.localdate)
+    request_key = serializers.UUIDField()
+    note = serializers.CharField(required=False, allow_blank=True, default='')
+
+
+@method_decorator(never_cache, name='dispatch')
+class ClearDuePreviewAPIView(WarehouseScopeAPIMixin, BaseAPIMixin, GenericAPIView):
+    serializer_class = ClearDuePreviewSerializer
+    required_permissions = ('accounting.clear_due',)
+    http_method_names = ['post', 'options']
+
+    def post(self, request, pk):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        return Response(preview_clear_due(pk, data['amount'], data['direction'], scope=request.warehouse_scope))
+
+
+@method_decorator(never_cache, name='dispatch')
+class ClearDueConfirmAPIView(WarehouseScopeAPIMixin, BaseAPIMixin, GenericAPIView):
+    serializer_class = ClearDueConfirmSerializer
+    required_permissions = ('accounting.clear_due',)
+    http_method_names = ['post', 'options']
+
+    def post(self, request, pk):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        result = confirm_clear_due(
+            request.user, pk, data['amount'], data['direction'], data['account'],
+            data['method'], data['payment_date'], data['request_key'], note=data['note'],
+        )
+        return Response(result, status=status.HTTP_200_OK)
+
+
+
+class DepositEntrySerializer(serializers.ModelSerializer):
+    class Meta:
+        from .models import DepositEntry
+        model = DepositEntry
+        fields = ['id', 'customer', 'kind', 'amount', 'account', 'source', 'sales_payment', 'note', 'request_key', 'created_at']
+        read_only_fields = fields
+
+
+class CustomerDepositListCreateAPIView(BaseAPIMixin, APIView):
+    required_permissions = {
+        'GET': ('people.view_party',),
+        'POST': ('accounting.add_deposit',),
+    }
+    http_method_names = ['get', 'post', 'head', 'options']
+
+    def get(self, request, customer_id):
+        from .models import DepositEntry
+        from people.models import Party
+        cust = get_object_or_404(Party, pk=customer_id, is_customer=True)
+        entries = DepositEntry.objects.filter(customer=cust).order_by('-pk')
+        return Response({
+            'customer_id': cust.pk,
+            'deposit_balance': str(cust.deposit_balance),
+            'results': DepositEntrySerializer(entries, many=True).data,
+        })
+
+    def post(self, request, customer_id):
+        from uuid import UUID
+        from sale.loyalty import add_deposit
+        req_key = request.data.get('request_key')
+        if not req_key:
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError({'request_key': 'request_key UUID is required.'})
+        acct_id = request.data.get('account')
+        if not acct_id:
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError({'account': 'account is required.'})
+        entry, created = add_deposit(
+            request.user, customer_id, request.data.get('amount') or 0,
+            int(acct_id), request.data.get('note') or '', UUID(str(req_key)),
+        )
+        return Response(
+            {**DepositEntrySerializer(entry).data, 'idempotent_replay': not created},
+            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+        )

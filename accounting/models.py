@@ -8,7 +8,7 @@ from django.db import models
 from django.db.models.functions import Lower, Trim
 from django.utils import timezone
 
-from common.models import TimeStampedModel
+from common.models import AppendOnlyManager, TimeStampedModel
 
 
 ZERO = Decimal('0.0000')
@@ -23,6 +23,25 @@ def base_currency():
 class TransferType(models.TextChoices):
     FUND_TRANSFER = 'fund_transfer', 'Fund transfer'
     MONEY_TRANSFER = 'money_transfer', 'Money transfer'
+
+
+class PaymentMethod(models.TextChoices):
+    CASH = 'cash', 'Cash'
+    CARD = 'card', 'Card'
+    BANK_TRANSFER = 'bank_transfer', 'Bank transfer'
+    BANK = 'bank', 'Bank'
+    MOBILE_BANKING = 'mobile_banking', 'Mobile banking'
+    CHEQUE = 'cheque', 'Cheque'
+    GIFT_CARD = 'gift_card', 'Gift card'
+    DEPOSIT = 'deposit', 'Deposit'
+
+
+class PaymentOrigin(models.TextChoices):
+    LEGACY_AUTO = 'legacy_auto', 'Legacy auto'
+    MANUAL = 'manual', 'Manual'
+    REFUND = 'refund', 'Refund'
+    CLEAR_DUE = 'clear_due', 'Clear due'
+    POS = 'pos', 'POS'
 
 
 class IncomeExpenseCategory(TimeStampedModel):
@@ -65,6 +84,8 @@ class IncomeExpense(TimeStampedModel):
                                         related_name='%(class)ss_to_pay')
     is_completed = models.BooleanField(default=False, editable=False)
     completed_at = models.DateTimeField(null=True, blank=True, editable=False)
+    note = models.TextField(blank=True)
+    reference = models.CharField(max_length=150, blank=True)
 
     class Meta:
         abstract = True
@@ -134,6 +155,11 @@ class FinancialAccount(TimeStampedModel):
     currency = models.CharField(max_length=3, default=base_currency, editable=False)
     opening_balance = models.DecimalField(max_digits=15, decimal_places=4, default=ZERO,
                                           validators=[MinValueValidator(ZERO)])
+    account_number = models.CharField(max_length=100, blank=True)
+    account_holder = models.CharField(max_length=150, blank=True)
+    bank_name = models.CharField(max_length=150, blank=True)
+    is_default = models.BooleanField(default=False)
+    note = models.TextField(blank=True)
     is_active = models.BooleanField(default=True)
 
     class Meta:
@@ -141,13 +167,32 @@ class FinancialAccount(TimeStampedModel):
         constraints = [
             models.UniqueConstraint(Lower(Trim('name')), name='accounting_financial_account_name_unique'),
             models.CheckConstraint(condition=models.Q(opening_balance__gte=0), name='accounting_opening_nonnegative'),
+            models.UniqueConstraint(
+                fields=['warehouse'],
+                condition=models.Q(is_default=True, is_active=True, warehouse__isnull=False),
+                name='accounting_default_account_per_warehouse',
+            ),
+            models.UniqueConstraint(
+                fields=['is_default'],
+                condition=models.Q(is_default=True, is_active=True, warehouse__isnull=True),
+                name='accounting_default_shared_account',
+            ),
+            models.UniqueConstraint(
+                fields=['account_number'],
+                condition=~models.Q(account_number=''),
+                name='accounting_account_number_unique',
+            ),
         ]
 
     def clean(self):
         super().clean()
         self.name = self.name.strip()
+        if isinstance(self.account_number, str):
+            self.account_number = self.account_number.strip()
         if not self.name:
             raise ValidationError({'name': 'Enter an account name.'})
+        if self.is_default and not self.is_active:
+            raise ValidationError({'is_default': 'Only an active account can be marked as default.'})
         if self.pk:
             previous = type(self).objects.filter(pk=self.pk).first()
             if previous and any(getattr(self, field) != getattr(previous, field)
@@ -231,26 +276,88 @@ class IncomePayment(IncomeExpensePayment):
         return f'IP-{self.pk}'
 
 
+class PartySettlement(TimeStampedModel):
+    class Kind(models.TextChoices):
+        RECEIPT = 'receipt', 'Receipt'
+        DISBURSEMENT = 'disbursement', 'Disbursement'
+
+    party = models.ForeignKey('people.Party', on_delete=models.PROTECT, related_name='settlements')
+    kind = models.CharField(max_length=20, choices=Kind.choices)
+    total = models.DecimalField(max_digits=18, decimal_places=4, validators=[MinValueValidator(MIN_AMOUNT)])
+    account = models.ForeignKey(
+        FinancialAccount, on_delete=models.PROTECT, null=True, blank=True, related_name='party_settlements',
+    )
+    method = models.CharField(max_length=24, choices=PaymentMethod.choices)
+    payment_date = models.DateField(default=timezone.localdate)
+    note = models.TextField(blank=True)
+    request_key = models.UUIDField(default=uuid4, unique=True, editable=False)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True, related_name='party_settlements',
+    )
+
+    class Meta:
+        ordering = ['-payment_date', '-pk']
+        permissions = [('clear_due', 'Can clear party due balances')]
+        constraints = [
+            models.CheckConstraint(condition=models.Q(total__gt=0), name='accounting_party_settlement_total_positive'),
+        ]
+
+    def __str__(self):
+        return f'SET-{self.pk}'
+
+
 class SalesPayment(TimeStampedModel):
     sales_order = models.ForeignKey('sale.SalesOrder', on_delete=models.PROTECT, related_name='payments')
     sales_return = models.ForeignKey('sale.SalesReturn', on_delete=models.PROTECT, blank=True, null=True,
                                      related_name='refund_payments')
-    account = models.ForeignKey(FinancialAccount, on_delete=models.PROTECT, related_name='sales_payments')
+    account = models.ForeignKey(FinancialAccount, on_delete=models.PROTECT, null=True, blank=True,
+                                related_name='sales_payments')
     date = models.DateField(default=timezone.localdate)
     amount = models.DecimalField(max_digits=15, decimal_places=4, validators=[MinValueValidator(MIN_AMOUNT)])
-    method = models.CharField(max_length=20, choices=FinancialAccount.Type.choices)
+    method = models.CharField(max_length=24, choices=PaymentMethod.choices)
     reference = models.CharField(max_length=150, blank=True)
     request_key = models.UUIDField(default=uuid4, unique=True, editable=False)
+    cheque_number = models.CharField(max_length=60, blank=True)
+    card_last4 = models.CharField(max_length=4, blank=True)
+    gift_card = models.ForeignKey('sale.GiftCard', on_delete=models.PROTECT, null=True, blank=True, related_name='sales_payments')
+    register_session = models.ForeignKey(
+        'sale.CashRegisterSession', on_delete=models.PROTECT, null=True, blank=True, related_name='payments',
+    )
+    note = models.TextField(blank=True)
+    is_reversal = models.BooleanField(default=False)
+    reversed_payment = models.ForeignKey('self', on_delete=models.PROTECT, null=True, blank=True,
+                                         related_name='reversals')
+    refund_of = models.ForeignKey('self', on_delete=models.PROTECT, null=True, blank=True,
+                                  related_name='refund_rows')
+    origin = models.CharField(max_length=20, choices=PaymentOrigin.choices, default=PaymentOrigin.MANUAL)
+    settlement = models.ForeignKey(PartySettlement, on_delete=models.PROTECT, null=True, blank=True,
+                                   related_name='sales_payments')
 
     class Meta:
         ordering = ['-pk']
+        permissions = [
+            ('add_sales_payment', 'Can record sales payments'),
+            ('reverse_payment', 'Can reverse posted payments'),
+            ('add_deposit', 'Can record customer deposits'),
+            ('view_balance_sheet', 'Can view balance sheet'),
+        ]
         constraints = [
             models.CheckConstraint(condition=models.Q(amount__gt=0), name='accounting_sales_payment_amount_positive'),
-            models.UniqueConstraint(fields=['sales_return', 'account'], name='accounting_refund_return_account_unique'),
+            models.CheckConstraint(
+                condition=models.Q(account__isnull=False) | models.Q(method__in=['gift_card', 'deposit']),
+                name='accounting_sales_payment_account_or_stored_value',
+            ),
+            models.UniqueConstraint(
+                fields=['sales_order'],
+                condition=models.Q(origin='legacy_auto', sales_return__isnull=True, is_reversal=False),
+                name='accounting_sales_legacy_auto_once',
+            ),
         ]
 
     @property
     def type_label(self):
+        if self.is_reversal:
+            return 'Sales payment reversal'
         return 'Sales refund' if self.sales_return_id else 'Sales payment'
 
     @property
@@ -263,24 +370,49 @@ class SalesPayment(TimeStampedModel):
 
 class PurchasePayment(TimeStampedModel):
     purchase_order = models.ForeignKey('purchase.PurchaseOrder', on_delete=models.PROTECT, related_name='payments')
-    purchase_return = models.OneToOneField('purchase.PurchaseReturn', on_delete=models.PROTECT, blank=True, null=True,
-                                           related_name='refund_payment')
-    account = models.ForeignKey(FinancialAccount, on_delete=models.PROTECT, related_name='purchase_payments')
+    purchase_return = models.ForeignKey('purchase.PurchaseReturn', on_delete=models.PROTECT, blank=True, null=True,
+                                        related_name='refund_payments')
+    account = models.ForeignKey(FinancialAccount, on_delete=models.PROTECT, null=True, blank=True,
+                                related_name='purchase_payments')
     date = models.DateField(default=timezone.localdate)
     amount = models.DecimalField(max_digits=15, decimal_places=4, validators=[MinValueValidator(MIN_AMOUNT)])
-    method = models.CharField(max_length=20, choices=FinancialAccount.Type.choices)
+    method = models.CharField(max_length=24, choices=PaymentMethod.choices)
     reference = models.CharField(max_length=150, blank=True)
+    request_key = models.UUIDField(default=uuid4, unique=True, editable=False)
+    cheque_number = models.CharField(max_length=60, blank=True)
+    card_last4 = models.CharField(max_length=4, blank=True)
+    note = models.TextField(blank=True)
+    is_reversal = models.BooleanField(default=False)
+    reversed_payment = models.ForeignKey('self', on_delete=models.PROTECT, null=True, blank=True,
+                                         related_name='reversals')
+    refund_of = models.ForeignKey('self', on_delete=models.PROTECT, null=True, blank=True,
+                                  related_name='refund_rows')
+    origin = models.CharField(max_length=20, choices=PaymentOrigin.choices, default=PaymentOrigin.MANUAL)
+    settlement = models.ForeignKey(PartySettlement, on_delete=models.PROTECT, null=True, blank=True,
+                                   related_name='purchase_payments')
 
     class Meta:
         ordering = ['-pk']
+        permissions = [
+            ('add_purchase_payment', 'Can record purchase payments'),
+        ]
         constraints = [
             models.CheckConstraint(condition=models.Q(amount__gt=0), name='accounting_purchase_payment_amount_positive'),
-            models.UniqueConstraint(fields=['purchase_order'], condition=models.Q(purchase_return__isnull=True),
-                                    name='accounting_purchase_original_payment_unique'),
+            models.CheckConstraint(
+                condition=models.Q(account__isnull=False) | models.Q(method__in=['gift_card', 'deposit']),
+                name='accounting_purchase_payment_account_or_stored_value',
+            ),
+            models.UniqueConstraint(
+                fields=['purchase_order'],
+                condition=models.Q(origin='legacy_auto', purchase_return__isnull=True, is_reversal=False),
+                name='accounting_purchase_legacy_auto_once',
+            ),
         ]
 
     @property
     def type_label(self):
+        if self.is_reversal:
+            return 'Purchase payment reversal'
         return 'Purchase refund' if self.purchase_return_id else 'Purchase payment'
 
     @property
@@ -296,7 +428,24 @@ class AccountTransaction(TimeStampedModel):
         INFLOW = 'inflow', 'Inflow'
         OUTFLOW = 'outflow', 'Outflow'
 
+    class SourceKind(models.TextChoices):
+        SALES_PAYMENT = 'sales_payment', 'Sales payment'
+        PURCHASE_PAYMENT = 'purchase_payment', 'Purchase payment'
+        ACCOUNT_TRANSFER = 'account_transfer', 'Account transfer'
+        EXPENSE_PAYMENT = 'expense_payment', 'Expense payment'
+        INCOME_PAYMENT = 'income_payment', 'Income payment'
+        CUSTOMER_DEPOSIT = 'customer_deposit', 'Customer deposit'
+        GIFT_CARD_SALE = 'gift_card_sale', 'Gift card sale'
+        REGISTER_MOVEMENT = 'register_movement', 'Register movement'
+        SALARY_ADVANCE = 'salary_advance', 'Salary advance'
+        SALARY_PAYMENT = 'salary_payment', 'Salary payment'
+
     account = models.ForeignKey(FinancialAccount, on_delete=models.PROTECT, related_name='transactions')
+    source_kind = models.CharField(
+        max_length=32, choices=SourceKind.choices, default=SourceKind.ACCOUNT_TRANSFER, db_index=True,
+    )
+    source_ref_id = models.BigIntegerField(null=True, blank=True)
+    source_reference = models.CharField(max_length=150, blank=True)
     transfer = models.ForeignKey(AccountTransfer, on_delete=models.PROTECT, related_name='transactions',
                                  blank=True, null=True)
     expense_payment = models.ForeignKey(ExpensePayment, on_delete=models.PROTECT, related_name='transactions',
@@ -312,6 +461,8 @@ class AccountTransaction(TimeStampedModel):
     amount = models.DecimalField(max_digits=15, decimal_places=4, validators=[MinValueValidator(MIN_AMOUNT)])
     balance_after = models.DecimalField(max_digits=15, decimal_places=4, validators=[MinValueValidator(ZERO)])
 
+    objects = AppendOnlyManager()
+
     class Meta:
         ordering = ['-pk']
         indexes = [models.Index(fields=['account', '-id'], name='accounting_tx_account_idx')]
@@ -320,16 +471,25 @@ class AccountTransaction(TimeStampedModel):
             models.CheckConstraint(condition=models.Q(balance_after__gte=0), name='accounting_tx_balance_nonnegative'),
             models.CheckConstraint(
                 condition=(
-                    models.Q(transfer__isnull=False, expense_payment__isnull=True,
-                             sales_payment__isnull=True, purchase_payment__isnull=True, income_payment__isnull=True) |
-                    models.Q(transfer__isnull=True, expense_payment__isnull=False,
-                             sales_payment__isnull=True, purchase_payment__isnull=True, income_payment__isnull=True) |
-                    models.Q(transfer__isnull=True, expense_payment__isnull=True,
-                             sales_payment__isnull=False, purchase_payment__isnull=True, income_payment__isnull=True) |
-                    models.Q(transfer__isnull=True, expense_payment__isnull=True,
-                             sales_payment__isnull=True, purchase_payment__isnull=False, income_payment__isnull=True) |
-                    models.Q(transfer__isnull=True, expense_payment__isnull=True, income_payment__isnull=False,
-                             sales_payment__isnull=True, purchase_payment__isnull=True)
+                    models.Q(source_kind='account_transfer', transfer__isnull=False, expense_payment__isnull=True,
+                             sales_payment__isnull=True, purchase_payment__isnull=True, income_payment__isnull=True,
+                             source_ref_id__isnull=True) |
+                    models.Q(source_kind='expense_payment', transfer__isnull=True, expense_payment__isnull=False,
+                             sales_payment__isnull=True, purchase_payment__isnull=True, income_payment__isnull=True,
+                             source_ref_id__isnull=True) |
+                    models.Q(source_kind='sales_payment', transfer__isnull=True, expense_payment__isnull=True,
+                             sales_payment__isnull=False, purchase_payment__isnull=True, income_payment__isnull=True,
+                             source_ref_id__isnull=True) |
+                    models.Q(source_kind='purchase_payment', transfer__isnull=True, expense_payment__isnull=True,
+                             sales_payment__isnull=True, purchase_payment__isnull=False, income_payment__isnull=True,
+                             source_ref_id__isnull=True) |
+                    models.Q(source_kind='income_payment', transfer__isnull=True, expense_payment__isnull=True,
+                             income_payment__isnull=False, sales_payment__isnull=True, purchase_payment__isnull=True,
+                             source_ref_id__isnull=True) |
+                    models.Q(source_kind__in=['customer_deposit', 'gift_card_sale', 'register_movement',
+                                              'salary_advance', 'salary_payment'],
+                             transfer__isnull=True, expense_payment__isnull=True, income_payment__isnull=True,
+                             sales_payment__isnull=True, purchase_payment__isnull=True, source_ref_id__isnull=False)
                 ),
                 name='accounting_tx_one_source',
             ),
@@ -339,5 +499,62 @@ class AccountTransaction(TimeStampedModel):
                                     name='accounting_tx_transfer_account_direction'),
         ]
 
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            raise ValueError('AccountTransaction is append-only and cannot be updated.')
+        if self.transfer_id:
+            self.source_kind = self.SourceKind.ACCOUNT_TRANSFER
+        elif self.expense_payment_id:
+            self.source_kind = self.SourceKind.EXPENSE_PAYMENT
+        elif self.income_payment_id:
+            self.source_kind = self.SourceKind.INCOME_PAYMENT
+        elif self.sales_payment_id:
+            self.source_kind = self.SourceKind.SALES_PAYMENT
+        elif self.purchase_payment_id:
+            self.source_kind = self.SourceKind.PURCHASE_PAYMENT
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValueError('AccountTransaction is append-only and cannot be deleted.')
+
     def __str__(self):
         return f'{self.account} · {self.get_direction_display()} · {self.amount}'
+
+
+class DepositEntry(TimeStampedModel):
+    class Kind(models.TextChoices):
+        CREDIT = 'credit', 'Credit'
+        DEBIT = 'debit', 'Debit'
+
+    class Source(models.TextChoices):
+        DEPOSIT = 'deposit', 'Deposit'
+        PAYMENT = 'payment', 'Payment'
+        REFUND = 'refund', 'Refund'
+        CLEAR_DUE = 'clear_due', 'Clear due'
+
+    customer = models.ForeignKey('people.Party', on_delete=models.PROTECT, related_name='deposit_entries')
+    kind = models.CharField(max_length=12, choices=Kind.choices)
+    amount = models.DecimalField(max_digits=18, decimal_places=4, validators=[MinValueValidator(MIN_AMOUNT)])
+    account = models.ForeignKey(FinancialAccount, on_delete=models.PROTECT, null=True, blank=True, related_name='deposit_entries')
+    source = models.CharField(max_length=16, choices=Source.choices, default=Source.DEPOSIT)
+    sales_payment = models.ForeignKey(
+        SalesPayment, on_delete=models.PROTECT, null=True, blank=True, related_name='deposit_entries',
+    )
+    note = models.TextField(blank=True)
+    request_key = models.UUIDField(default=uuid4, unique=True, editable=False)
+
+    objects = AppendOnlyManager()
+
+    class Meta:
+        ordering = ['pk']
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            raise ValueError('DepositEntry is append-only.')
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValueError('DepositEntry is append-only.')
+
+    def __str__(self):
+        return f'{self.customer_id}:{self.kind}:{self.amount}'

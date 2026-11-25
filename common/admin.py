@@ -1,7 +1,13 @@
 from django.contrib import admin
 from django.core.exceptions import PermissionDenied
 
-from .models import ProductStatus, TradeStatus
+from .models import (
+    AuditLog, BackupSetting, BarcodeSetting, CustomField, CustomFieldValue,
+    GeneralSetting, HRMSetting, IdempotencyRecord, ImportJob, Language, MailSetting,
+    Notification, NotificationRecipient, OutboxMessage, POSSetting, PaymentAttempt,
+    PaymentGatewayConfig, ProductStatus, RestaurantTable, RewardSetting, SMSSetting,
+    SMSTemplate, TaskSetting, TradeStatus,
+)
 
 
 class AuditedAdmin(admin.ModelAdmin):
@@ -45,3 +51,90 @@ class ProductStatusAdmin(admin.ModelAdmin):
         if queryset.filter(code='draft').exists():
             raise PermissionDenied('The default draft status cannot be deleted.')
         super().delete_queryset(request, queryset)
+
+
+@admin.register(GeneralSetting)
+class GeneralSettingAdmin(AuditedAdmin):
+    list_display = ['system_title', 'company_name', 'costing_method', 'decimal_digits']
+
+    def has_add_permission(self, request):
+        return not GeneralSetting.objects.exists() and super().has_add_permission(request)
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(IdempotencyRecord)
+class IdempotencyRecordAdmin(admin.ModelAdmin):
+    list_display = ['scope', 'key', 'result_type', 'result_id', 'created_at']
+    search_fields = ['scope', 'key', 'result_type']
+    readonly_fields = ['key', 'scope', 'payload_hash', 'result_type', 'result_id', 'result_data', 'created_at']
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(AuditLog)
+class AuditLogAdmin(admin.ModelAdmin):
+    list_display = ['created_at', 'module', 'action', 'model_name', 'object_id', 'actor']
+    list_filter = ['module', 'action']
+    search_fields = ['model_name', 'object_id', 'object_repr']
+    readonly_fields = [
+        'actor', 'action', 'module', 'model_name', 'object_id', 'object_repr',
+        'warehouse', 'changes', 'request_key', 'ip_address', 'user_agent', 'created_at',
+    ]
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(ImportJob)
+class ImportJobAdmin(admin.ModelAdmin):
+    list_display = ['kind', 'status', 'created_by', 'request_key', 'created_at']
+    list_filter = ['kind', 'status']
+    search_fields = ['kind', 'request_key']
+    readonly_fields = [
+        'kind', 'file', 'status', 'dry_run_result', 'committed_result',
+        'created_by', 'request_key', 'created_at', 'updated_at',
+    ]
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+admin.site.register([
+    POSSetting, HRMSetting, RewardSetting, TaskSetting,
+    Notification, NotificationRecipient, SMSTemplate, MailSetting, SMSSetting,
+    CustomField, CustomFieldValue, RestaurantTable, BarcodeSetting, Language,
+    PaymentGatewayConfig, BackupSetting,
+], AuditedAdmin)
+
+
+@admin.register(OutboxMessage, PaymentAttempt)
+class ReadOnlyOpsPostedAdmin(admin.ModelAdmin):
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False

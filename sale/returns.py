@@ -10,10 +10,11 @@ from rest_framework.exceptions import APIException, NotFound, PermissionDenied, 
 
 from account.permissions import has_role_permissions
 from accounting.services import post_sales_return_refund, return_refund_amount
-from inventory.models import Product
-from warehouse.models import Stock, WareHouse
+from common.money import q_qty
+from inventory.models import Product, require_convertible_unit
+from warehouse.models import StockMovement, StockSerial, WareHouse
 from warehouse.scope import lock_warehouse_scope, scoped_queryset
-from warehouse.services import MAX_STOCK_QUANTITY
+from warehouse.services import MAX_STOCK_QUANTITY, post_stock_movement
 
 from .models import SalesOrder, SalesReturn, SalesReturnItem
 
@@ -86,8 +87,7 @@ def validate_items(order, quantities, products=None, *, previous=None):
         product = line.product if products is None else products[line.product_id]
         if not product.is_returnable:
             raise ValidationError({'items': f'Line {line.line_number}: {product.name} is marked as non-returnable.'})
-        if product.unit_id != line.unit_id:
-            raise ValidationError({'items': f'Line {line.line_number}: the original sale unit must match the product unit.'})
+        require_convertible_unit(line.unit, product.unit, field='items')
         remaining = line.quantity - returned[pk]
         if not quantity.is_finite() or quantity <= 0 or quantity > remaining:
             raise ValidationError({'items': f'Line {line.line_number}: enter a positive quantity up to {max(remaining, 0)}.'})
@@ -95,20 +95,60 @@ def validate_items(order, quantities, products=None, *, previous=None):
 
 
 def restock(warehouse, quantities, user, now):
-    username = user.get_username()
-    for product_id, quantity in sorted(quantities.items()):
-        if quantity > MAX_STOCK_QUANTITY:
-            raise ValidationError({'quantity': 'The combined returned quantity exceeds the stock limit.'})
-        stock, _ = Stock.objects.select_for_update().get_or_create(warehouse=warehouse, product_id=product_id,
-            defaults={'quantity': Decimal('0'), 'create_by': username, 'modified_by': username})
-        expected = stock.quantity + quantity
-        updated = Stock.objects.filter(pk=stock.pk, quantity__lte=MAX_STOCK_QUANTITY - quantity).update(
-            quantity=F('quantity') + quantity, updated_at=now, modified_by=username)
-        if not updated:
-            raise ValidationError({'quantity': 'Completing this return would exceed the warehouse stock limit.'})
-        stock.refresh_from_db(fields=['quantity'])
-        if stock.quantity != expected:
-            raise ValidationError({'quantity': 'The database cannot store the resulting stock quantity accurately.'})
+    pass
+
+
+def _restock_return_lines(record, order, warehouse, quantities, sold, user):
+    for line_id in sorted(quantities, key=lambda lid: (sold[lid].product_id, lid)):
+        qty = quantities[line_id]
+        sale_line = sold[line_id]
+        product = sale_line.product
+        factor = getattr(sale_line, 'unit_conversion_factor', Decimal('1')) or Decimal('1')
+        base_qty = q_qty(qty * factor)
+        if product.product_type_id in ('service', 'digital'):
+            continue
+        if product.product_type_id == 'combo':
+            for comp in product.combo_items.select_related('component_product').order_by('component_product_id'):
+                if comp.component_product.product_type_id in ('service', 'digital'):
+                    continue
+                comp_qty = q_qty(base_qty * comp.quantity)
+                post_stock_movement(
+                    warehouse_id=warehouse.pk,
+                    product_id=comp.component_product_id,
+                    kind=StockMovement.Kind.SALE_RETURN,
+                    quantity_delta=comp_qty,
+                    unit_cost_base=None,
+                    movement_date=record.return_date,
+                    reference_type='sales_return',
+                    reference_id=record.pk,
+                    reference_line_id=line_id,
+                    posting_key=f'sales_return:{record.pk}:line:{line_id}:comp:{comp.component_product_id}',
+                    actor=user,
+                )
+            continue
+        serial_ids = []
+        if product.has_imei_serial and sale_line.serial_numbers:
+            serial_ids = list(
+                StockSerial.objects.filter(
+                    product_id=product.pk, serial_number__in=sale_line.serial_numbers[:int(base_qty)],
+                ).values_list('pk', flat=True)
+            )
+        post_stock_movement(
+            warehouse_id=warehouse.pk,
+            product_id=sale_line.product_id,
+            kind=StockMovement.Kind.SALE_RETURN,
+            quantity_delta=base_qty,
+            unit_cost_base=sale_line.unit_cost_base,
+            batch_id=sale_line.batch_id,
+            serial_ids=serial_ids,
+            serial_status=StockSerial.Status.RETURNED,
+            movement_date=record.return_date,
+            reference_type='sales_return',
+            reference_id=record.pk,
+            reference_line_id=line_id,
+            posting_key=f'sales_return:{record.pk}:line:{line_id}',
+            actor=user,
+        )
 
 
 def complete_return(user, pk):
@@ -145,10 +185,7 @@ def complete_return(user, pk):
                 pk__in=product_ids).order_by('pk')}
             previous = returned_quantities(order, exclude_return=pk)
             sold = validate_items(order, quantities, products=products, previous=previous)
-            stock_quantities = defaultdict(Decimal)
-            for line_id, quantity in quantities.items():
-                stock_quantities[sold[line_id].product_id] += quantity
-            restock(warehouse, stock_quantities, user, now)
+            _restock_return_lines(record, order, warehouse, quantities, sold, user)
             post_sales_return_refund(record, scope, user, date=timezone.localdate(now),
                                      amount=return_refund_amount(order, quantities, previous))
             return record, True

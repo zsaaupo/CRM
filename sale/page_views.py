@@ -46,7 +46,8 @@ class SalesListPageView(WarehouseScopePageMixin, ProtectedAccountPageView):
                 for key, label, kind in [
                     ('order_number', 'Order number', 'text'), ('customer_name', 'Customer', 'text'),
                     ('order_date', 'Order date', 'text'), ('expected_delivery_date', 'Expected date', 'text'),
-                    ('status', 'Status', 'status'), ('grand_total', 'Total', 'price'),
+                    ('status', 'Status', 'status'), ('payment_status', 'Payment status', 'text'),
+                    ('grand_total', 'Total', 'price'),
                     ('is_completed', 'Completed', 'boolean'),
                     ('actions', 'Actions', 'edit'),
                 ]
@@ -308,4 +309,23 @@ class QuotationDetailPageView(QuotationPageView):
             )
         if record.issued_at and has_role_permissions(user, QUOTE_DETAIL):
             context['pdf_url'] = reverse('report:quotation-pdf', args=[record.pk])
+        return context
+
+
+
+class PosTerminalPageView(ProtectedAccountPageView):
+    template_name = 'sale/pos.html'
+    permission_required = ('sale.use_pos',)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context.update({
+            'page_section': 'pos',
+            'page_label': 'POS Terminal',
+            'checkout_api_url': reverse('sale:pos-checkout'),
+            'products_api_url': reverse('sale:pos-products'),
+            'register_open_url': reverse('sale:register-open'),
+            'drafts_api_url': reverse('sale:pos-draft-list'),
+            'recent_orders_url': reverse('sale:sales-order-recent'),
+        })
         return context

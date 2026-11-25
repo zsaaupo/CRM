@@ -19,10 +19,10 @@ from warehouse.scope import WarehouseScopeAPIMixin, scoped_queryset, warehouse_s
 from account.permissions import has_role_permissions
 
 from .models import PurchaseOrder, PurchaseOrderItem
-from .services import PurchaseBusy, PurchaseDeleteGuardMixin, receive_purchase
+from .services import PurchaseBusy, PurchaseDeleteGuardMixin, duplicate_purchase_order, receive_purchase
 from .serializers import (
     PurchaseOrderCreateSerializer, PurchaseOrderDetailSerializer, PurchaseOrderItemFilterSerializer,
-    PurchaseOrderItemSerializer, PurchaseOrderSerializer, PurchaseReceiveSerializer,
+    PurchaseOrderItemSerializer, PurchaseOrderSerializer, PurchasePartialReceiptSerializer, PurchaseReceiveSerializer,
 )
 
 
@@ -122,12 +122,66 @@ class PurchaseReceiveAPIView(PurchaseConcurrencyMixin, WarehouseScopeAPIMixin, B
     def post(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        order, received_now = receive_purchase(request.user, serializer.validated_data['purchase_id'])
+        data = serializer.validated_data
+        order, received_now = receive_purchase(
+            request.user,
+            data['purchase_id'],
+            settlement_mode=data.get('settlement_mode'),
+            tenders=data.get('tenders') or None,
+            request_key=data.get('request_key'),
+            payment_date=data.get('payment_date'),
+        )
         return Response({
             'message': 'Purchase received and stock updated.' if received_now else 'Purchase was already received. Stock was not added again.',
             'received_now': received_now,
             'purchase_order': PurchaseOrderDetailSerializer(order, context=self.get_serializer_context()).data,
         })
+
+
+@method_decorator(never_cache, name='dispatch')
+class PurchaseReceiptCreateAPIView(PurchaseConcurrencyMixin, WarehouseScopeAPIMixin, BaseAPIMixin, GenericAPIView):
+    serializer_class = PurchasePartialReceiptSerializer
+    required_permissions = ('purchase.receive_purchase',)
+    http_method_names = ['post', 'options']
+
+    def post(self, request, pk):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        result = receive_purchase(
+            request.user,
+            pk,
+            receipts=[
+                {
+                    'order_line': line['order_line'],
+                    'quantity': str(line['quantity']),
+                    'unit': line.get('unit'),
+                    'batch_number': line.get('batch_number', ''),
+                    'expiry_date': line['expiry_date'].isoformat() if line.get('expiry_date') else None,
+                }
+                for line in data['lines']
+            ],
+            receipt_date=data['receipt_date'],
+            request_key=data['request_key'],
+            settlement_mode=data.get('settlement_mode'),
+            tenders=data.get('tenders') or None,
+            payment_date=data.get('payment_date'),
+            notes=data.get('notes', ''),
+        )
+        return Response(result, status=200)
+
+
+@method_decorator(never_cache, name='dispatch')
+class PurchaseDuplicateAPIView(PurchaseConcurrencyMixin, WarehouseScopeAPIMixin, BaseAPIMixin, APIView):
+    required_permissions = ('purchase.view_purchaseorder', 'purchase.add_purchaseorder')
+    http_method_names = ['post', 'options']
+
+    def post(self, request, pk):
+        clone = duplicate_purchase_order(request.user, pk)
+        return Response({
+            'id': clone.pk,
+            'purchase_order': PurchaseOrderDetailSerializer(clone, context={'request': request}).data,
+        }, status=201)
 
 
 @method_decorator(never_cache, name='dispatch')

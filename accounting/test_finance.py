@@ -91,7 +91,7 @@ class FinanceTests(TestCase):
         sale_detail = reverse('sale_pages:sale-detail', args=[order.pk])
         self.assertContains(self.client.get(sale_detail), f'href="{payment_page}"')
         self.assertFalse(AccountTransaction.objects.exists())
-        self.assertEqual(self.client.post(payments, {}, format='json').status_code, 405)
+        self.assertEqual(self.client.post(payments, {}, format='json').status_code, 400)
         self.assertEqual(self.client.post(self.payments, {}, format='json').status_code, 405)
         expense = self.complete_expense()
         sale = self.complete_sale(order)

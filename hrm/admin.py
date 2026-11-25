@@ -11,6 +11,9 @@ from .models import (
     EmployeeScheduleAssignment, EmployeeStatus, EmploymentType, Holiday, LeaveRequest, LeaveType, LoanInstallment,
     PayrollAdjustment, PayrollDeductionRule, PayrollEvent, PayrollPeriod, PayrollRun, Payslip, PayslipLine,
     SalaryComponent, SalaryPayment, SalaryStructure, SalaryStructureLine, WorkSchedule,
+    AttendanceImportBatch, AttendanceImportRow, EmployeePromotion, LatePolicy, LeaveBalance,
+    LeaveBalanceEntry, LeavePolicy, ManualPayrollVoucher, Notice, PayrollMonthPolicy,
+    SalaryAdvance, SalaryIncrement, ScheduleBreak, WorkingCalendar,
 )
 from .permissions import REVIEW_LEAVE_PERMISSION, check_employee_user_link, leave_requests_for_user
 
@@ -363,3 +366,88 @@ class LoanInstallmentAdmin(AuditedAdmin):
     search_fields = ['loan__reference', 'loan__employee__employee_code', 'loan__employee__full_name']
     list_filter = ['month']
     list_select_related = ['loan']
+
+
+@admin.register(ScheduleBreak)
+class ScheduleBreakAdmin(AuditedAdmin):
+    list_display = ['schedule', 'start_time', 'end_time']
+
+
+@admin.register(EmployeePromotion)
+class EmployeePromotionAdmin(AuditedAdmin):
+    list_display = ['employee', 'effective_date', 'new_designation', 'new_department', 'applied_at']
+    search_fields = ['employee__employee_code', 'employee__full_name', 'reason']
+
+
+@admin.register(Notice)
+class NoticeAdmin(AuditedAdmin):
+    list_display = ['title', 'publish_date', 'expiry_date', 'target_department', 'target_warehouse', 'is_active']
+    search_fields = ['title', 'body']
+
+
+@admin.register(AttendanceImportBatch)
+class AttendanceImportBatchAdmin(AuditedAdmin):
+    list_display = ['id', 'status', 'date_format', 'timezone', 'created_at', 'committed_at']
+
+
+@admin.register(AttendanceImportRow)
+class AttendanceImportRowAdmin(AuditedAdmin):
+    list_display = ['batch', 'device_employee_id', 'raw_timestamp', 'employee', 'work_date', 'status']
+    list_filter = ['status']
+
+
+@admin.register(WorkingCalendar)
+class WorkingCalendarAdmin(AuditedAdmin):
+    list_display = ['effective_from', 'weekly_off_days']
+
+
+@admin.register(LeavePolicy)
+class LeavePolicyAdmin(AuditedAdmin):
+    list_display = ['leave_type', 'effective_from', 'annual_quota', 'carry_forward_limit', 'carry_expiry_month_day']
+
+
+@admin.register(LeaveBalance)
+class LeaveBalanceAdmin(AuditedAdmin):
+    list_display = ['employee', 'leave_type', 'year', 'allocated', 'carried', 'used', 'expired']
+    list_filter = ['year', 'leave_type']
+
+
+@admin.register(LeaveBalanceEntry)
+class LeaveBalanceEntryAdmin(admin.ModelAdmin):
+    list_display = ['balance', 'kind', 'days', 'effective_date', 'request_key']
+    list_filter = ['kind']
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(LatePolicy)
+class LatePolicyAdmin(AuditedAdmin):
+    list_display = ['effective_from', 'default_check_in', 'default_check_out', 'grace_minutes', 'monthly_late_allowance']
+
+
+@admin.register(PayrollMonthPolicy)
+class PayrollMonthPolicyAdmin(AuditedAdmin):
+    list_display = ['month', 'calc_version', 'frozen_at', 'frozen_by']
+
+
+@admin.register(SalaryAdvance)
+class SalaryAdvanceAdmin(AuditedAdmin):
+    list_display = ['employee', 'requested_amount', 'approved_amount', 'status', 'installment_count', 'repayment_start_month']
+    list_filter = ['status']
+
+
+@admin.register(SalaryIncrement)
+class SalaryIncrementAdmin(AuditedAdmin):
+    list_display = ['employee', 'previous_amount', 'new_amount', 'effective_date']
+
+
+@admin.register(ManualPayrollVoucher)
+class ManualPayrollVoucherAdmin(AuditedAdmin):
+    list_display = ['employee', 'payment_date', 'account', 'amount', 'method', 'payslip']

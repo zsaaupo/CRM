@@ -41,6 +41,8 @@ def review_leave_request(request_id, actor, status):
     if status == LeaveRequest.Status.APPROVED:
         # Serialize overlap checks across requests for the same employee.
         Employee.all_objects.filter(pk=leave.employee_id).update(updated_at=F('updated_at'))
+        from .leave_policies import apply_leave_approval_balance_checks
+        apply_leave_approval_balance_checks(leave, actor)
     leave.status = status
     leave.reviewed_by = actor
     leave.reviewed_at = timezone.now()

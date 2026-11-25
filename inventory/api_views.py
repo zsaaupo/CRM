@@ -8,11 +8,17 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 
 from account.permissions import HasRequiredPermissions
-from common.view import BaseDetailAPIView, BaseListAPIView, BaseListCreateAPIView, BaseUpdateAPIView
-from .models import Brand, Currency, Product, ProductCategory, ProductType, UnitOfMeasure
+from common.io_utils import ExportListMixin
+from common.view import BaseAPIMixin, BaseDetailAPIView, BaseListAPIView, BaseListCreateAPIView, BaseUpdateAPIView
+from .models import (
+    Brand, Currency, Product, ProductCategory, ProductComboItem,
+    ProductType, TaxRule, UnitOfMeasure, WarehouseProductPrice,
+)
+from .pricing import resolve_unit_price
 from .serializers import (
-    BrandSerializer, CurrencySerializer, ProductCategorySerializer, ProductSerializer,
-    ProductDetailSerializer, ProductTypeSerializer, StatusSerializer, UnitOfMeasureSerializer,
+    BrandSerializer, CurrencySerializer, ProductCategorySerializer, ProductComboItemSerializer,
+    ProductDetailSerializer, ProductSerializer, ProductTypeSerializer, StatusSerializer,
+    TaxRuleSerializer, UnitOfMeasureSerializer, WarehouseProductPriceSerializer,
 )
 
 
@@ -61,11 +67,18 @@ class ProductEditOptionsAPIView(ProductOptionsAPIView):
         return super().get_base_products().exclude(pk=self.product.pk)
 
 
-class ProductListCreateAPIView(BaseListCreateAPIView):
+class ProductListCreateAPIView(ExportListMixin, BaseListCreateAPIView):
     serializer_class = ProductSerializer
     queryset = Product.objects.select_related('product_type', 'status', 'category', 'brand', 'unit', 'variant_of', 'currency')
     response_key = 'product'
     search_fields = ['name', 'sku', 'barcode', 'manufacturer', 'manufacturer_part_number']
+    export_filename = 'products'
+    export_title = 'Products'
+    export_columns = [
+        ('SKU', 'sku'), ('Name', 'name'), ('Barcode', 'barcode'), ('Type', 'product_type_id'),
+        ('Category', 'category.name'), ('Brand', 'brand.name'), ('Unit', 'unit.code'),
+        ('Cost Price', 'cost_price'), ('Sale Price', 'sale_price'),
+    ]
 
 
 class ProductDetailAPIView(BaseDetailAPIView):
@@ -210,6 +223,108 @@ class UnitOfMeasureUpdateAPIView(BaseUpdateAPIView):
 class ProductTypeUpdateAPIView(BaseUpdateAPIView):
     serializer_class = ProductTypeSerializer
     queryset = ProductTypeDetailAPIView.queryset
+
+
+class TaxRuleListCreateAPIView(BaseListCreateAPIView):
+    serializer_class = TaxRuleSerializer
+    queryset = TaxRule.objects.all()
+    response_key = 'tax_rule'
+    search_fields = ['name']
+
+
+class TaxRuleListAPIView(BaseListAPIView):
+    serializer_class = TaxRuleSerializer
+    queryset = TaxRule.objects.all()
+    search_fields = ['name']
+
+
+class TaxRuleDetailAPIView(BaseDetailAPIView):
+    serializer_class = TaxRuleSerializer
+    queryset = TaxRule.objects.all()
+
+
+class TaxRuleUpdateAPIView(BaseUpdateAPIView):
+    serializer_class = TaxRuleSerializer
+    queryset = TaxRule.objects.all()
+
+
+class ProductComboItemListCreateAPIView(BaseListCreateAPIView):
+    serializer_class = ProductComboItemSerializer
+    queryset = ProductComboItem.objects.select_related('combo_product', 'component_product')
+    response_key = 'combo_item'
+    ordering = ['pk']
+    search_fields = ['component_product__sku', 'component_product__name']
+
+    def get_queryset(self):
+        return super().get_queryset().filter(combo_product_id=self.kwargs['product_id'])
+
+    def perform_create(self, serializer):
+        combo = get_object_or_404(Product, pk=self.kwargs['product_id'])
+        serializer.save(
+            combo_product=combo,
+            create_by=self.request.user.get_username(),
+            modified_by=self.request.user.get_username(),
+        )
+
+
+class ProductComboItemDetailAPIView(BaseDetailAPIView):
+    serializer_class = ProductComboItemSerializer
+    queryset = ProductComboItem.objects.select_related('combo_product', 'component_product')
+
+    def get_queryset(self):
+        return super().get_queryset().filter(combo_product_id=self.kwargs['product_id'])
+
+
+class WarehouseProductPriceListCreateAPIView(BaseListCreateAPIView):
+    serializer_class = WarehouseProductPriceSerializer
+    queryset = WarehouseProductPrice.objects.select_related('warehouse', 'product')
+    response_key = 'warehouse_price'
+    ordering = ['-effective_from', 'pk']
+    search_fields = ['warehouse__name']
+
+    def get_queryset(self):
+        return super().get_queryset().filter(product_id=self.kwargs['product_id'])
+
+    def perform_create(self, serializer):
+        product = get_object_or_404(Product, pk=self.kwargs['product_id'])
+        serializer.save(
+            product=product,
+            create_by=self.request.user.get_username(),
+            modified_by=self.request.user.get_username(),
+        )
+
+
+@method_decorator(never_cache, name='dispatch')
+class ResolveProductPriceAPIView(BaseAPIMixin, APIView):
+    required_permissions = ('inventory.view_product',)
+    http_method_names = ['get', 'head', 'options']
+
+    def get(self, request):
+        from decimal import Decimal
+        from django.utils import timezone
+        from people.models import Party
+
+        product = get_object_or_404(Product, pk=request.query_params.get('product'))
+        wh_id = request.query_params.get('warehouse') or None
+        cust_id = request.query_params.get('customer') or None
+        customer = Party.objects.select_related('customer_group').filter(pk=cust_id).first() if cust_id else None
+        raw_date = request.query_params.get('date')
+        doc_date = timezone.datetime.fromisoformat(raw_date).date() if raw_date else timezone.localdate()
+        qty = Decimal(request.query_params.get('quantity') or '1')
+        manual = request.query_params.get('manual_price')
+        resolved = resolve_unit_price(
+            product, warehouse=int(wh_id) if wh_id else None, customer=customer,
+            date=doc_date, quantity=qty, manual_price=Decimal(manual) if manual is not None else None,
+        )
+        return Response({
+            'price': str(resolved.price),
+            'source': resolved.source,
+            'rule_id': resolved.rule_id,
+            'tax_rule': resolved.tax_rule.pk if resolved.tax_rule else None,
+            'tax_rate': str(resolved.tax_rate),
+            'tax_method': resolved.tax_method,
+            'wholesale_price': str(resolved.wholesale_price) if resolved.wholesale_price is not None else None,
+        })
 
 
 class StatusUpdateAPIView(BaseUpdateAPIView):

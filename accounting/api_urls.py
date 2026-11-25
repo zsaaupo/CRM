@@ -1,12 +1,17 @@
 from django.urls import path
-from .book_reports import DaybookView
+from .book_reports import (
+    AccountBalancesAPIView, BalanceSheetAPIView, DaybookView, IncomeExpenseReportAPIView,
+)
 
 from .api_views import (
-    AccountStatementAPIView, AccountTransferListCreateAPIView, CashFlowListAPIView, ExpenseCategoryDetailAPIView,
-    ExpenseCategoryListCreateAPIView, ExpenseCompleteAPIView, ExpenseDetailAPIView, ExpenseListCreateAPIView,
-    ExpenseOptionsAPIView, ExpensePaymentListAPIView, FinancialAccountDetailAPIView, FinancialAccountListCreateAPIView,
-    IncomeCategoryDetailAPIView, IncomeCategoryListCreateAPIView, IncomeCompleteAPIView, IncomeDetailAPIView,
-    IncomeListCreateAPIView, IncomeOptionsAPIView, IncomePaymentListAPIView, LedgerAPIView, SalesPaymentListAPIView,
+    AccountStatementAPIView, AccountTransferListCreateAPIView, CashFlowListAPIView, ClearDueConfirmAPIView,
+    ClearDuePreviewAPIView, CustomerDepositListCreateAPIView, ExpenseCategoryDetailAPIView,
+    ExpenseCategoryListCreateAPIView, ExpenseCompleteAPIView,
+    ExpenseDetailAPIView, ExpenseListCreateAPIView, ExpenseOptionsAPIView, ExpensePaymentListAPIView,
+    FinancialAccountDetailAPIView, FinancialAccountListCreateAPIView, IncomeCategoryDetailAPIView,
+    IncomeCategoryListCreateAPIView, IncomeCompleteAPIView, IncomeDetailAPIView, IncomeListCreateAPIView,
+    IncomeOptionsAPIView, IncomePaymentListAPIView, LedgerAPIView, PartyDueSummaryAPIView, PaymentReverseAPIView,
+    PurchasePaymentListCreateAPIView, SalesPaymentListCreateAPIView,
 )
 
 
@@ -34,8 +39,22 @@ urlpatterns = [
     path('financial-accounts/<int:pk>/statement/', AccountStatementAPIView.as_view(), name='account-statement'),
     path('cash-flow/', CashFlowListAPIView.as_view(), name='cash-flow-list'),
     path('ledger/', LedgerAPIView.as_view(), name='ledger'),
+    path('account-balances/', AccountBalancesAPIView.as_view(), name='account-balances'),
+    path('balance-sheet/', BalanceSheetAPIView.as_view(), name='balance-sheet'),
+    path('income-expense-report/', IncomeExpenseReportAPIView.as_view(), name='income-expense-report'),
     path('account-transfers/', AccountTransferListCreateAPIView.as_view(), name='account-transfer-list'),
     path('expenses/<int:expense_pk>/payments/', ExpensePaymentListAPIView.as_view(), name='expense-payment-list'),
-    path('sales-orders/<int:sales_order_pk>/payments/', SalesPaymentListAPIView.as_view(),
+    path('sales-orders/<int:sales_order_pk>/payments/', SalesPaymentListCreateAPIView.as_view(),
          name='sales-payment-list'),
+    path('purchase-orders/<int:purchase_order_pk>/payments/', PurchasePaymentListCreateAPIView.as_view(),
+         name='purchase-payment-list'),
+    path('payments/<int:pk>/reverse/', PaymentReverseAPIView.as_view(), name='payment-reverse'),
+    path('sales-payments/<int:pk>/reverse/', PaymentReverseAPIView.as_view(default_kind='sales'),
+         name='sales-payment-reverse'),
+    path('purchase-payments/<int:pk>/reverse/', PaymentReverseAPIView.as_view(default_kind='purchase'),
+         name='purchase-payment-reverse'),
+    path('parties/<int:pk>/due-summary/', PartyDueSummaryAPIView.as_view(), name='party-due-summary'),
+    path('parties/<int:pk>/clear-due/preview/', ClearDuePreviewAPIView.as_view(), name='party-clear-due-preview'),
+    path('parties/<int:pk>/clear-due/confirm/', ClearDueConfirmAPIView.as_view(), name='party-clear-due-confirm'),
+    path('customers/<int:customer_id>/deposits/', CustomerDepositListCreateAPIView.as_view(), name='customer-deposit-list'),
 ]

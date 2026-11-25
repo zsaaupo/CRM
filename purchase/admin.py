@@ -3,7 +3,7 @@ from django.contrib import admin
 from accounting.admin import PaymentAccountAdminMixin
 from warehouse.admin import WarehouseScopedAdmin
 
-from .models import PurchaseOrder, PurchaseOrderItem, PurchaseReturn, PurchaseReturnItem
+from .models import PurchaseOrder, PurchaseOrderItem, PurchaseReceipt, PurchaseReceiptItem, PurchaseReturn, PurchaseReturnItem
 
 
 @admin.register(PurchaseOrder)
@@ -51,3 +51,35 @@ class PurchaseReturnItemAdmin(WarehouseScopedAdmin):
     list_display = ['purchase_return', 'purchase_order_item', 'quantity']
     search_fields = ['purchase_return__return_number', 'purchase_order_item__product__name', 'purchase_order_item__product__sku']
     list_select_related = ['purchase_return', 'purchase_order_item__purchase_order']
+
+
+@admin.register(PurchaseReceipt)
+class PurchaseReceiptAdmin(WarehouseScopedAdmin):
+    list_display = ['receipt_number', 'purchase_order', 'warehouse', 'receipt_date', 'received_by']
+    list_select_related = ['purchase_order', 'warehouse', 'received_by']
+    search_fields = ['receipt_number', 'purchase_order__order_number']
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(PurchaseReceiptItem)
+class PurchaseReceiptItemAdmin(WarehouseScopedAdmin):
+    warehouse_lookup = 'receipt__warehouse_id'
+    list_display = ['receipt', 'purchase_order_item', 'quantity', 'base_quantity', 'unit_cost_base']
+    list_select_related = ['receipt', 'purchase_order_item']
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False

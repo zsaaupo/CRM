@@ -7,7 +7,11 @@ from account.permissions import has_role_permissions
 from common.admin import AuditedAdmin
 
 from .access import check_assignment_scope, lock_assignment_write, managed_assignments
-from .models import RoleWarehouseAccess, Stock, WareHouse, WarehouseTransfer, WarehouseTransferItem
+from .models import (
+    RoleWarehouseAccess, Stock, StockAdjustment, StockAdjustmentItem,
+    StockBatch, StockCount, StockCountLine, StockMovement, StockSerial,
+    WareHouse, WarehouseTransfer, WarehouseTransferItem,
+)
 from .scope import all_warehouse_access, has_warehouse_scope, lock_warehouse_scope, scoped_queryset, warehouse_scope
 from .services import transfer_queryset
 
@@ -225,3 +229,88 @@ class RoleWarehouseAccessAdmin(AuditedAdmin):
         for obj in queryset.order_by('pk'):
             self.check_assignment(request, obj)
         super().delete_queryset(request, queryset)
+
+
+@admin.register(StockMovement)
+class StockMovementAdmin(WarehouseScopedAdmin):
+    list_display = ['posted_at', 'kind', 'warehouse', 'product', 'quantity_delta', 'unit_cost_base', 'balance_after', 'posting_key']
+    list_filter = ['kind', 'movement_date', ('warehouse', admin.RelatedOnlyFieldListFilter)]
+    list_select_related = ['warehouse', 'product']
+    search_fields = ['posting_key', 'product__sku', 'product__name', 'notes']
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(StockBatch)
+class StockBatchAdmin(WarehouseScopedAdmin):
+    list_display = ['warehouse', 'product', 'batch_number', 'expiry_date', 'quantity', 'unit_cost']
+    list_select_related = ['warehouse', 'product']
+    search_fields = ['batch_number', 'product__sku', 'product__name']
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(StockSerial)
+class StockSerialAdmin(WarehouseScopedAdmin):
+    list_display = ['product', 'serial_number', 'warehouse', 'batch', 'status']
+    list_filter = ['status']
+    list_select_related = ['warehouse', 'product', 'batch']
+    search_fields = ['serial_number', 'product__sku']
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(StockAdjustment)
+class StockAdjustmentAdmin(WarehouseScopedAdmin):
+    list_display = ['reference_number', 'warehouse', 'adjustment_date', 'status', 'posted_at']
+    list_filter = ['status', 'adjustment_date']
+    search_fields = ['reference_number', 'reason', 'note']
+
+
+@admin.register(StockAdjustmentItem)
+class StockAdjustmentItemAdmin(AuditedAdmin):
+    list_display = ['adjustment', 'product', 'action', 'quantity', 'unit', 'unit_cost']
+    list_select_related = ['adjustment', 'product', 'unit']
+
+
+@admin.register(StockCount)
+class StockCountAdmin(WarehouseScopedAdmin):
+    list_display = ['reference_number', 'warehouse', 'count_type', 'status', 'snapshot_at']
+    list_filter = ['status', 'count_type']
+    search_fields = ['reference_number']
+
+
+@admin.register(StockCountLine)
+class StockCountLineAdmin(AuditedAdmin):
+    list_display = ['stock_count', 'product', 'batch', 'expected_qty', 'counted_qty', 'variance_qty', 'needs_recount']
+    list_select_related = ['stock_count', 'product', 'batch']
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False

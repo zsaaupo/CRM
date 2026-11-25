@@ -1,0 +1,30 @@
+{% extends "layouts/dashboard.html" %}
+
+{% block content %}
+<section class="card">
+  <h1>{{ page_label }}</h1>
+  <form id="barcode-form" method="post" action="{{ barcode_pdf_url }}">
+    {% csrf_token %}
+    <div>
+      <label for="layout">Label layout</label>
+      <select name="layout" id="layout">
+        <option value="a4_20">20 per A4 sheet</option>
+        <option value="a4_24" selected>24 per A4 sheet</option>
+        <option value="a4_30">30 per A4 sheet</option>
+        <option value="a4_40">40 per A4 sheet</option>
+        <option value="thermal">Thermal roll</option>
+      </select>
+    </div>
+    <div>
+      <label>Products</label>
+      <select name="product" id="product">
+        {% for p in products %}
+        <option value="{{ p.pk }}">{{ p.sku }} &mdash; {{ p.name }} ({{ p.barcode_symbology }})</option>
+        {% endfor %}
+      </select>
+      <input type="number" name="copies" id="copies" value="1" min="1" max="500">
+    </div>
+    <button type="submit">Generate Barcode PDF</button>
+  </form>
+</section>
+{% endblock %}

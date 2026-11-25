@@ -11,8 +11,14 @@ from sale.returns import completed_orders
 from warehouse.models import WareHouse
 from warehouse.scope import all_warehouse_access, has_warehouse_scope, scoped_queryset, warehouse_scope
 
-from .models import AccountTransaction, AccountTransfer, Expense, ExpenseCategory, FinancialAccount, Income, IncomeCategory, SalesPayment, TransferType
-from .services import SALES_PAYMENT_VIEW, STATEMENT_VIEW, TRANSFER_VIEW, accounts_with_balances, sales_payment_totals
+from .models import (
+    AccountTransaction, AccountTransfer, Expense, ExpenseCategory, FinancialAccount, Income, IncomeCategory,
+    PurchasePayment, SalesPayment, TransferType,
+)
+from .services import (
+    PURCHASE_PAYMENT_VIEW, SALES_PAYMENT_VIEW, STATEMENT_VIEW, TRANSFER_VIEW, accounts_with_balances,
+    compute_order_balance, sales_payment_totals,
+)
 
 
 CATEGORIES = CatalogResource(
@@ -319,12 +325,40 @@ class SalesPaymentListPageView(FinanceListPageView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         order = self.sales_order()
-        total, paid, refunded = sales_payment_totals(order)
+        bal = compute_order_balance(order)
         context.update(
-            sales_order=order, payment_total=total, paid=paid, refunded=refunded, due=total - paid,
+            sales_order=order, payment_total=bal.net_billable, paid=bal.net_paid,
+            refunded=bal.refunds_issued, due=bal.open_due, payment_status=bal.payment_status,
             currency=settings.INVENTORY_BASE_CURRENCY,
             list_api_url=reverse('accounting:sales-payment-list', args=[order.pk]),
             secondary_url=reverse('sale_pages:sale-detail', args=[order.pk]), secondary_label='Back to sale',
+            list_description='Search by account or payment reference.',
+        )
+        return context
+
+
+class PurchasePaymentListPageView(FinanceListPageView):
+    resource = CatalogResource(
+        'purchase-payment', 'purchase-payments', 'payment', 'purchase payments', PurchasePayment,
+        (('name', 'Payment', 'text'), ('type_label', 'Type', 'text'), ('date', 'Date', 'text'),
+         ('account_name', 'Account', 'text'), ('method_label', 'Method', 'text'),
+         ('reference', 'Reference', 'text'), ('amount', 'Amount', 'price')),
+    )
+    permission_required = PURCHASE_PAYMENT_VIEW
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        from purchase.returns import received_orders
+        order = get_object_or_404(received_orders(warehouse_scope(self.request.user)).select_related('warehouse'),
+                                  pk=self.kwargs['purchase_order_pk'])
+        bal = compute_order_balance(order)
+        context.update(
+            page_section='purchase', section_label='Purchase',
+            purchase_order=order, payment_total=bal.net_billable, paid=bal.net_paid,
+            refunded=bal.refunds_issued, due=bal.open_due, payment_status=bal.payment_status,
+            currency=settings.INVENTORY_BASE_CURRENCY,
+            list_api_url=reverse('accounting:purchase-payment-list', args=[order.pk]),
+            secondary_url=reverse('purchase_pages:purchase-detail', args=[order.pk]), secondary_label='Back to purchase',
             list_description='Search by account or payment reference.',
         )
         return context

@@ -65,3 +65,33 @@ class TradeStatusAddPageView(TradeStatusPageView):
 
 class TradeStatusEditPageView(TradeStatusAddPageView):
     mode = 'edit'
+
+
+class GeneralSettingPageView(ProtectedAccountPageView):
+    permission_required = ('common.view_generalsetting',)
+    template_name = 'common/ops_page.html'
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        ctx.update({
+            'page_section': 'settings',
+            'settings_key': 'general',
+            'page_label': 'General Settings',
+            'api_url': reverse('ops_settings:general'),
+        })
+        return ctx
+
+
+class AuditLogPageView(ProtectedAccountPageView):
+    permission_required = ('common.view_auditlog',)
+    template_name = 'common/ops_page.html'
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        ctx.update({
+            'page_section': 'settings',
+            'settings_key': 'audit-logs',
+            'page_label': 'Audit Logs',
+            'api_url': reverse('ops_settings:audit-log-list'),
+        })
+        return ctx

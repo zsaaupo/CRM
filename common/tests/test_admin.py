@@ -8,7 +8,18 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from accounting.models import AccountTransaction, AccountTransfer, ExpensePayment, IncomePayment, PurchasePayment, SalesPayment
+from accounting.models import (
+    AccountTransaction, AccountTransfer, DepositEntry, ExpensePayment, IncomePayment,
+    PartySettlement, PurchasePayment, SalesPayment,
+)
+from common.models import AuditLog, IdempotencyRecord, ImportJob, OutboxMessage, PaymentAttempt
+from hrm.models import LeaveBalanceEntry
+from manufacturing.models import RawMaterialMovement, RawMaterialStock, ProductionConsumptionLine
+from people.models import CustomerPointLedger
+from purchase.models import PurchaseReceipt, PurchaseReceiptItem
+from sale.models import CouponRedemption, GiftCardEntry, QuotationConversion, RegisterMovement
+from tasks.models import TaskSeenState
+from warehouse.models import StockBatch, StockCountLine, StockMovement, StockSerial
 from hrm.models import (
     Employee, EmployeeLoan, LeaveRequest, LeaveType, PayrollPeriod, PayrollRun, Payslip, PayslipLine,
     SalaryPayment,
@@ -29,8 +40,15 @@ class ProjectAdminTests(TestCase):
 
     def test_all_project_models_have_admin_lists(self):
         self.client.force_login(self.root)
-        posted_models = (AccountTransaction, AccountTransfer, ExpensePayment, IncomePayment, PurchasePayment, SalesPayment)
-        for app_label in ('account', 'accounting', 'common', 'hrm', 'inventory', 'people', 'purchase', 'report', 'sale', 'warehouse'):
+        posted_models = (
+            AccountTransaction, AccountTransfer, DepositEntry, ExpensePayment, IncomePayment, PartySettlement,
+            PurchasePayment, PurchaseReceipt, PurchaseReceiptItem, SalesPayment, AuditLog, IdempotencyRecord,
+            ImportJob, CustomerPointLedger, CouponRedemption, GiftCardEntry, QuotationConversion,
+            RegisterMovement, StockBatch, StockCountLine, StockMovement, StockSerial,
+            RawMaterialMovement, RawMaterialStock, ProductionConsumptionLine, LeaveBalanceEntry,
+            TaskSeenState, OutboxMessage, PaymentAttempt,
+        )
+        for app_label in ('account', 'accounting', 'common', 'hrm', 'inventory', 'manufacturing', 'people', 'purchase', 'report', 'sale', 'tasks', 'warehouse'):
             for model in apps.get_app_config(app_label).get_models():
                 with self.subTest(model=model._meta.label):
                     self.assertTrue(admin.site.is_registered(model))
