@@ -1,5 +1,9 @@
 from django.urls import path
 from .activity import REPORTS
+from .adjustment_api import (
+    AdjustmentCompleteAPIView, AdjustmentEditOptionsAPIView, AdjustmentOptionsAPIView, StockAdjustmentDetailAPIView,
+    StockAdjustmentListAPIView, StockAdjustmentListCreateAPIView, StockAdjustmentUpdateAPIView,
+)
 
 from .api_views import (
     StockChartAPIView, StockDetailAPIView, StockListAPIView,
@@ -18,6 +22,13 @@ app_name = 'warehouse'
 urlpatterns = [
     *[path(f'reports/<int:warehouse_id>/{key}/', view.as_view(), name=f'report-{key}')
       for key, (_, view, _) in REPORTS.items()],
+    path('adjustments/options/', AdjustmentOptionsAPIView.as_view(), name='adjustment-options'),
+    path('adjustments/edit-options/', AdjustmentEditOptionsAPIView.as_view(), name='adjustment-edit-options'),
+    path('adjustments/complete/', AdjustmentCompleteAPIView.as_view(), name='adjustment-complete'),
+    path('adjustments/', StockAdjustmentListCreateAPIView.as_view(), name='adjustment-list'),
+    path('adjustments/list/', StockAdjustmentListAPIView.as_view(), name='adjustment-list-view'),
+    path('adjustments/<int:pk>/', StockAdjustmentDetailAPIView.as_view(), name='adjustment-detail'),
+    path('adjustments/<int:pk>/update/', StockAdjustmentUpdateAPIView.as_view(), name='adjustment-update'),
     path('transfers/options/', TransferOptionsAPIView.as_view(), name='transfer-options'),
     path('transfers/edit-options/', TransferEditOptionsAPIView.as_view(), name='transfer-edit-options'),
     path('transfers/complete/', TransferCompleteAPIView.as_view(), name='transfer-complete'),

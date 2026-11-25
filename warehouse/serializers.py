@@ -1,3 +1,4 @@
+from audit_log.service import record_activity
 from common.serializers import AUDIT_FIELDS, CatalogSerializer
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
@@ -173,6 +174,7 @@ class WarehouseTransferSerializer(CatalogSerializer):
                     WarehouseTransferItem.objects.create(transfer=self.instance, create_by=actor, modified_by=actor, **values)
                 elif item['id'] in changed:
                     self.instance.items.filter(pk=item['id']).update(**values, modified_by=actor, updated_at=timezone.now())
+                    record_activity(existing[item['id']], 'updated', actor=actor)
         record = super().update(self.instance, validated_data)
         return self.loaded_record(record)
 

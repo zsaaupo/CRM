@@ -1,5 +1,6 @@
 from django.urls import path
 from .book_reports import DaybookView
+from .balance_sheet import BalanceSheetView
 
 from .api_views import (
     AccountStatementAPIView, AccountTransferListCreateAPIView, CashFlowListAPIView, ExpenseCategoryDetailAPIView,
@@ -13,6 +14,7 @@ from .api_views import (
 app_name = 'accounting'
 
 urlpatterns = [
+    path('balance-sheet/', BalanceSheetView.as_view(json_response=True), name='balance-sheet'),
     path('daybook/', DaybookView.as_view(json_response=True), name='daybook'),
     path('expense-categories/', ExpenseCategoryListCreateAPIView.as_view(), name='expense-category-list'),
     path('expense-categories/<int:pk>/', ExpenseCategoryDetailAPIView.as_view(), name='expense-category-detail'),

@@ -1,3 +1,4 @@
+import csv
 import json
 from decimal import Decimal
 from uuid import uuid4
@@ -327,6 +328,67 @@ class FinanceTests(TestCase):
                 self.assertEqual((entry['direction'], entry['transfer'], original['transfer']),
                                  (direction, transfer_id, transfer_id))
                 self.assertNotIn('reversal_of', entry)
+        summary = self.client.get(reverse('accounting:balance-sheet')).json()
+        for row in summary['results']:
+            statement = self.client.get(reverse('accounting:account-statement', args=[row['id']]))
+            self.assertEqual(row['balance'], statement.data['account']['balance'])
+        self.assertEqual(summary['filtered_totals']['inflow'], '100.6000')
+        self.assertEqual(summary['filtered_totals']['outflow'], '100.6000')
+
+    def test_balance_sheet_scope_transfers_and_exports(self):
+        api = reverse('accounting:balance-sheet')
+        page = reverse('accounting_pages:balance-sheet')
+        self.assertEqual(self.client.post(self.transfers, self.transfer_data('25.1234'),
+                                          format='json').status_code, 201)
+        assignment = assign_warehouse_role(self.staff, warehouse=self.warehouse)
+        self.client.force_login(self.staff)
+        for url in (page, api):
+            for params in ({}, {'export': 'csv'}, {'export': 'pdf'}):
+                self.assertEqual(self.client.get(url, params).status_code, 403)
+        assignment.role.permissions.set(Permission.objects.filter(content_type__app_label='accounting',
+            codename__in=['view_financialaccount', 'view_accounttransaction']))
+        summary = self.client.get(api).json()
+        self.assertEqual([row['id'] for row in summary['results']], [self.account.pk, self.bank.pk])
+        self.assertEqual(summary['filtered_totals'], {
+            'opening_balance': '100.0001', 'inflow': '25.1234', 'outflow': '25.1234', 'balance': '100.0001'})
+        for row in summary['results']:
+            statement = self.client.get(reverse('accounting:account-statement', args=[row['id']]))
+            self.assertEqual(row['balance'], statement.data['account']['balance'])
+        params = {'search': 'Main cash', 'column': ['name', 'balance']}
+        html = self.client.get(page, params)
+        self.assertNotContains(html, 'name="column"')
+        self.assertContains(html, '<th scope="col"', count=6)
+        self.assertContains(html, reverse('accounting_pages:account-statement', args=[self.account.pk]))
+        self.assertContains(html, '74.88')
+        self.assertNotContains(html, self.remote.name)
+        exported = self.client.get(page, {**params, 'export': 'csv'})
+        self.assertEqual(list(csv.reader(exported.content.decode().splitlines())),
+                         [['Account', 'Type', 'Opening balance', 'Money in', 'Money out', 'Current balance'],
+                          ['Main cash', 'Cash', '100.0001', '0.0000', '25.1234', '74.8767'],
+                          ['Page total', '', '100.0001', '0.0000', '25.1234', '74.8767']])
+        pdf = self.client.get(page, {**params, 'export': 'pdf'})
+        self.assertEqual(pdf['Content-Type'], 'application/pdf')
+        self.assertTrue(pdf.content.startswith(b'%PDF-'))
+        self.assertIn('no-store', pdf['Cache-Control'])
+        self.bank.is_active = False
+        self.bank.save(update_fields=['is_active'])
+        self.assertEqual(self.client.get(api).json()['filtered_totals']['balance'], '74.8767')
+
+    def test_balance_sheet_search_sort_pagination_and_empty_totals(self):
+        api = reverse('accounting:balance-sheet')
+        FinancialAccount.objects.bulk_create([
+            FinancialAccount(name=f'Till {i}', type='cash', opening_balance=i) for i in range(12)])
+        params = {'search': 'till', 'sort_by': 'balance', 'sort_dir': 'desc', 'page': 2}
+        report = self.client.get(api, params).json()
+        self.assertEqual([row['name'] for row in report['results']], ['Till 1', 'Till 0'])
+        self.assertEqual((report['count'], report['page_totals']['balance'],
+                          report['filtered_totals']['balance']), (12, '1.0000', '66.0000'))
+        self.assertEqual(self.client.get(api, {**params, 'limit': 'all'}).json()['page_totals']['balance'], '66.0000')
+        empty = self.client.get(api, {'search': 'missing account'}).json()
+        self.assertEqual(empty['results'], [])
+        self.assertEqual(empty['page_totals']['balance'], '0.0000')
+        for params in ({'sort_by': 'unknown'}, {'page': 'bad'}):
+            self.assertEqual(self.client.get(api, params).status_code, 400)
 
     def test_warehouse_roles_scope_accounts_statements_transfers_and_payments(self):
         assignment = assign_warehouse_role(self.staff, warehouse=self.warehouse)

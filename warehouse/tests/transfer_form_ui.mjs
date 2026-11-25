@@ -5,6 +5,8 @@ import vm from 'node:vm';
 
 const source = (await readFile(new URL('../static/warehouse/js/transfer_form.js', import.meta.url), 'utf8'))
     .replace(/^import .*;\r?\n/gm, '').replace(/^export /gm, '');
+const adjustmentSource = (await readFile(new URL('../static/warehouse/js/adjustment_form.js', import.meta.url), 'utf8'))
+    .replace(/^import .*;\r?\n/gm, '').replace(/^export /gm, '');
 
 class Element {
     constructor(tag = 'div') {
@@ -21,8 +23,8 @@ class Element {
     reportValidity() { return true; }
 }
 
-const names = ['product', 'unit', 'quantity'];
-function line() {
+function line(adjustment) {
+    const names = adjustment ? ['product', 'operation', 'quantity'] : ['product', 'unit', 'quantity'];
     const row = new Element('fieldset');
     const fields = Object.fromEntries(names.map(name => {
         const field = new Element('input'); field.dataset.lineField = name;
@@ -31,7 +33,7 @@ function line() {
         return [name, field];
     }));
     const unitLabel = new Element('input');
-    const labels = Object.fromEntries(names.map(name => [name, new Element('label')]));
+    const labels = Object.fromEntries([...names, 'unit'].map(name => [name, new Element('label')]));
     const errors = Object.fromEntries([...names, 'non_field_errors'].map(name => [name, new Element()]));
     const parts = Object.fromEntries(['heading', 'legend', 'remove', 'minimum-sale-price', 'minimum-label'].map(name => [name, new Element()]));
     row.querySelector = selector => {
@@ -41,26 +43,30 @@ function line() {
         return parts[selector.match(/^\[data-line-(.*)\]$/)?.[1]];
     };
     row.querySelectorAll = () => [...Object.values(fields), unitLabel];
-    row.cloneNode = () => line();
+    row.cloneNode = () => line(adjustment);
     return row;
 }
 
 
-async function setup({edit = true, completed = false, conflict = false, failLoad = false, historical = false, delayed = false, failSave = false} = {}) {
+async function setup({edit = true, completed = false, conflict = false, failLoad = false, historical = false, delayed = false, failSave = false, adjustment = false} = {}) {
+    const kind = adjustment ? 'adjustment' : 'transfer';
     const form = new Element('form');
-    const fields = Object.fromEntries(['source_warehouse', 'destination_warehouse', 'transfer_date', 'notes', 'csrfmiddlewaretoken'].map(name => [name, new Element('input')]));
+    const headerFields = adjustment ? ['warehouse', 'adjustment_date'] : ['source_warehouse', 'destination_warehouse', 'transfer_date'];
+    const fields = Object.fromEntries([...headerFields, 'notes', 'csrfmiddlewaretoken'].map(name => [name, new Element('input')]));
     fields.csrfmiddlewaretoken.value = 'csrf';
     const parts = Object.fromEntries(['status', 'header', 'submit', 'add-line', 'retry', 'lines'].map(name => [name, new Element()]));
     const spinner = new Element(), label = new Element(); label.textContent = edit ? 'Save changes' : 'Create transfer';
     form.action = edit ? '/update/7/' : '/create/';
-    form.dataset = {method: edit ? 'PATCH' : 'POST', optionsUrl: '/options/', detailUrl: '/detail/7/', successUrl: '/warehouse/transfers/'};
+    form.dataset = {method: edit ? 'PATCH' : 'POST', optionsUrl: '/options/', detailUrl: '/detail/7/', successUrl: `/warehouse/${kind}s/`};
     form.elements = {namedItem: name => fields[name]};
     form.querySelector = selector => selector === '[data-submit-spinner]' ? spinner : selector === '[data-submit-label]' ? label
-        : parts[selector.match(/^\[data-transfer-(.*)\]$/)?.[1]];
+        : parts[selector.match(new RegExp(`^\\[data-${kind}-(.*)\\]$`))?.[1]];
     form.querySelectorAll = () => [];
     const warehouses = historical ? [{value: 2, label: 'Destination'}] : [{value: 1, label: 'Source'}, {value: 2, label: 'Destination'}];
     const options = {source_warehouse: warehouses, destination_warehouse: warehouses,
-        product: [{value: 5, label: 'Rice', unit: 9, unit_label: 'KG'}, {value: 6, label: 'Box', unit: 10, unit_label: 'PCS'}]};
+        warehouse: warehouses.slice(0, 1),
+        product: [{value: 5, label: 'Rice', unit: 9, unit_label: 'KG'},
+            {value: 6, label: 'Box', unit: 10, unit_label: 'PCS'}]};
     const record = {id: 7, source_warehouse: 1, source_warehouse_name: 'Historical source', destination_warehouse: 2,
         destination_warehouse_name: 'Destination', transfer_date: '2026-11-17', notes: 'Saved note', is_completed: completed,
         items: Array.from({length: 26}, (_, index) => ({id: index + 101, line_number: index + 1, product: 5, unit: 9, unit_code: 'KG', quantity: '2.500000'}))};
@@ -73,13 +79,15 @@ async function setup({edit = true, completed = false, conflict = false, failLoad
         return {};
     };
     const context = vm.createContext({document: {querySelector: () => null,
-        getElementById: () => ({content: {firstElementChild: line()}}), createElement: tag => new Element(tag)},
+        getElementById: () => ({content: {firstElementChild: line(adjustment)}}), createElement: tag => new Element(tag)},
         getJSON: async url => {if (failLoad) {failLoad = false; throw new Error('Connection failed');} return url === '/options/' ? options : record;},
         postJSON: (...args) => save('POST', ...args), patchJSON: (...args) => save('PATCH', ...args),
         window: {location: {assign: url => redirects.push(url)}},
     });
     vm.runInContext(source, context); context.testForm = form;
-    await vm.runInContext('initializeTransferForm(testForm).ready', context);
+    const initialize = adjustment ? `(() => { ${adjustmentSource}\n return initializeAdjustmentForm(testForm).ready; })()`
+        : 'initializeTransferForm(testForm).ready';
+    await vm.runInContext(initialize, context);
     return {form, fields, parts, calls, redirects, release};
 }
 const event = {preventDefault() {}};
@@ -126,6 +134,30 @@ const error = await setup({failSave: true}); await error.form.listeners.submit(e
 assert.equal(error.parts.lines.children[1].querySelector('[data-line-error="quantity"]').textContent, 'Invalid quantity.');
 assert.equal(error.parts.submit.disabled, false);
 console.log('Multi-product transfer form passed: add/remove, units, IDs, 26 saved lines, CSRF, nested errors, retry, completion and duplicate-submit guards.');
+
+const adjustment = await setup({edit: false, adjustment: true});
+assert.equal(adjustment.fields.warehouse.value, '1');
+const selectProduct = (row, value, operation, quantity) => {
+    const field = name => row.querySelector(`[data-line-field="${name}"]`);
+    field('product').value = value;
+    field('product').listeners.change();
+    field('operation').value = operation;
+    field('quantity').value = quantity;
+};
+const addLine = adjustment.parts.lines.children[0];
+selectProduct(addLine, '5', 'add', '5.000001');
+assert.equal(addLine.querySelector('[data-line-unit-label]').value, 'KG');
+adjustment.parts['add-line'].listeners.click();
+const subtractLine = adjustment.parts.lines.children[1];
+selectProduct(subtractLine, '6', 'subtract', '2');
+assert.equal(subtractLine.querySelector('[data-line-unit-label]').value, 'PCS');
+await adjustment.form.listeners.submit(event);
+assert.deepEqual(adjustment.calls[0].data.items, [
+    {line_number: 1, product: '5', operation: 'add', quantity: '5.000001'},
+    {line_number: 2, product: '6', operation: 'subtract', quantity: '2'},
+]);
+assert.deepEqual(adjustment.redirects, ['/warehouse/adjustments/']);
+console.log('Stock adjustment form passed: warehouse selection, unit display, and mixed operations.');
 const detailSource = (await readFile(new URL('../static/warehouse/js/transfer_detail.js', import.meta.url), 'utf8'))
     .replace(/^import .*;\r?\n/gm, '').replace(/^export /gm, '');
 const rows = new Element();

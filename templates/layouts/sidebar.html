@@ -43,7 +43,7 @@
             {% endfor %}
         </div>
         {% endif %}
-        {% if warehouse_access.view or warehouse_access.stock or warehouse_access.transfers or warehouse_access.report %}
+        {% if warehouse_access.view or warehouse_access.stock or warehouse_access.adjustments or warehouse_access.transfers or warehouse_access.report %}
         <button type="button" class="sidebar-link sidebar-group-toggle {% if page_section == 'warehouses' %}is-current{% endif %}" data-nav-toggle data-warehouses-toggle aria-controls="warehouses-submenu" aria-expanded="{% if page_section == 'warehouses' %}true{% else %}false{% endif %}">
             <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="m3 10 9-7 9 7v11H3V10Z" stroke-linejoin="round"/><path d="M8 21V11h8v10M8 15h8M8 18h8"/></svg>
             <span>Warehouses</span>
@@ -55,6 +55,7 @@
             {% if warehouse_access.add %}<a href="{% url 'warehouse_pages:add-warehouse' %}" data-nav-item class="sidebar-sub-link {% if page_section == 'warehouses' and page_mode == 'add' %}is-current{% endif %}" {% if page_section == 'warehouses' and page_mode == 'add' %}aria-current="page"{% endif %}>Add warehouse</a>{% endif %}
             {% if warehouse_access.stock %}<a href="{% url 'warehouse_pages:stock-list' %}" data-nav-item class="sidebar-sub-link {% if page_mode == 'stock-list' or page_mode == 'stock-detail' %}is-current{% endif %}" {% if page_mode == 'stock-list' or page_mode == 'stock-detail' %}aria-current="page"{% endif %}>Stock list</a>{% endif %}
             {% if warehouse_access.stock_chart %}<a href="{% url 'warehouse_pages:stock-chart' %}" data-nav-item class="sidebar-sub-link {% if page_mode == 'stock-chart' %}is-current{% endif %}" {% if page_mode == 'stock-chart' %}aria-current="page"{% endif %}>Stock chart</a>{% endif %}
+            {% if warehouse_access.adjustments %}<a href="{% url 'warehouse_pages:adjustment-list' %}" data-nav-item class="sidebar-sub-link {% if page_mode == 'adjustment-list' or page_mode == 'adjustment-add' or page_mode == 'adjustment-edit' or page_mode == 'adjustment-detail' %}is-current{% endif %}" {% if page_mode == 'adjustment-list' %}aria-current="page"{% endif %}>Stock adjustments</a>{% endif %}
             {% if warehouse_access.transfers %}<a href="{% url 'warehouse_pages:transfer-list' %}" data-nav-item class="sidebar-sub-link {% if page_mode == 'transfer-list' or page_mode == 'transfer-edit' or page_mode == 'transfer-detail' %}is-current{% endif %}">Transfer list</a>{% endif %}
             {% if warehouse_access.add_transfer %}<a href="{% url 'warehouse_pages:add-transfer' %}" data-nav-item class="sidebar-sub-link {% if page_mode == 'transfer-add' %}is-current{% endif %}">Add transfer</a>{% endif %}
         </div>
@@ -151,6 +152,7 @@
             {% if finance_access.cash_flow %}<a href="{% url 'accounting_pages:cash-flow-list' %}" data-nav-item class="sidebar-sub-link {% if finance_key == 'cash-flow' %}is-current{% endif %}" {% if finance_key == 'cash-flow' %}aria-current="page"{% endif %}>Cash flow</a>{% endif %}
             {% if finance_access.ledger %}<a href="{% url 'accounting_pages:ledger' %}" data-nav-item class="sidebar-sub-link {% if finance_key == 'ledger' %}is-current{% endif %}" {% if finance_key == 'ledger' %}aria-current="page"{% endif %}>Ledger</a>{% endif %}
             {% if finance_access.ledger %}
+            <a href="{% url 'accounting_pages:balance-sheet' %}" data-nav-item class="sidebar-sub-link {% if finance_key == 'balance-sheet' %}is-current{% endif %}" {% if finance_key == 'balance-sheet' %}aria-current="page"{% endif %}>Balance Sheet</a>
             <a href="{% url 'accounting_pages:daybook' %}" data-nav-item class="sidebar-sub-link {% if finance_key == 'daybook' %}is-current{% endif %}">Daybook</a>
             {% endif %}
             {% if finance_access.transfers %}
@@ -167,6 +169,12 @@
         <div id="settings-submenu" class="sidebar-submenu" {% if page_section != 'settings' %}hidden{% endif %}>
             <a href="{% url 'common_pages:trade-status-list' %}" data-nav-item class="sidebar-sub-link {% if settings_key == 'trade-status' %}is-current{% endif %}" {% if settings_key == 'trade-status' %}aria-current="page"{% endif %}>Trade status setting</a>
         </div>
+        {% endif %}
+        {% if perms.audit_log.view_auditlog %}
+        <a href="{% url 'audit_log:list' %}" data-nav-item class="sidebar-link {% if page_section == 'audit-log' %}is-current{% endif %}" {% if page_section == 'audit-log' %}aria-current="page"{% endif %}>
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M7 3h7l4 4v14H6V3h1Zm7 0v5h4M9 12h6m-6 4h6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span>Audit log</span>
+        </a>
         {% endif %}
     </nav>
     <div class="sidebar-footer"><span class="status-dot" aria-hidden="true"></span> A little more clarity, every day.</div>

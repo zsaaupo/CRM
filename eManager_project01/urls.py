@@ -28,6 +28,7 @@ urlpatterns = [
     path('hrm/', include('hrm.page_urls')),
     path('accounting/', include('accounting.page_urls')),
     path('settings/', include('common.page_urls')),
+    path('audit-log/', include('audit_log.urls')),
     path('account/', include('account.page_urls')),
 ]
 

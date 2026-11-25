@@ -1,6 +1,8 @@
 from django.contrib import admin
 from django.core.exceptions import PermissionDenied
+from django.db.models import Q
 
+from people.models import Party
 from .models import Brand, Currency, Product, ProductCategory, ProductType, UnitOfMeasure
 
 
@@ -79,8 +81,17 @@ class ProductAdmin(CatalogAdmin):
     readonly_fields = ['public_id', *CatalogAdmin.readonly_fields]
     fieldsets = [
         ('Identification', {'fields': ('sku', 'name', 'barcode', 'public_id', 'product_type', 'status')}),
-        ('Classification and content', {'fields': ('category', 'brand', 'unit', 'variant_of', 'description', 'image', 'manufacturer', 'manufacturer_part_number', 'attributes')}),
+        ('Classification and content', {'fields': ('category', 'brand', 'unit', 'supplier', 'variant_of', 'description', 'image', 'manufacturer', 'manufacturer_part_number', 'attributes')}),
         ('Pricing and tax', {'fields': ('currency', 'cost_price', 'sale_price', 'minimum_sale_price', 'Whole_sale_price', 'product_tax', 'is_returnable')}),
         ('Audit', {'fields': ('create_by', 'modified_by', 'created_at', 'updated_at'), 'classes': ('collapse',)}),
     ]
+
+    def get_form(self, request, obj=None, **kwargs):
+        form = super().get_form(request, obj, **kwargs)
+        if 'supplier' in form.base_fields:
+            current = obj.supplier_id if obj else None
+            form.base_fields['supplier'].queryset = Party.all_objects.filter(
+                Q(is_deleted=False, is_supplier=True) | Q(pk=current),
+            )
+        return form
 

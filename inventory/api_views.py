@@ -1,4 +1,5 @@
 from common.models import ProductStatus
+from django.db.models import Q
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import never_cache
 from django.shortcuts import get_object_or_404
@@ -9,6 +10,7 @@ from rest_framework.response import Response
 
 from account.permissions import HasRequiredPermissions
 from common.view import BaseDetailAPIView, BaseListAPIView, BaseListCreateAPIView, BaseUpdateAPIView
+from people.models import Party
 from .models import Brand, Currency, Product, ProductCategory, ProductType, UnitOfMeasure
 from .serializers import (
     BrandSerializer, CurrencySerializer, ProductCategorySerializer, ProductSerializer,
@@ -28,6 +30,18 @@ class ProductOptionsAPIView(APIView):
     def get_base_products(self):
         return Product.objects.filter(variant_of__isnull=True)
 
+    def get_suppliers(self):
+        return Party.objects.filter(is_supplier=True)
+
+    def supplier_choices(self):
+        choices = []
+        for supplier in self.get_suppliers().order_by('name', 'pk'):
+            label = f'{supplier.name} ({supplier.code})'
+            if supplier.is_deleted or not supplier.is_supplier:
+                label += ' (unavailable)'
+            choices.append({'value': supplier.pk, 'label': label})
+        return choices
+
     def get(self, request):
         def choices(model, value_field='pk', include_code=False):
             fields = [value_field, 'name'] + (['code'] if include_code and value_field != 'code' else [])
@@ -41,6 +55,7 @@ class ProductOptionsAPIView(APIView):
             'category': choices(ProductCategory),
             'brand': choices(Brand),
             'unit': choices(UnitOfMeasure, include_code=True),
+            'supplier': self.supplier_choices(),
             'currency': choices(Currency, 'code', include_code=True),
             'variant_of': [{'value': row['pk'], 'label': f"{row['sku']} — {row['name']}"}
                            for row in self.get_base_products()
@@ -60,6 +75,9 @@ class ProductEditOptionsAPIView(ProductOptionsAPIView):
             return Product.objects.none()
         return super().get_base_products().exclude(pk=self.product.pk)
 
+    def get_suppliers(self):
+        return Party.all_objects.filter(Q(is_deleted=False, is_supplier=True) | Q(pk=self.product.supplier_id))
+
 
 class ProductListCreateAPIView(BaseListCreateAPIView):
     serializer_class = ProductSerializer
@@ -70,7 +88,9 @@ class ProductListCreateAPIView(BaseListCreateAPIView):
 
 class ProductDetailAPIView(BaseDetailAPIView):
     serializer_class = ProductDetailSerializer
-    queryset = Product.objects.select_related('product_type', 'status', 'category', 'brand', 'unit', 'variant_of', 'currency')
+    queryset = Product.objects.select_related(
+        'product_type', 'status', 'category', 'brand', 'unit', 'supplier', 'variant_of', 'currency',
+    )
 
 
 class ProductCategoryListCreateAPIView(BaseListCreateAPIView):

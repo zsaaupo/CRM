@@ -11,6 +11,8 @@ from django.db import transaction
 from django.db.models import Exists, F, OuterRef, Prefetch, Q
 from django.utils import timezone
 
+from audit_log.service import bulk_create_with_audit
+
 from .models import (
     Attendance, Employee, EmployeeAttendanceStatus, EmployeeCompensation, EmployeeLoan, EmployeeScheduleAssignment,
     Holiday, LeaveRequest, LoanInstallment, PayrollAdjustment, PayrollDeductionRule, PayrollEvent, PayrollPeriod,
@@ -279,10 +281,10 @@ def save_payslips(run, rows, username):
     for row in rows:
         fields = {key: value for key, value in row.items() if key not in ('employee', 'lines', 'blockers')}
         slips.append(Payslip(payroll_run=run, employee_id=row['employee'], create_by=username, modified_by=username, **fields))
-    Payslip.objects.bulk_create(slips)
+    bulk_create_with_audit(Payslip.objects, slips)
     lines = [PayslipLine(payslip=slip, create_by=username, modified_by=username, **line)
              for slip, row in zip(slips, rows, strict=True) for line in row['lines']]
-    PayslipLine.objects.bulk_create(lines)
+    bulk_create_with_audit(PayslipLine.objects, lines)
 
     # SQLite can round high-precision decimals. Roll back the full run if a stored amount changed.
     amounts = {slip.pk: (Decimal(slip.gross_pay), Decimal(slip.total_deductions), Decimal(slip.net_pay)) for slip in slips}

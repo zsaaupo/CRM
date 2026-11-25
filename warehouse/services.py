@@ -8,6 +8,7 @@ from django.utils import timezone
 from rest_framework.exceptions import APIException, NotFound, PermissionDenied, ValidationError
 
 from account.permissions import has_role_permissions
+from audit_log.service import record_activity
 from inventory.models import Product
 from .models import Stock, WareHouse, WarehouseTransfer
 from .scope import all_warehouse_access, check_warehouse, lock_warehouse_scope
@@ -126,6 +127,9 @@ def complete_transfer(actor, transfer_id):
                 destination.refresh_from_db(fields=['quantity'])
                 if source.quantity != expected_source or destination.quantity != expected_destination:
                     raise ValidationError({'quantity': 'The database cannot store the resulting stock quantities accurately.'})
+                record_activity(source, 'stock_changed', actor=actor)
+                record_activity(destination, 'stock_changed', actor=actor)
+            record_activity(record, 'completed', actor=actor)
             return record, True
     except OperationalError as exc:
         if 'locked' in str(exc).lower() or 'deadlock' in str(exc).lower():

@@ -39,6 +39,51 @@ class Stock(TimeStampedModel):
         return f'{self.product} - {self.warehouse}: {self.quantity}'
 
 
+def generate_adjustment_number():
+    return f'SA-{uuid.uuid4().hex.upper()}'
+
+
+class StockAdjustment(TimeStampedModel):
+    adjustment_number = models.CharField(max_length=50, unique=True, default=generate_adjustment_number, editable=False)
+    warehouse = models.ForeignKey(WareHouse, on_delete=models.PROTECT, related_name='stock_adjustments')
+    adjustment_date = models.DateField(default=timezone.localdate)
+    notes = models.TextField(blank=True)
+    is_completed = models.BooleanField(default=False, editable=False)
+    completed_at = models.DateTimeField(null=True, editable=False)
+
+    class Meta:
+        ordering = ['-adjustment_date', '-pk']
+
+    def __str__(self):
+        return self.adjustment_number
+
+
+class StockAdjustmentItem(TimeStampedModel):
+    class Operation(models.TextChoices):
+        ADD = 'add', 'Add'
+        SUBTRACT = 'subtract', 'Subtract'
+
+    adjustment = models.ForeignKey(StockAdjustment, on_delete=models.CASCADE, related_name='items')
+    line_number = models.PositiveIntegerField()
+    product = models.ForeignKey('inventory.Product', on_delete=models.PROTECT, related_name='stock_adjustment_items')
+    unit = models.ForeignKey('inventory.UnitOfMeasure', on_delete=models.PROTECT, related_name='stock_adjustment_items')
+    operation = models.CharField(max_length=8, choices=Operation.choices)
+    quantity = models.DecimalField(max_digits=18, decimal_places=6,
+                                   validators=[MinValueValidator(Decimal('0.000001'))])
+
+    class Meta:
+        ordering = ['line_number', 'pk']
+        constraints = [
+            models.UniqueConstraint(fields=['adjustment', 'line_number'], name='stock_adjustment_line_unique'),
+            models.CheckConstraint(condition=models.Q(line_number__gt=0), name='stock_adjustment_line_positive'),
+            models.CheckConstraint(condition=models.Q(quantity__gt=0), name='stock_adjustment_quantity_positive'),
+            models.CheckConstraint(condition=models.Q(operation__in=['add', 'subtract']), name='stock_adjustment_operation_valid'),
+        ]
+
+    def __str__(self):
+        return f'{self.adjustment.adjustment_number} / {self.line_number}'
+
+
 class WarehouseTransfer(TimeStampedModel):
     """A draft containing product lines; stock moves only on completion."""
 

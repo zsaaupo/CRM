@@ -10,6 +10,7 @@ from rest_framework.exceptions import APIException, NotFound, PermissionDenied, 
 
 from account.permissions import has_role_permissions
 from accounting.services import post_purchase_return_refund, return_refund_amount
+from audit_log.service import record_activity
 from inventory.models import Product
 from warehouse.models import Stock, WareHouse
 from warehouse.scope import lock_warehouse_scope, scoped_queryset
@@ -105,6 +106,7 @@ def deduct_stock(warehouse, quantities, products, user, now):
         stock.refresh_from_db(fields=['quantity'])
         if stock.quantity != expected:
             raise ValidationError({'quantity': 'The database cannot store the resulting stock quantity accurately.'})
+        record_activity(stock, 'stock_changed', actor=user)
 
 
 def complete_return(user, pk):
@@ -147,6 +149,7 @@ def complete_return(user, pk):
             deduct_stock(warehouse, stock_quantities, products, user, now)
             post_purchase_return_refund(record, scope, user, date=timezone.localdate(now),
                                         amount=return_refund_amount(order, quantities, previous))
+            record_activity(record, 'completed', actor=user)
             return record, True
     except OperationalError as exc:
         if 'locked' in str(exc).lower() or 'deadlock' in str(exc).lower():

@@ -5,6 +5,7 @@ from django.db.models import F
 from django.utils import timezone
 from rest_framework.exceptions import NotFound
 
+from audit_log.service import record_activity
 from .models import LoanInstallment, PayrollEvent, PayrollPeriod, PayrollRun, Payslip, SalaryPayment
 from .payroll import PayrollConflict, preview_payroll
 
@@ -44,7 +45,7 @@ def payments_by_slip(run):
     return paid, pending
 
 
-def recover_installments(slip):
+def recover_installments(slip, actor):
     for line in slip.lines.all():
         for inputs in line.calculation_inputs:
             installment_id = inputs.get('installment_id')
@@ -55,6 +56,8 @@ def recover_installments(slip):
                         recovered_line=line, recovered_at=timezone.now(), updated_at=timezone.now())
                 if not updated and not LoanInstallment.objects.filter(pk=installment_id, recovered_line=line).exists():
                     raise PayrollConflict('A loan installment changed after payroll approval.')
+                if updated:
+                    record_activity(LoanInstallment.objects.get(pk=installment_id), 'recovered', actor=actor)
 
 
 @transaction.atomic
@@ -82,7 +85,7 @@ def transition_run(pk, action, actor, note=''):
     record_event(run, actor, event, note)
     if action == 'approve':
         for slip in run.payslips.filter(net_pay=0):
-            recover_installments(slip)
+            recover_installments(slip, actor)
         if not run.payslips.filter(net_pay__gt=0).exists():
             run.status = RUN.PAID
             run.save(update_fields=['status', 'updated_at'])
@@ -148,7 +151,7 @@ def resolve_payment(run_id, payment_id, actor, status, reference='', paid_on=Non
     if status == PAYMENT.SUCCEEDED:
         paid, _ = payments_by_slip(run)
         if paid[payment.payslip_id] == payment.payslip.net_pay:
-            recover_installments(payment.payslip)
+            recover_installments(payment.payslip, actor)
         if all(paid.get(pk, 0) == net for pk, net in run.payslips.values_list('pk', 'net_pay')):
             run.status = RUN.PAID
             run.modified_by = actor.get_username()

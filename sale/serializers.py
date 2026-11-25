@@ -6,6 +6,7 @@ from rest_framework.exceptions import NotFound
 
 from accounting.serializers import PaymentAccountField
 from common.models import TradeStatus
+from audit_log.service import record_activity
 from common.serializers import AUDIT_FIELDS, CatalogSerializer
 from inventory.models import Currency
 from people.models import Party
@@ -232,3 +233,4 @@ def replace_sales_lines(document, items, actor, require_permission):
                 **{relation.field.name: document}, create_by=actor, modified_by=actor, **values)
         elif item['id'] in changed:
             document.items.filter(pk=item['id']).update(**values, modified_by=actor, updated_at=now)
+            record_activity(existing[item['id']], 'updated', actor=actor)

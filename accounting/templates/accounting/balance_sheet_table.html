@@ -1,0 +1,14 @@
+<table class="users-table products">
+    <thead><tr>{% for key,label in table.columns %}
+        <th scope="col"{% if key != 'name' and key != 'type' %} class="numeric"{% endif %}{% if filters.sort_by == key %} aria-sort="{% if filters.sort_dir == 'asc' %}ascending{% else %}descending{% endif %}"{% endif %}>
+            {% if pdf %}{{ label }}{% else %}<a href="{% if filters.sort_by == key and filters.sort_dir == 'asc' %}{% querystring sort_by=key sort_dir='desc' page=1 %}{% else %}{% querystring sort_by=key sort_dir='asc' page=1 %}{% endif %}">{{ label }}{% if filters.sort_by == key %}{% if filters.sort_dir == 'asc' %} ↑{% else %} ↓{% endif %}{% endif %}</a>{% endif %}
+        </th>{% endfor %}</tr></thead>
+    <tbody>{% for id,cells in table.rows %}<tr>{% for key,value in cells %}
+        {% if key == 'name' and not pdf %}<td><a href="{% url 'accounting_pages:account-statement' id %}">{{ value }}</a></td>
+        {% elif key == 'name' or key == 'type' %}<td>{{ value }}</td>
+        {% else %}<td class="numeric">{{ value|floatformat:"2g" }}</td>{% endif %}
+    {% endfor %}</tr>{% empty %}<tr><td colspan="{{ table.columns|length }}" class="users-empty">No matching active accounts.</td></tr>{% endfor %}</tbody>
+    <tfoot>{% include 'accounting/balance_sheet_total.html' with amounts=table.page_amounts label='Page total' %}
+        {% if not pdf %}{% include 'accounting/balance_sheet_total.html' with amounts=table.filtered_amounts label='All matching accounts' row_class='filtered-total' %}{% endif %}
+    </tfoot>
+</table>

@@ -1,0 +1,62 @@
+{% extends 'layouts/dashboard.html' %}
+{% load static %}
+{% block title %}{{ form_heading }} | eManager{% endblock %}
+{% block content %}
+<div class="workspace-content">
+    <div class="page-heading">
+        <div><p class="page-eyebrow">Warehouses</p><h1 class="page-title">{{ form_heading }}<span class="text-emerald-600">.</span></h1></div>
+        <a href="{{ list_url }}" class="secondary-button">Back to adjustments <span aria-hidden="true">&rarr;</span></a>
+    </div>
+    <form method="post" action="{{ create_api_url }}" data-adjustment-form data-method="{{ form_method|default:'POST' }}" data-options-url="{{ options_api_url }}" data-detail-url="{{ detail_api_url }}" data-success-url="{{ list_url }}" novalidate>
+        {% csrf_token %}
+        <div class="form-status mb-5" data-adjustment-status role="status" aria-live="polite" tabindex="-1" hidden></div>
+        <button type="button" class="secondary-button mb-5" data-adjustment-retry hidden>Try loading again</button>
+        <fieldset class="user-form-card" data-adjustment-header disabled>
+            <legend class="sr-only">Adjustment information</legend>
+            <div class="user-form-grid">
+                {% include 'inventory/includes/field.html' with name='warehouse' label='Warehouse' field_type='select' required=True only %}
+                {% include 'inventory/includes/field.html' with name='adjustment_date' label='Adjustment date' field_type='date' required=True value=today|date:'Y-m-d' only %}
+                {% include 'inventory/includes/field.html' with name='notes' label='Notes' field_type='textarea' only %}
+            </div>
+        </fieldset>
+        <section class="user-form-card mt-6" aria-labelledby="adjustment-products-heading">
+            <div class="flex items-center justify-between gap-4">
+                <h2 id="adjustment-products-heading" class="section-title">Products</h2>
+                <button type="button" class="secondary-button" data-adjustment-add-line disabled>Add item</button>
+            </div>
+            <p class="section-description">Stock updates when you complete the adjustment.</p>
+            <div class="space-y-6" data-adjustment-lines></div>
+        </section>
+        <div class="user-form-actions">
+            <a href="{{ list_url }}" class="secondary-button">Cancel</a>
+            <button type="submit" class="primary-button compact-primary" data-adjustment-submit disabled><span data-submit-label>{{ save_label }}</span><span class="button-spinner" data-submit-spinner hidden aria-hidden="true"></span></button>
+        </div>
+        <noscript><p class="form-error">Enable JavaScript to load and save adjustments.</p></noscript>
+    </form>
+    <template id="adjustment-line-template">
+        <fieldset class="rounded-xl border border-stone-200 p-5">
+            <legend class="sr-only" data-line-legend>Adjustment item</legend>
+            <div class="mb-5 flex items-center justify-between gap-4">
+                <h3 class="section-title" data-line-heading>Item</h3>
+                <button type="button" class="icon-button inventory-delete-button" data-line-remove title="Remove item" aria-label="Remove item"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7" stroke-linecap="round"/></svg></button>
+            </div>
+            <p class="form-error mb-4" data-line-error="non_field_errors" hidden></p>
+            <div class="user-form-grid">
+                {% include 'sale/includes/line_field.html' with name='product' label='Product' field_type='select' only %}
+                <div>
+                    <label class="form-label" data-line-label="operation">Operation</label>
+                    <select class="form-input" data-line-field="operation" required>
+                        <option value="">Select an operation</option>
+                        <option value="add">Add</option>
+                        <option value="subtract">Subtract</option>
+                    </select>
+                    <p class="form-error" data-line-error="operation" hidden></p>
+                </div>
+                {% include 'sale/includes/line_field.html' with name='quantity' label='Quantity' minimum='0.000001' maximum='999999999999.999999' step='0.000001' only %}
+                <div><label class="form-label" data-line-label="unit">Unit</label><input class="form-input" data-line-unit-label readonly></div>
+            </div>
+        </fieldset>
+    </template>
+</div>
+{% endblock %}
+{% block workspace_js %}<script type="module" src="{% static 'warehouse/js/adjustment_form.js' %}"></script>{% endblock %}

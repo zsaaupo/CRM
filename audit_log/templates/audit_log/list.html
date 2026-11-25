@@ -1,0 +1,14 @@
+{% extends 'inventory/list.html' %}
+
+{% block catalog_toolbar_controls %}
+<div class="audit-log-controls">
+    {{ block.super }}
+    <form class="audit-log-record-filter" data-catalog-filters data-catalog-auto-filter aria-label="Filter audit log">
+        <label for="audit-record-type" class="sr-only">Record type</label>
+        <select id="audit-record-type" name="record_type" class="form-input">
+            <option value="">All record types</option>
+            {% for record_type in record_types %}<option value="{{ record_type }}">{{ record_type }}</option>{% endfor %}
+        </select>
+    </form>
+</div>
+{% endblock %}

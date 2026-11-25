@@ -11,6 +11,7 @@
         {% include 'inventory/includes/field.html' with name='brand' label='Brand' field_type='select' only %}
         {% include 'inventory/includes/field.html' with name='unit' label='Unit' field_type='select' required=True only %}
         {% include 'inventory/includes/field.html' with name='variant_of' label='Base product' field_type='select' hint='Select a base product only when adding a variant.' only %}
+        {% include 'inventory/includes/field.html' with name='supplier' label='Supplier' field_type='select' only %}
     </div>
 </fieldset>
 <fieldset class="user-form-section">

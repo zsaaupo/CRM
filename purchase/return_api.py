@@ -12,6 +12,7 @@ from rest_framework.views import APIView
 
 from account.permissions import has_role_permissions
 from accounting.models import ZERO, base_currency
+from audit_log.service import bulk_create_with_audit, record_activities
 from common.serializers import AUDIT_FIELDS, CatalogSerializer
 from common.view import BaseAPIMixin, BaseDetailAPIView, BaseListAPIView, BaseListCreateAPIView, BaseUpdateAPIView
 from warehouse.scope import HasWarehouseAccess, lock_warehouse_scope, warehouse_scope
@@ -126,7 +127,7 @@ class PurchaseReturnWriteSerializer(PurchaseReturnSerializer):
         values = self.validate(validated_data)
         items = values.pop('items')
         record = super().create(values)
-        PurchaseReturnItem.objects.bulk_create([
+        bulk_create_with_audit(PurchaseReturnItem.objects, [
             PurchaseReturnItem(purchase_return=record, purchase_order_item_id=item['purchase_order_item'], quantity=item['quantity'],
                             create_by=record.create_by, modified_by=record.modified_by) for item in items
         ])
@@ -154,7 +155,7 @@ class PurchaseReturnWriteSerializer(PurchaseReturnSerializer):
             if removed:
                 current.items.filter(purchase_order_item_id__in=removed).delete()
             if added:
-                PurchaseReturnItem.objects.bulk_create([
+                bulk_create_with_audit(PurchaseReturnItem.objects, [
                     PurchaseReturnItem(purchase_return=current, purchase_order_item_id=key, quantity=expected[key],
                                     create_by=actor, modified_by=actor) for key in added
                 ])
@@ -165,7 +166,9 @@ class PurchaseReturnWriteSerializer(PurchaseReturnSerializer):
                     line.quantity = expected[key]
                     line.modified_by = actor
                     line.updated_at = now
-                PurchaseReturnItem.objects.bulk_update([existing[key] for key in changed], ['quantity', 'modified_by', 'updated_at'])
+                changed_lines = [existing[key] for key in changed]
+                PurchaseReturnItem.objects.bulk_update(changed_lines, ['quantity', 'modified_by', 'updated_at'])
+                record_activities(changed_lines, 'updated', actor=user, using=current._state.db)
             self.check_stored_quantities(current, expected)
         return super().update(current, values)
 

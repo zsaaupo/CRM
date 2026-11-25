@@ -36,7 +36,7 @@ class ProductOptionsAPITests(TestCase):
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, 200)
         data = response.json()
-        self.assertEqual(set(data), {'product_type', 'status', 'category', 'brand', 'unit', 'currency', 'variant_of'})
+        self.assertEqual(set(data), {'product_type', 'status', 'category', 'brand', 'unit', 'currency', 'supplier', 'variant_of'})
         for choices in data.values():
             for item in choices:
                 self.assertEqual(set(item), {'value', 'label'})

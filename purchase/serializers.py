@@ -8,6 +8,7 @@ from rest_framework.exceptions import NotFound, PermissionDenied
 
 from accounting.serializers import PaymentAccountField
 from common.models import TradeStatus
+from audit_log.service import record_activity
 from common.serializers import AUDIT_FIELDS, CatalogSerializer
 from inventory.models import Currency
 from people.models import Party
@@ -210,6 +211,7 @@ class PurchaseOrderCreateSerializer(PurchaseOrderSerializer):
                 if 'id' in item:
                     if item['id'] in changed:
                         order.items.filter(pk=item['id']).update(**values, modified_by=actor, updated_at=timezone.now())
+                        record_activity(existing[item['id']], 'updated', actor=actor)
                 else:
                     PurchaseOrderItem.objects.create(purchase_order=order, create_by=actor, modified_by=actor, **values)
         return super().update(order, validated_data)

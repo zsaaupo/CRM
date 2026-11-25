@@ -1,0 +1,4 @@
+<tr class="{{ row_class }}">
+    <th scope="row" colspan="2">{{ label }}</th>
+    {% for value in amounts %}<td class="numeric">{{ value|floatformat:"2g" }}</td>{% endfor %}
+</tr>

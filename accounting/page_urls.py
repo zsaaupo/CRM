@@ -1,5 +1,6 @@
 from django.urls import path
 from .book_reports import DaybookView
+from .balance_sheet import BalanceSheetView
 
 from .models import TransferType
 from .page_views import (
@@ -13,6 +14,7 @@ app_name = 'accounting_pages'
 money_transfer_pages = {'resource': MONEY_TRANSFERS, 'transfer_type': TransferType.MONEY_TRANSFER}
 
 urlpatterns = [
+    path('balance-sheet/', BalanceSheetView.as_view(), name='balance-sheet'),
     path('daybook/', DaybookView.as_view(), name='daybook'),
     path('expense-categories/', AccountingListPageView.as_view(resource=CATEGORIES), name='expense-category-list'),
     path('expense-categories/add/', AccountingFormPageView.as_view(resource=CATEGORIES), name='add-expense-category'),

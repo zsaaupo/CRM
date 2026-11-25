@@ -5,6 +5,7 @@ from django.conf import settings
 from rest_framework import serializers
 
 from common.serializers import AUDIT_FIELDS, CatalogSerializer
+from people.models import Party
 from .models import Brand, Currency, Product, ProductCategory, ProductType, UnitOfMeasure
 
 
@@ -69,12 +70,13 @@ class ProductSerializer(CatalogSerializer):
     product_type = serializers.SlugRelatedField(slug_field='code', queryset=ProductType.objects.all(), required=False)
     status = serializers.SlugRelatedField(slug_field='code', queryset=ProductStatus.objects.all(), required=False)
     image = serializers.ImageField(required=False, allow_null=True)
+    supplier = serializers.PrimaryKeyRelatedField(queryset=Party.all_objects.all(), required=False, allow_null=True)
 
     class Meta:
         model = Product
         fields = [
             'id', 'public_id', 'sku', 'name', 'barcode', 'product_type', 'status',
-            'category', 'brand', 'unit', 'variant_of', 'description', 'image',
+            'category', 'brand', 'unit', 'supplier', 'variant_of', 'description', 'image',
             'manufacturer', 'manufacturer_part_number', 'attributes', 'currency',
             'cost_price', 'sale_price', 'minimum_sale_price', 'Whole_sale_price',
             'product_tax', 'is_returnable', *AUDIT_FIELDS[1:],
@@ -89,10 +91,11 @@ class ProductDetailSerializer(ProductSerializer):
     brand_name = serializers.CharField(source='brand.name', read_only=True, default=None)
     unit_name = serializers.CharField(source='unit.name', read_only=True)
     unit_code = serializers.CharField(source='unit.code', read_only=True)
+    supplier_name = serializers.CharField(source='supplier.name', read_only=True, default=None)
     currency_name = serializers.CharField(source='currency.name', read_only=True)
     variant_of_name = serializers.CharField(source='variant_of.name', read_only=True, default=None)
     variant_of_sku = serializers.CharField(source='variant_of.sku', read_only=True, default=None)
 
     class Meta(ProductSerializer.Meta):
         fields = [*ProductSerializer.Meta.fields, 'product_type_name', 'status_name', 'category_name',
-                  'brand_name', 'unit_name', 'unit_code', 'currency_name', 'variant_of_name', 'variant_of_sku']
+                  'brand_name', 'unit_name', 'unit_code', 'supplier_name', 'currency_name', 'variant_of_name', 'variant_of_sku']

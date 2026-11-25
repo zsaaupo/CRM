@@ -230,6 +230,10 @@ button:focus-visible { outline: 2px solid #059669; outline-offset: 3px; }
 .cash-flow-controls { display: flex; flex: 1 1 auto; min-width: 0; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 12px; }
 .cash-flow-controls .users-search { width: min(100%, 260px); }
 .cash-flow-account-filter .form-input { width: min(100%, 150px); min-height: 40px; padding: 9px 10px; font-size: 12px; }
+.audit-log-controls { display: grid; flex: 0 1 520px; min-width: 0; grid-template-columns: minmax(0, 1fr) min(44%, 168px); align-items: center; gap: 12px; }
+.audit-log-controls .users-search { width: 100%; min-width: 0; }
+.audit-log-record-filter { min-width: 0; }
+.audit-log-record-filter .form-input { min-height: 40px; padding: 9px 10px; font-size: 12px; }
 .expense-filter-row {
     display: flex;
     flex-wrap: nowrap;
@@ -308,6 +312,7 @@ button:focus-visible { outline: 2px solid #059669; outline-offset: 3px; }
     .users-toolbar { align-items: flex-start; flex-direction: column; padding: 20px; }
     .users-search { width: 100%; }
     .cash-flow-controls { width: 100%; justify-content: flex-start; }
+    .audit-log-controls { width: 100%; flex-basis: auto; gap: 8px; }
     .users-pagination { align-items: flex-start; flex-direction: column; padding: 18px 20px; }
     .workspace-topbar { height: 70px; padding: 0 18px; }
     .workspace-content { padding: 28px 18px; }

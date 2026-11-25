@@ -12,11 +12,13 @@ from common.models import TimeStampedModel
 class PartyQuerySet(models.QuerySet):
     def delete(self, *, actor=None):
         """Mark matching parties as deleted without removing rows or related records."""
+        from audit_log.service import soft_delete_with_audit
+
         now = timezone.now()
         changes = {'is_deleted': True, 'deleted_at': now, 'deleted_by': actor, 'updated_at': now}
         if actor is not None:
             changes['modified_by'] = actor
-        count = self.filter(is_deleted=False).update(**changes)
+        count = soft_delete_with_audit(self.filter(is_deleted=False), 'is_deleted', changes, 'deleted', actor)
         return count, {self.model._meta.label: count}
 
 

@@ -99,6 +99,8 @@ class Product(TimeStampedModel):
     category = models.ForeignKey(ProductCategory, on_delete=models.PROTECT, null=True, blank=True, related_name='products')
     brand = models.ForeignKey(Brand, on_delete=models.PROTECT, null=True, blank=True, related_name='products')
     unit = models.ForeignKey(UnitOfMeasure, on_delete=models.PROTECT, related_name='products')
+    supplier = models.ForeignKey('people.Party', on_delete=models.PROTECT, null=True, blank=True,
+                                 related_name='supplied_products')
     variant_of = models.ForeignKey('self', on_delete=models.PROTECT, null=True, blank=True, related_name='variants')
     description = models.TextField(blank=True)
     image = models.ImageField(upload_to='products_image/', blank=True)
@@ -137,6 +139,13 @@ class Product(TimeStampedModel):
                     errors[field] = 'This field cannot be blank.'
         if not isinstance(self.attributes, dict):
             errors['attributes'] = 'Product attributes must be a JSON object.'
+        if self.supplier_id:
+            party_model = self._meta.get_field('supplier').related_model
+            eligible = party_model.objects.filter(pk=self.supplier_id, is_supplier=True).exists()
+            if not eligible and (self._state.adding or not Product.objects.filter(
+                pk=self.pk, supplier_id=self.supplier_id,
+            ).exists()):
+                errors['supplier'] = 'Choose a non-deleted party marked as a supplier.'
         if self.variant_of_id:
             try:
                 parent = self.variant_of

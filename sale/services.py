@@ -7,6 +7,7 @@ from django.utils import timezone
 from rest_framework.exceptions import APIException, NotFound, PermissionDenied, ValidationError
 
 from accounting.services import lock_payment_account, post_completed_sale_payment
+from audit_log.service import bulk_create_with_audit, record_activity
 from inventory.models import Product
 from people.models import Party
 from report.services import document_context
@@ -107,7 +108,9 @@ def complete_sale(actor, sale_id):
                 stock.refresh_from_db(fields=['quantity'])
                 if stock.quantity != expected_quantity:
                     raise ValidationError({'quantity': 'The database cannot store this resulting stock quantity accurately.'})
+                record_activity(stock, 'stock_changed', actor=actor)
             post_completed_sale_payment(order, scope, actor, date=timezone.localdate(now))
+            record_activity(order, 'completed', actor=actor)
             return order, True
     except OperationalError as exc:
         if 'locked' in str(exc).lower() or 'deadlock' in str(exc).lower():
@@ -256,7 +259,7 @@ def apply_quotation_action(actor, pk, action, *, payment_account=None):
             **sales_values(quotation, today), payment_account=account, notes=quotation.terms,
             create_by=username, modified_by=username,
         )
-        SalesOrderItem.objects.bulk_create([
+        bulk_create_with_audit(SalesOrderItem.objects, [
             SalesOrderItem(sales_order=order, create_by=username, modified_by=username, **line_values(item))
             for item in items
         ])
@@ -279,7 +282,7 @@ def apply_quotation_action(actor, pk, action, *, payment_account=None):
             **sales_values(quotation, today), revised_from=quotation, valid_until=quotation_valid_until(today),
             terms=quotation.terms, notes=quotation.notes, create_by=username, modified_by=username,
         )
-        SalesQuotationItem.objects.bulk_create([
+        bulk_create_with_audit(SalesQuotationItem.objects, [
             SalesQuotationItem(quotation=revision, create_by=username, modified_by=username, **line_values(item))
             for item in quotation.items.all()
         ])

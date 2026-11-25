@@ -1,0 +1,13 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Balance Sheet</title>
+<style>
+@page {size:A4 landscape}
+.products {table-layout:auto}
+.products th,.products td {overflow-wrap:anywhere}
+.numeric {text-align:right}
+tfoot {display:table-row-group; font-weight:600}
+</style></head><body>
+<header class="document-title"><h1>Balance Sheet</h1>
+<p>Active accounts · {{ report.scope_label }} · {{ report.currency }}</p>
+<p>Accounts {{ report.start }}–{{ report.end }} of {{ report.count }}</p></header>
+{% include 'accounting/balance_sheet_table.html' with table=report pdf=True %}
+</body></html>

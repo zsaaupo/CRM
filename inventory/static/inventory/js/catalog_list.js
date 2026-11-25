@@ -14,6 +14,8 @@ function actionIcon(pathData) {
 export function catalogRow(record, columns, editUrlTemplate = "", onDelete = null, viewUrlTemplate = "", editDisabledField = "", onReceive = null, onComplete = null, deleteDisabledField = "", completeLabel = "sale") {
     const row = document.createElement("tr");
     row.dataset.recordId = String(record.id);
+    const recordLabel = record.name || record.full_name || record.order_number || record.transfer_number
+        || record.return_number || record.adjustment_number || record.code || record.id;
     for (const column of columns) {
         const cell = document.createElement("td");
         const value = record[column.key];
@@ -24,7 +26,7 @@ export function catalogRow(record, columns, editUrlTemplate = "", onDelete = nul
                 const view = document.createElement("a");
                 view.href = viewUrlTemplate.replace("/0/", `/${encodeURIComponent(record.id)}/`);
                 view.className = column.view_label ? "text-button" : "icon-button";
-                view.title = `View ${record.name || record.full_name || record.order_number || record.transfer_number || record.return_number || record.code || record.id}`;
+                view.title = `View ${recordLabel}`;
                 view.setAttribute("aria-label", view.title);
                 if (column.view_label) {
                     view.textContent = column.view_label;
@@ -43,8 +45,8 @@ export function catalogRow(record, columns, editUrlTemplate = "", onDelete = nul
                 } else link.href = editUrlTemplate.replace("/0/", `/${encodeURIComponent(record.id)}/`);
                 link.dataset.catalogEditAction = "";
                 link.className = "icon-button";
-                link.setAttribute("aria-label", `Edit ${record.name || record.full_name || record.order_number || record.transfer_number || record.return_number || record.code || record.id}`);
-                link.title = `Edit ${record.name || record.full_name || record.order_number || record.transfer_number || record.return_number || record.code || record.id}`;
+                link.title = `Edit ${recordLabel}`;
+                link.setAttribute("aria-label", link.title);
                 link.append(actionIcon("m16 3 5 5-12 12-6 1 1-6L16 3ZM13 6l5 5"));
                 actions.append(link);
             }
@@ -68,7 +70,7 @@ export function catalogRow(record, columns, editUrlTemplate = "", onDelete = nul
                 complete.className = "icon-button inventory-receive-button";
                 complete.dataset.catalogCompleteAction = "";
                 complete.disabled = record.is_completed !== false;
-                complete.title = `${record.is_completed === true ? "Completed" : `Complete ${completeLabel}`} ${record.order_number || record.transfer_number || record.return_number || record.id}`;
+                complete.title = `${record.is_completed === true ? "Completed" : `Complete ${completeLabel}`} ${record.order_number || record.transfer_number || record.return_number || record.adjustment_number || record.id}`;
                 complete.setAttribute("aria-label", complete.title);
                 complete.append(actionIcon("M4 4h16v16H4V4Zm4 8 3 3 5-6"));
                 complete.addEventListener("click", () => {
@@ -82,7 +84,7 @@ export function catalogRow(record, columns, editUrlTemplate = "", onDelete = nul
                 remove.className = "icon-button inventory-delete-button";
                 remove.dataset.catalogDeleteAction = "";
                 remove.disabled = Boolean(deleteDisabledField && record[deleteDisabledField] === true);
-                remove.title = `Delete ${record.name || record.full_name || record.order_number || record.transfer_number || record.return_number || record.code || record.id}`;
+                remove.title = `Delete ${recordLabel}`;
                 remove.setAttribute("aria-label", remove.title);
                 remove.append(actionIcon("M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"));
                 remove.addEventListener("click", () => {

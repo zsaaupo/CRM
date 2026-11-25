@@ -1,0 +1,55 @@
+{% extends 'layouts/dashboard.html' %}
+{% load static %}
+{% block title %}Balance Sheet | eManager{% endblock %}
+{% block extra_css %}
+<style>
+.balance-controls {display:flex; flex-wrap:wrap; align-items:end; gap:1rem; margin-bottom:1.5rem}
+.balance-report .numeric {text-align:right; font-variant-numeric:tabular-nums}
+.balance-report tfoot {font-weight:600}
+.balance-report .users-pagination {flex-wrap:wrap; gap:.6rem}
+.balance-report th a {color:inherit}
+@media print {
+    .workspace-sidebar,.workspace-topbar,.skip-link,.balance-controls,.balance-actions,.users-pagination,.filtered-total {display:none !important}
+    .workspace-main,.workspace-content {margin:0 !important; padding:0 !important}
+    .users-panel,.users-table-scroll {overflow:visible}
+    .users-table {min-width:0 !important; width:100%}
+    .balance-report tfoot {display:table-row-group}
+}
+</style>
+{% endblock %}
+{% block content %}
+<div class="workspace-content balance-report">
+    <div class="page-heading"><div><p class="page-eyebrow">Accounting</p>
+        <h1 class="page-title">Balance Sheet</h1>
+        <p class="page-description">All-time balances for active financial accounts.</p>
+    </div></div>
+    {% if form.errors %}
+        <div role="alert" class="form-error">{{ form.errors }} <a href="{{ request.path }}">Reset filters</a></div>
+    {% else %}
+    <form method="get" class="user-form-card balance-controls" data-balance-filters>
+        <label class="form-label">Account name<input type="search" class="form-input" name="search" value="{{ filters.search }}" maxlength="150"></label>
+        <label class="form-label">Rows per page<select class="form-input" name="limit">{% for limit in limits %}
+            <option value="{{ limit }}"{% if filters.limit == limit %} selected{% endif %}>{{ limit|capfirst }}</option>{% endfor %}</select></label>
+        <input type="hidden" name="sort_by" value="{{ filters.sort_by }}"><input type="hidden" name="sort_dir" value="{{ filters.sort_dir }}">
+        <button class="secondary-button" type="submit">Apply</button>
+    </form>
+    <section class="users-panel" data-balance-results>
+        <div class="users-toolbar"><div><h2 class="section-title">Account balances</h2>
+            <p>{{ report.currency }} · {{ report.scope_label }}</p></div>
+            <div class="balance-actions"><a class="secondary-button" href="{% querystring export='csv' %}" download>CSV</a>
+            <a class="secondary-button" href="{% querystring export='pdf' %}" download>PDF</a>
+            <button class="secondary-button" type="button" onclick="window.print()">Print</button></div>
+        </div>
+        <div class="users-table-scroll">{% include 'accounting/balance_sheet_table.html' %}</div>
+        <nav class="users-pagination" aria-label="Account pages">
+            <span role="status">Showing {{ report.start }}–{{ report.end }} of {{ report.count }} accounts</span>
+            {% if report.page > 1 %}<a href="{% querystring page=report.page|add:'-1' %}">Previous</a>{% endif %}
+            {% for number in report.page_numbers %}{% if number == report.page %}<strong aria-current="page">{{ number }}</strong>
+            {% elif number == '…' %}<span>…</span>{% else %}<a href="{% querystring page=number %}">{{ number }}</a>{% endif %}{% endfor %}
+            {% if report.page < report.pages %}<a href="{% querystring page=report.page|add:'1' %}">Next</a>{% endif %}
+        </nav>
+    </section>
+    {% endif %}
+</div>
+{% endblock %}
+{% block workspace_js %}<script type="module" src="{% static 'accounting/js/balance_sheet.js' %}"></script>{% endblock %}

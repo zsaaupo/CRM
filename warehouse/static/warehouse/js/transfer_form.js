@@ -1,12 +1,12 @@
 import { getJSON, postJSON, patchJSON } from "../../js/api.js";
 
-const headerFields = ['source_warehouse', 'destination_warehouse', 'transfer_date', 'notes'];
-const lineFields = ['product', 'unit', 'quantity'];
 const errorText = value => Array.isArray(value) ? value.map(errorText).join(' ')
     : value && typeof value === 'object' ? Object.values(value).map(errorText).join(' ') : String(value ?? '');
 
-export function initializeTransferForm(form) {
-    const find = name => form.querySelector(`[data-transfer-${name}]`);
+export function initializeStockForm(form, {kind, warehouseFields, dateField, lineFields, selectOnlyWarehouse = false}) {
+    const headerFields = [...warehouseFields, dateField, 'notes'];
+    const readOnlyMessage = `This ${kind} is complete and read-only. Return to the list.`;
+    const find = name => form.querySelector(`[data-${kind}-${name}]`);
     const field = name => form.elements.namedItem(name);
     const lines = find('lines');
     const status = find('status');
@@ -46,22 +46,28 @@ export function initializeTransferForm(form) {
     }
     function addLine(item = null, focus = false) {
         if (!ready || busy || readOnly) return;
-        const row = document.getElementById('transfer-line-template').content.firstElementChild.cloneNode(true);
-        const prefix = `transfer-item-${++lineId}`;
+        const row = document.getElementById(`${kind}-line-template`).content.firstElementChild.cloneNode(true);
+        const prefix = `${kind}-item-${++lineId}`;
         for (const input of row.querySelectorAll('[data-line-field], [data-line-unit-label]')) {
             if (input.type === 'hidden') continue;
             const name = input.dataset.lineField || 'unit'; input.id = `${prefix}-${name}`;
             row.querySelector(`[data-line-label="${name}"]`).setAttribute('for', input.id);
-            row.querySelector(`[data-line-error="${name}"]`).id = `${input.id}-error`;
-            input.setAttribute('aria-describedby', `${input.id}-error`);
+            const error = row.querySelector(`[data-line-error="${name}"]`);
+            if (error) {
+                error.id = `${input.id}-error`;
+                input.setAttribute('aria-describedby', error.id);
+            }
         }
         const product = row.querySelector('[data-line-field="product"]');
+        const unit = row.querySelector('[data-line-field="unit"]');
+        const unitLabel = row.querySelector('[data-line-unit-label]');
         choices(product, options.product);
-        product.addEventListener('change', () => {
-            const selected = options.product.find(record => String(record.value) === product.value);
-            row.querySelector('[data-line-field="unit"]').value = selected?.unit ?? '';
-            row.querySelector('[data-line-unit-label]').value = selected?.unit_label ?? '';
-        });
+        function showProductDetails(savedItem = null) {
+            const selected = options.product.find(record => String(record.value) === String(product.value));
+            if (unit) unit.value = savedItem ? savedItem.unit : selected?.unit ?? '';
+            unitLabel.value = savedItem && unit ? savedItem.unit_name || savedItem.unit_code || '' : selected?.unit_label ?? '';
+        }
+        product.addEventListener('change', () => showProductDetails());
         row.querySelector('[data-line-remove]').addEventListener('click', () => {
             if (busy || readOnly || lines.children.length <= 1) return;
             row.remove(); numberLines(); find('add-line').focus();
@@ -69,31 +75,32 @@ export function initializeTransferForm(form) {
         if (item) {
             row.dataset.itemId = String(item.id);
             lineFields.forEach(name => { row.querySelector(`[data-line-field="${name}"]`).value = item[name] ?? ''; });
-            row.querySelector('[data-line-unit-label]').value = item.unit_name || item.unit_code || '';
+            showProductDetails(item);
         }
         lines.append(row); numberLines(); if (focus) product.focus();
     }
     async function load() {
         if (loading || busy) return;
-        loading = true; ready = false; controls(); find('retry').hidden = true; message('Loading transfer details...', 'info');
+        loading = true; ready = false; controls(); find('retry').hidden = true; message(`Loading ${kind} details...`, 'info');
         try {
             const [data, record] = await Promise.all([getJSON(form.dataset.optionsUrl),
                 isEdit ? getJSON(form.dataset.detailUrl) : null]);
-            if (isEdit && (!record?.id || !Array.isArray(record.items))) throw new Error('Could not load all transfer products. Please try again.');
+            if (isEdit && (!record?.id || !Array.isArray(record.items))) throw new Error(`Could not load all ${kind} products. Please try again.`);
             readOnly = record?.is_completed === true;
-            if (readOnly) throw new Error('Completed transfers are read-only. Return to the transfer list.');
-            for (const name of ['source_warehouse', 'destination_warehouse', 'product']) {
-                if (!Array.isArray(data[name])) throw new Error('Could not load transfer choices. Please try again.');
+            if (readOnly) throw new Error(readOnlyMessage);
+            for (const name of [...warehouseFields, 'product']) {
+                if (!Array.isArray(data[name])) throw new Error(`Could not load ${kind} choices. Please try again.`);
             }
             if (!data.product.length) throw new Error('No products are available. Add products and try again.');
             options = data;
-            for (const name of ['source_warehouse', 'destination_warehouse']) {
+            for (const name of warehouseFields) {
                 choices(field(name), data[name]);
                 if (record && !data[name].some(row => String(row.value) === String(record[name]))) {
                     const historical = document.createElement('option'); historical.value = String(record[name]);
                     historical.textContent = `${record[`${name}_name`]} (existing)`; field(name).append(historical);
                 }
                 if (field(name).children.length <= 1) throw new Error('No warehouses are available. Add warehouses and try again.');
+                if (selectOnlyWarehouse && !record && data[name].length === 1) field(name).value = String(data[name][0].value);
             }
             if (record) headerFields.forEach(name => { field(name).value = record[name] ?? ''; });
             ready = true; lines.replaceChildren();
@@ -102,7 +109,7 @@ export function initializeTransferForm(form) {
             status.hidden = true;
         } catch (error) {
             message(error.status === 403 ? 'Your session or permissions have changed. Refresh this page and try again.'
-                : error.message || 'Could not load transfer details. Please try again.');
+                : error.message || `Could not load ${kind} details. Please try again.`);
             find('retry').hidden = false;
         } finally { loading = false; controls(); }
     }
@@ -145,13 +152,21 @@ export function initializeTransferForm(form) {
                 catch { /* Preserve the original error if access changed. */ }
             }
             showErrors(error.errors);
-            message(readOnly ? 'Completed transfers are read-only. Return to the transfer list.'
+            message(readOnly ? readOnlyMessage
                 : error.status === 403 ? 'Your session or permissions have changed. Refresh this page and try again.'
-                : error.errors ? `Please check the transfer details. ${errorText(error.errors)}`
-                : error.message || 'Could not save the transfer. Please try again.'); status.focus();
+                : error.errors ? `Please check the ${kind} details. ${errorText(error.errors)}`
+                : error.message || `Could not save the ${kind}. Please try again.`); status.focus();
         } finally { busy = false; controls(); }
     });
     return {ready: load()};
 }
+
+export function initializeTransferForm(form) {
+    return initializeStockForm(form, {
+        kind: 'transfer', warehouseFields: ['source_warehouse', 'destination_warehouse'],
+        dateField: 'transfer_date', lineFields: ['product', 'unit', 'quantity'],
+    });
+}
+
 const form = document.querySelector('[data-transfer-form]');
 if (form) initializeTransferForm(form);

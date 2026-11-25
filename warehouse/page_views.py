@@ -1,11 +1,12 @@
 from account.permissions import has_role_permissions
+from django.shortcuts import get_object_or_404
 from django.urls import reverse
 from django.utils import timezone
 
 from account.page_views import ProtectedAccountPageView
 from django.conf import settings
 from .activity import available_reports
-from .models import WareHouse
+from .models import StockAdjustment, WareHouse
 from .scope import WarehouseScopePageMixin, all_warehouse_access, has_warehouse_scope, scoped_queryset, warehouse_scope
 
 
@@ -240,4 +241,92 @@ class TransferDetailPageView(WarehouseScopePageMixin, ProtectedAccountPageView):
             'list_url': reverse('warehouse_pages:transfer-list'),
             'detail_api_url': reverse('warehouse:transfer-detail', args=[self.kwargs['pk']]),
         })
+        return context
+
+
+class AdjustmentPageView(WarehouseScopePageMixin, ProtectedAccountPageView):
+    permission_required = ('warehouse.view_stockadjustment',)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        if 'pk' in self.kwargs:
+            scope = warehouse_scope(self.request.user)
+            get_object_or_404(scoped_queryset(StockAdjustment.objects.all(), scope), pk=self.kwargs['pk'])
+            context['detail_api_url'] = reverse('warehouse:adjustment-detail', args=[self.kwargs['pk']])
+        context.update({
+            'page_section': 'warehouses', 'section_label': 'Warehouses',
+            'resource': {'singular': 'adjustment', 'plural': 'adjustments'},
+            'list_url': reverse('warehouse_pages:adjustment-list'),
+        })
+        return context
+
+
+class AdjustmentListPageView(AdjustmentPageView):
+    template_name = 'inventory/list.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        user = self.request.user
+        can_delete = has_role_permissions(user, ('warehouse.delete_stockadjustment',))
+        context.update({
+            'page_mode': 'adjustment-list', 'page_label': 'Stock adjustments', 'list_heading': 'Stock adjustments',
+            'hide_list_hint': True, 'list_description': 'Review drafts and completed stock adjustments.',
+            'add_url': reverse('warehouse_pages:add-adjustment'),
+            'list_api_url': reverse('warehouse:adjustment-list-view'),
+            'view_url_template': reverse('warehouse_pages:adjustment-detail', args=[0]),
+            'can_add': has_role_permissions(user, ('warehouse.add_stockadjustment',)), 'can_delete': can_delete,
+            'columns': [{'key': key, 'label': label, 'type': kind} for key, label, kind in [
+                ('adjustment_number', 'Adjustment number', 'text'), ('adjustment_date', 'Date', 'text'),
+                ('warehouse_name', 'Warehouse', 'text'), ('item_count', 'Lines', 'text'),
+                ('status_label', 'Status', 'text'), ('actions', 'Actions', 'edit'),
+            ]],
+        })
+        if has_role_permissions(user, ('warehouse.change_stockadjustment',)):
+            context.update({
+                'edit_url_template': reverse('warehouse_pages:edit-adjustment', args=[0]),
+                'edit_disabled_field': 'is_completed',
+                'complete_api_url': reverse('warehouse:adjustment-complete'),
+                'complete_id_field': 'adjustment_id', 'complete_result_key': 'stock_adjustment',
+                'complete_label': 'adjustment',
+            })
+        if can_delete:
+            context['delete_url_template'] = reverse('warehouse:adjustment-detail', args=[0])
+            context['delete_disabled_field'] = 'is_completed'
+        return context
+
+
+class AdjustmentAddPageView(AdjustmentPageView):
+    template_name = 'warehouse/adjustment_form.html'
+    permission_required = ('warehouse.view_stockadjustment', 'warehouse.add_stockadjustment')
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context.update({
+            'page_mode': 'adjustment-add', 'form_heading': 'Add stock adjustment', 'save_label': 'Save draft',
+            'create_api_url': reverse('warehouse:adjustment-list'),
+            'options_api_url': reverse('warehouse:adjustment-options'), 'today': timezone.localdate(),
+        })
+        return context
+
+
+class AdjustmentEditPageView(AdjustmentAddPageView):
+    permission_required = ('warehouse.view_stockadjustment', 'warehouse.change_stockadjustment')
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context.update({
+            'page_mode': 'adjustment-edit', 'form_heading': 'Edit stock adjustment',
+            'form_method': 'PATCH', 'save_label': 'Save changes',
+            'create_api_url': reverse('warehouse:adjustment-update', args=[self.kwargs['pk']]),
+            'options_api_url': reverse('warehouse:adjustment-edit-options'),
+        })
+        return context
+
+
+class AdjustmentDetailPageView(AdjustmentPageView):
+    template_name = 'warehouse/adjustment_detail.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['page_mode'] = 'adjustment-detail'
         return context
