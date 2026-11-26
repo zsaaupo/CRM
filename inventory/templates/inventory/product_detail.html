@@ -38,6 +38,9 @@
                 {% include 'includes/detail_field.html' with name='currency' label='Currency code' only %}
                 {% include 'includes/detail_field.html' with name='cost_price' label='Cost price' kind='money' only %}
                 {% include 'includes/detail_field.html' with name='sale_price' label='Sale price' kind='money' only %}
+                {% include 'includes/detail_field.html' with name='promo_price' label='Label promotional price' kind='money' only %}
+                {% include 'includes/detail_field.html' with name='promo_start_date' label='Promotion start date' only %}
+                {% include 'includes/detail_field.html' with name='promo_end_date' label='Promotion end date' only %}
                 {% include 'includes/detail_field.html' with name='minimum_sale_price' label='Minimum sale price' kind='money' only %}
                 {% include 'includes/detail_field.html' with name='Whole_sale_price' label='Wholesale price' kind='money' only %}
                 {% include 'includes/detail_field.html' with name='product_tax' label='Product tax' kind='percent' only %}

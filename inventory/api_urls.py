@@ -1,5 +1,6 @@
 from django.urls import path
 
+from .barcode_views import BarcodeSearchAPIView, PrintBarcodesAPIView
 from .api_views import (
     BrandUpdateAPIView, CurrencyUpdateAPIView, ProductCategoryUpdateAPIView,
     ProductTypeUpdateAPIView, ProductUpdateAPIView, StatusUpdateAPIView, UnitOfMeasureUpdateAPIView,
@@ -19,6 +20,8 @@ from .api_views import (
 app_name = 'inventory'
 
 urlpatterns = [
+    path('products/barcode-search/', BarcodeSearchAPIView.as_view(), name='barcode-search'),
+    path('products/print-barcode/', PrintBarcodesAPIView.as_view(), name='print-barcodes'),
     path('products/<int:pk>/options/', ProductEditOptionsAPIView.as_view(), name='product-edit-options'),
     path('products/<int:pk>/update/', ProductUpdateAPIView.as_view(), name='product-update'),
     path('categories/<int:pk>/update/', ProductCategoryUpdateAPIView.as_view(), name='category-update'),

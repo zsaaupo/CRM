@@ -1,0 +1,96 @@
+{% extends "layouts/dashboard.html" %}
+{% load static %}
+{% block title %}Print barcodes | eManager{% endblock %}
+
+{% block extra_css %}<link rel="stylesheet" href="{% static 'inventory/css/print_barcodes.css' %}">{% endblock %}
+
+{% block content %}
+<div class="workspace-content" data-barcode-page>
+    <div class="page-heading">
+        <div><p class="page-eyebrow">Inventory</p><h1 class="page-title">Print barcodes<span class="text-emerald-600">.</span></h1></div>
+        <a href="{% url 'inventory_pages:product-list' %}" class="secondary-button">Back to products</a>
+    </div>
+    <form class="barcode-form" data-barcode-form data-search-url="{{ search_url }}" data-print-url="{{ print_url }}" data-max-labels="{{ max_labels }}">
+        {% csrf_token %}
+        <section class="user-form-card" aria-labelledby="barcode-products-heading">
+            <h2 id="barcode-products-heading" class="section-title">Products</h2>
+            <label class="form-label mt-4" for="barcode-search">Add product</label>
+            <div class="barcode-search">
+                <span class="barcode-search-icon" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 5v14m4-14v14m3-14v14m4-14v14m2-14v14m3-14v14"/></svg></span>
+                <input id="barcode-search" class="form-input" type="text" placeholder="Search by product name, SKU, or barcode" autocomplete="off" maxlength="255"
+                       role="combobox" aria-autocomplete="list" aria-controls="barcode-results" aria-expanded="false" aria-describedby="barcode-search-help" data-barcode-search>
+                <div id="barcode-results" class="barcode-results" role="listbox" aria-label="Matching products" hidden data-barcode-results></div>
+            </div>
+            <p id="barcode-search-help" class="section-description">Scan a barcode or type a code and press Enter.</p>
+            <p class="section-description barcode-search-feedback" role="status" aria-live="polite" hidden data-barcode-search-status></p>
+            <div class="users-table-scroll barcode-queue" hidden data-barcode-queue>
+                <table class="users-table">
+                    <caption class="sr-only">Products queued for barcode printing</caption>
+                    <thead><tr><th scope="col">Name</th><th scope="col">Code</th><th scope="col">Quantity</th><th scope="col"><span class="sr-only">Remove</span></th></tr></thead>
+                    <tbody data-barcode-rows></tbody>
+                </table>
+            </div>
+            <p class="barcode-empty" data-barcode-empty>No products queued.</p>
+            <p class="section-description" role="status" hidden data-barcode-total></p>
+        </section>
+
+        <section class="user-form-card" aria-labelledby="barcode-content-heading">
+            <h2 id="barcode-content-heading" class="section-title">Information on label</h2>
+            <div class="barcode-field-grid">
+                {% for key, label in label_fields %}
+                <div class="barcode-field">
+                    <label class="inventory-check-label"><input class="inventory-check-input" type="checkbox" name="show_{{ key }}" checked data-field-toggle="{{ key }}">{{ label }}</label>
+                    <label class="barcode-size"><span class="sr-only">{{ label }} font size</span><input class="form-input" type="number" name="{{ key }}_size" min="6" max="36" step="1" value="15" required><span>px</span></label>
+                </div>
+                {% endfor %}
+            </div>
+            <label class="inventory-check-label mt-4"><input class="inventory-check-input" type="checkbox" name="auto_retail_barcodes" aria-describedby="barcode-symbology-help">Use EAN-13 or UPC-A for valid retail codes</label>
+            <p id="barcode-symbology-help" class="section-description">Labels use Code 128 by default.</p>
+        </section>
+
+        <section class="user-form-card" aria-labelledby="barcode-paper-heading">
+            <h2 id="barcode-paper-heading" class="section-title">Paper</h2>
+            <label class="form-label mt-4" for="barcode-preset">Paper size</label>
+            <select id="barcode-preset" class="form-input" name="preset" aria-describedby="thermal-print-help" required>
+                {% for key, label in presets %}<option value="{{ key }}"{% if key == '30_per_sheet' %} selected{% endif %}>{{ label }}</option>{% endfor %}
+                <option value="custom">Custom</option>
+            </select>
+            <p id="thermal-print-help" class="section-description" hidden data-thermal-help>Set the printer stock to 31.75 × 25.4 mm with a 3.18 mm gap.</p>
+            <fieldset class="user-form-section" hidden disabled data-custom-paper>
+                <legend class="section-title">Custom dimensions (mm)</legend>
+                <div class="user-form-grid">
+                    {% for name, label, value in custom_dimensions %}
+                    <div><label class="form-label" for="barcode-{{ name }}">{{ label }}</label>
+                        <input id="barcode-{{ name }}" class="form-input" type="number" name="{{ name }}" value="{{ value }}" min="{% if 'width' in name or 'height' in name %}0.001{% else %}0{% endif %}" max="1000" step="0.001" required>
+                    </div>
+                    {% endfor %}
+                </div>
+            </fieldset>
+        </section>
+        <div class="barcode-form-actions">
+            <button class="primary-button compact-primary" type="submit" data-barcode-submit>Generate preview</button>
+            <p class="form-status" role="status" aria-live="polite" hidden data-barcode-status></p>
+        </div>
+    </form>
+    <section class="user-form-card barcode-preview" aria-labelledby="barcode-preview-heading" hidden data-barcode-preview>
+        <div class="barcode-preview-heading">
+            <div><h2 id="barcode-preview-heading" class="section-title">Print preview</h2><p class="section-description">Print at Actual size (100%) using the selected paper size.</p></div>
+            <div class="barcode-preview-actions">
+                <a class="secondary-button" target="_blank" rel="noopener" data-barcode-open>Open PDF to print</a>
+                <a class="secondary-button" download="barcode-labels.pdf" data-barcode-download>Download PDF</a>
+            </div>
+        </div>
+        <iframe class="barcode-preview-frame" title="Printable barcode labels" data-barcode-frame></iframe>
+    </section>
+    <noscript><p class="form-error">Enable JavaScript to build and preview barcode labels.</p></noscript>
+    <template data-barcode-row>
+        <tr>
+            <td data-name></td><td data-code></td>
+            <td><input class="form-input barcode-quantity" type="number" min="1" max="{{ max_labels }}" step="1" value="1" required></td>
+            <td><button class="icon-button" type="button" data-remove><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M9 6V4h6v2M6 6l1 14h10l1-14M10 10v6m4-6v6"/></svg></button></td>
+        </tr>
+    </template>
+</div>
+{% endblock %}
+
+{% block workspace_js %}<script type="module" src="{% static 'inventory/js/print_barcodes.js' %}"></script>{% endblock %}

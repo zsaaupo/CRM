@@ -1,0 +1,126 @@
+.barcode-form {
+    display: grid;
+    gap: 1.25rem;
+}
+
+.barcode-search {
+    position: relative;
+}
+
+.barcode-search-icon {
+    position: absolute;
+    inset: 0 auto 0 .85rem;
+    display: grid;
+    align-items: center;
+    color: #57534e;
+    pointer-events: none;
+}
+
+.barcode-search .form-input {
+    padding-inline-start: 2.65rem;
+}
+
+.barcode-results {
+    position: absolute;
+    z-index: 2;
+    inset: calc(100% + .25rem) 0 auto;
+    max-height: 16rem;
+    overflow: auto;
+    background: #fff;
+    border: 1px solid #e7e5e4;
+    border-radius: .65rem;
+    box-shadow: 0 8px 24px #1c191719;
+}
+
+.barcode-results [role="option"] {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: .25rem 1rem;
+    padding: .65rem .85rem;
+    overflow-wrap: anywhere;
+    cursor: pointer;
+}
+
+.barcode-results [role="option"]:hover,
+.barcode-results [aria-selected="true"] {
+    background: #ecfdf5;
+}
+
+.barcode-result-code {
+    color: #57534e;
+    font-size: .85rem;
+}
+
+.barcode-queue {
+    margin-top: 1rem;
+    border: 1px solid #e7e5e4;
+    border-radius: .75rem;
+}
+
+.barcode-quantity {
+    min-width: 5rem;
+    max-width: 7rem;
+}
+
+.barcode-empty {
+    margin-top: 1rem;
+    padding: 1rem;
+    border: 1px dashed #d6d3d1;
+    border-radius: .75rem;
+    color: #57534e;
+}
+
+.barcode-field-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 235px), 1fr));
+    gap: .75rem 1rem;
+    margin-top: 1rem;
+}
+
+.barcode-field,
+.barcode-form-actions,
+.barcode-preview-heading,
+.barcode-preview-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .65rem 1rem;
+}
+
+.barcode-field,
+.barcode-preview-heading {
+    justify-content: space-between;
+}
+
+.barcode-field {
+    padding: .5rem .75rem;
+    border: 1px solid #e7e5e4;
+    border-radius: .75rem;
+}
+
+.barcode-size {
+    display: flex;
+    align-items: center;
+    gap: .35rem;
+    color: #57534e;
+    font-size: .875rem;
+}
+
+.barcode-size .form-input {
+    width: 4.5rem;
+}
+
+.barcode-preview {
+    margin-top: 1.25rem;
+}
+
+.barcode-preview-frame {
+    display: block;
+    width: 100%;
+    height: min(70vh, 58rem);
+    margin-top: 1rem;
+    border: 1px solid #d6d3d1;
+    border-radius: .65rem;
+}

@@ -40,6 +40,7 @@
             {% for item in inventory_menu %}
             <a href="{{ item.list_url }}" data-nav-item class="sidebar-sub-link {% if inventory_key == item.key and inventory_mode != 'add' %}is-current{% endif %}" {% if inventory_key == item.key and inventory_mode != 'add' %}aria-current="page"{% endif %}>{{ item.label }}</a>
             {% if item.key == 'product' and item.can_add %}<a href="{{ item.add_url }}" data-nav-item class="sidebar-sub-link {% if inventory_key == 'product' and inventory_mode == 'add' %}is-current{% endif %}" {% if inventory_key == 'product' and inventory_mode == 'add' %}aria-current="page"{% endif %}>Add product</a>{% endif %}
+            {% if item.key == 'product' %}<a href="{% url 'inventory_pages:print-barcodes' %}" data-nav-item class="sidebar-sub-link {% if inventory_mode == 'print-barcodes' %}is-current{% endif %}" {% if inventory_mode == 'print-barcodes' %}aria-current="page"{% endif %}>Print barcodes</a>{% endif %}
             {% endfor %}
         </div>
         {% endif %}

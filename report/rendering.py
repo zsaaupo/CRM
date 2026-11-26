@@ -58,16 +58,18 @@ def asset_fetcher(company):
     return fetch
 
 
-def render_pdf(document, template_name='report/document.html'):
+def render_pdf(document, template_name='report/document.html', *, stylesheet='document.css'):
     try:
         CSS, HTML, FontConfiguration = pdf_engine()
         fonts = FontConfiguration()
         fetch = asset_fetcher(document['company'])
-        css = CSS(string=(ASSETS / 'document.css').read_text(encoding='utf-8'),
-                  base_url='report-asset:///', url_fetcher=fetch, font_config=fonts)
+        stylesheets = []
+        if stylesheet:
+            stylesheets.append(CSS(string=(ASSETS / stylesheet).read_text(encoding='utf-8'),
+                                   base_url='report-asset:///', url_fetcher=fetch, font_config=fonts))
         html = render_to_string(template_name, {'report': document})
         return HTML(string=html, base_url='report-asset:///', url_fetcher=fetch).write_pdf(
-            stylesheets=[css], font_config=fonts, pdf_tags=True)
+            stylesheets=stylesheets, font_config=fonts, pdf_tags=True)
     except (ImportError, OSError, ValueError, RuntimeError):
         logger.exception('Could not render the report PDF.')
         raise ReportUnavailable() from None

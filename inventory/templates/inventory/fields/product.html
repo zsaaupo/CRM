@@ -33,6 +33,9 @@
         {% include 'inventory/includes/field.html' with name='currency' label='Currency' field_type='select' required=True only %}
         {% include 'inventory/includes/field.html' with name='cost_price' label='Cost price' field_type='number' required=True value='0' only %}
         {% include 'inventory/includes/field.html' with name='sale_price' label='Sale price' field_type='number' required=True value='0' only %}
+        {% include 'inventory/includes/field.html' with name='promo_price' label='Label promotional price' field_type='number' minimum='0.0001' only %}
+        {% include 'inventory/includes/field.html' with name='promo_start_date' label='Promotion start date' field_type='date' nullable_field=True only %}
+        {% include 'inventory/includes/field.html' with name='promo_end_date' label='Promotion end date' field_type='date' nullable_field=True only %}
         {% include 'inventory/includes/field.html' with name='minimum_sale_price' label='Minimum sale price' field_type='number' only %}
         {% include 'inventory/includes/field.html' with name='Whole_sale_price' label='Wholesale price' field_type='number' only %}
         {% include 'inventory/includes/field.html' with name='product_tax' label='Tax rate (%)' field_type='number' required=True value='0' maximum='100' only %}

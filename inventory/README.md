@@ -154,3 +154,22 @@ links products without changing prices or codes. It also creates the configured
 base currency with rate 1. Other migrated currencies have an unknown (null) rate
 until edited; no market rates are invented. New currencies require a positive
 rate (up to eight decimal places). Referenced currencies cannot be deleted.
+
+## Print barcodes
+
+Open **Inventory → Print barcodes** or choose **Print barcodes** from the
+Products list. Scan a code or select a search result, set the quantities and
+label options, then generate the PDF preview. Repeating a scan increases that
+product's quantity.
+
+Print the PDF at **Actual size (100%)** with the matching stock selected in the
+printer driver. The 30-label preset uses the Avery 5160 layout. The other
+Letter presets use centered grids with no gaps. Use **Custom** when your
+stock specifies different margins or gaps. For thermal stock, set the driver
+to 31.75 × 25.4 mm labels with a 3.18 mm feed gap. The PDF contains one page
+per thermal label.
+
+Some longer codes and combinations of font sizes require wider or taller
+stock. The preview form identifies the affected product when a label cannot
+fit. PDF generation uses the [shared report runtime](../report/README.md).
+See [Inventory API](API.md#barcode-labels) for the endpoints and print options.

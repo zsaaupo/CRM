@@ -112,6 +112,10 @@ class Product(TimeStampedModel):
     currency = models.ForeignKey(Currency, to_field='code', on_delete=models.PROTECT, related_name='products')
     cost_price = models.DecimalField(max_digits=18, decimal_places=4, default=Decimal('0'), validators=[MinValueValidator(0)])
     sale_price = models.DecimalField(max_digits=18, decimal_places=4, default=Decimal('0'), validators=[MinValueValidator(0)])
+    promo_price = models.DecimalField(max_digits=18, decimal_places=4, null=True, blank=True,
+                                      validators=[MinValueValidator(Decimal('0.0001'))])
+    promo_start_date = models.DateField(null=True, blank=True)
+    promo_end_date = models.DateField(null=True, blank=True)
     minimum_sale_price = models.DecimalField(max_digits=18, decimal_places=4, null=True, blank=True, validators=[MinValueValidator(0)])
     Whole_sale_price = models.DecimalField(max_digits=18, decimal_places=4, null=True, blank=True, validators=[MinValueValidator(0)])
     product_tax = models.DecimalField(max_digits=7, decimal_places=4, default=Decimal('0'), validators=[MinValueValidator(0), MaxValueValidator(100)])
@@ -124,6 +128,13 @@ class Product(TimeStampedModel):
             models.UniqueConstraint(fields=['barcode'], condition=~Q(barcode=''), name='inventory_product_barcode_unique'),
             models.CheckConstraint(condition=Q(cost_price__gte=0) & Q(sale_price__gte=0) & (Q(minimum_sale_price__isnull=True) | Q(minimum_sale_price__gte=0)) & (Q(Whole_sale_price__isnull=True) | Q(Whole_sale_price__gte=0)), name='inventory_product_prices_nonneg'),
             models.CheckConstraint(condition=Q(minimum_sale_price__isnull=True) | Q(sale_price__gte=F('minimum_sale_price')), name='inventory_product_price_floor'),
+            models.CheckConstraint(condition=Q(promo_price__isnull=True) | Q(promo_price__gt=0),
+                                   name='inventory_product_promo_positive'),
+            models.CheckConstraint(
+                condition=Q(promo_start_date__isnull=True) | Q(promo_end_date__isnull=True)
+                | Q(promo_start_date__lte=F('promo_end_date')),
+                name='inventory_product_promo_date_order',
+            ),
             models.CheckConstraint(condition=Q(product_tax__gte=0, product_tax__lte=100), name='inventory_product_tax_bounds'),
             models.CheckConstraint(condition=Q(variant_of__isnull=True) | ~Q(variant_of=F('pk')), name='inventory_product_not_own_variant'),
         ]
@@ -139,6 +150,8 @@ class Product(TimeStampedModel):
                     errors[field] = 'This field cannot be blank.'
         if not isinstance(self.attributes, dict):
             errors['attributes'] = 'Product attributes must be a JSON object.'
+        if self.promo_start_date and self.promo_end_date and self.promo_end_date < self.promo_start_date:
+            errors['promo_end_date'] = 'Choose an end date on or after the start date.'
         if self.supplier_id:
             party_model = self._meta.get_field('supplier').related_model
             eligible = party_model.objects.filter(pk=self.supplier_id, is_supplier=True).exists()
@@ -168,3 +181,12 @@ class Product(TimeStampedModel):
 
     def __str__(self):
         return f'{self.sku} — {self.name}'
+
+    @property
+    def label_code(self):
+        return self.barcode if self.barcode.strip() else self.sku
+
+    def has_active_promo(self, date):
+        return (self.promo_price is not None and self.promo_price > 0
+                and (self.promo_start_date is None or self.promo_start_date <= date)
+                and (self.promo_end_date is None or date <= self.promo_end_date))

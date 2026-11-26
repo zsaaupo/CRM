@@ -61,6 +61,15 @@ class InventoryPageView(ProtectedAccountPageView):
 class InventoryListPageView(InventoryPageView):
     template_name = 'inventory/list.html'
 
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        if self.resource_key == 'product':
+            context.update({
+                'secondary_url': reverse('inventory_pages:print-barcodes'),
+                'secondary_label': 'Print barcodes',
+            })
+        return context
+
 
 class ProductDetailPageView(InventoryPageView):
     template_name = 'inventory/product_detail.html'

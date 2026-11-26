@@ -1,0 +1,57 @@
+{% load l10n %}
+{% localize off %}
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Barcode labels</title>
+    <style>
+        @font-face { font-family: LabelSans; src: url('report-asset:///fonts/NotoSans-Regular.ttf'); }
+        @font-face { font-family: LabelSans; src: url('report-asset:///fonts/NotoSans-SemiBold.ttf'); font-weight: 600; }
+        @font-face { font-family: LabelBengali; src: url('report-asset:///fonts/NotoSansBengali-Regular.ttf'); }
+        @font-face { font-family: LabelBengali; src: url('report-asset:///fonts/NotoSansBengali-SemiBold.ttf'); font-weight: 600; }
+        @page { size: {{ report.paper.sheet_width }}mm {{ report.paper.sheet_height }}mm; margin: 0; }
+        html, body { margin: 0; padding: 0; }
+        body { color: #000; font-family: LabelSans, LabelBengali, sans-serif; line-height: {{ report.line_height }}; }
+        .sheet { position: relative; width: {{ report.paper.sheet_width }}mm; height: {{ report.paper.sheet_height }}mm; }
+        .sheet + .sheet { break-before: page; }
+        .label { position: absolute; width: {{ report.paper.label_width }}mm; height: {{ report.paper.label_height }}mm;
+                 box-sizing: border-box; padding: {{ report.label_padding }}mm; overflow: hidden; text-align: center; }
+        .name, .caption { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .name, .prices, .caption { margin: 0; }
+        .prices { white-space: nowrap; }
+        .regular-with-promo { text-decoration: line-through; }
+        .promo { font-weight: 600; }
+        .regular-with-promo + .promo { margin-left: {{ report.price_gap }}mm; }
+        .barcode { display: block; margin: 0 auto; }
+        .caption { font-size: {{ report.caption_size }}px; }
+    </style>
+</head>
+<body>
+{% for page in report.pages %}
+    <div class="sheet">
+        {% for slot in page %}
+        {% with label=slot.label barcode=slot.label.barcode %}
+        <div class="label" style="left: {{ slot.left }}mm; top: {{ slot.top }}mm">
+            {% if label.business_name %}<p class="name" style="font-size: {{ label.business_name.size }}px">{{ label.business_name.text }}</p>{% endif %}
+            {% if label.product_name %}<p class="name" style="font-size: {{ label.product_name.size }}px">{{ label.product_name.text }}</p>{% endif %}
+            {% if label.price or label.promo_price %}
+            <p class="prices" style="font-size: {{ label.price_size }}px">{% if label.price %}<span{% if label.promo_price %} class="regular-with-promo"{% endif %} style="font-size: {{ label.price.size }}px">{{ label.price.text }}</span>{% endif %}{% if label.promo_price %}<span class="promo" style="font-size: {{ label.promo_price.size }}px">{{ label.promo_price.text }}</span>{% endif %}</p>
+            {% endif %}
+            <svg class="barcode" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="{{ label.code }}" width="{{ barcode.width }}mm" height="{{ barcode.height }}mm" viewBox="0 0 {{ barcode.width }} {{ barcode.height }}">
+                {% for bar in barcode.bars %}
+                <rect x="{{ bar.x }}" y="0" width="{{ bar.width }}" height="{{ bar.height }}"/>
+                {% endfor %}
+                {% for digit_group in barcode.digits %}
+                <text x="{{ digit_group.x }}" y="{{ barcode.digits_y }}" font-family="sans-serif" font-size="{{ barcode.digits_size }}" text-anchor="middle">{{ digit_group.text }}</text>
+                {% endfor %}
+            </svg>
+            {% if barcode.caption %}<p class="caption">{{ barcode.caption }}</p>{% endif %}
+        </div>
+        {% endwith %}
+        {% endfor %}
+    </div>
+{% endfor %}
+</body>
+</html>
+{% endlocalize %}

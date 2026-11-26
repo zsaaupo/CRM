@@ -78,7 +78,8 @@ class ProductSerializer(CatalogSerializer):
             'id', 'public_id', 'sku', 'name', 'barcode', 'product_type', 'status',
             'category', 'brand', 'unit', 'supplier', 'variant_of', 'description', 'image',
             'manufacturer', 'manufacturer_part_number', 'attributes', 'currency',
-            'cost_price', 'sale_price', 'minimum_sale_price', 'Whole_sale_price',
+            'cost_price', 'sale_price', 'promo_price', 'promo_start_date', 'promo_end_date',
+            'minimum_sale_price', 'Whole_sale_price',
             'product_tax', 'is_returnable', *AUDIT_FIELDS[1:],
         ]
         read_only_fields = [*AUDIT_FIELDS, 'public_id']

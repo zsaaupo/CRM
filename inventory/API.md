@@ -252,3 +252,36 @@ The product detail API includes read-only `product_type_name`, `status_name`,
 `variant_of_name` and `variant_of_sku` alongside the existing relation codes/IDs.
 Optional relation labels are null when not set. These labels do not require
 catalog-management permissions and cannot be changed through product writes.
+
+## Barcode labels
+
+Both endpoints require an active session and `inventory.view_product`.
+`GET /inventory/api/products/barcode-search/?q=NOTE` returns up to 20 matches by
+name, SKU, or barcode. Use `exact=1` to match a scanned code. If more than one
+product matches, present the choices to the operator. Exact lookup also
+recognizes a valid UPC-A with its equivalent EAN-13 leading zero. The returned
+`code` is what will be printed.
+
+`POST /inventory/api/products/print-barcode/` requires a CSRF token and returns
+an inline `application/pdf` on success and JSON for errors.
+
+```json
+{
+  "items": [{"product_id": 101, "quantity": 10}],
+  "label_config": {"show_price": true, "price_size": 12, "auto_retail_barcodes": false},
+  "paper_config": {"preset": "30_per_sheet", "custom": null}
+}
+```
+
+Each batch supports 500 labels. The four label fields default to visible at 15 px.
+Each field has a `show_<field>` boolean and a `<field>_size` integer from 6 to
+36 px. The fields are `product_name`, `price`, `promo_price`, and `business_name`.
+
+Preset keys are `20_per_sheet`, `30_per_sheet`, `32_per_sheet`, `40_per_sheet`,
+`50_per_sheet`, `continuous_31_25`, and `custom`. The custom object specifies
+`sheet_width`, `sheet_height`, `label_width`, `label_height`, `margin_top`,
+`margin_bottom`, `margin_left`, `margin_right`, `gap_x`, and `gap_y` in millimeters.
+
+Product writes accept optional `promo_price`, `promo_start_date`, and
+`promo_end_date` for labels. A promotion with a positive price is active on
+its start and end dates. Empty date bounds are open.
