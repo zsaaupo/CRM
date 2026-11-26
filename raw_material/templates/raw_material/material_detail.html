@@ -1,0 +1,45 @@
+{% extends 'layouts/dashboard.html' %}
+{% load static %}
+{% block title %}{{ page_label }} | eManager{% endblock %}
+{% block content %}
+<div class="workspace-content" data-record-detail data-api-url="{{ detail_api_url }}" data-title-field="name" data-login-url="{% url 'account_pages:login' %}">
+    <div class="page-heading">
+        <div class="min-w-0 max-w-full"><p class="page-eyebrow">Raw Material</p><h1 class="page-title break-all"><span data-record-title>{{ page_label }}</span><span class="text-emerald-600">.</span></h1></div>
+        <div class="flex flex-wrap gap-3">
+            <a href="{{ list_url }}" class="secondary-button">Back to raw materials <span aria-hidden="true">&rarr;</span></a>
+            {% if edit_url %}<a href="{{ edit_url }}" class="primary-button compact-primary">Edit raw material</a>{% endif %}
+        </div>
+    </div>
+    {% include 'includes/detail_status.html' %}
+    <div data-record-content hidden>
+        <section class="user-form-card mb-6" aria-labelledby="material-information-heading">
+            <h2 id="material-information-heading" class="section-title mb-6">Material information</h2>
+            <dl class="profile-grid">
+                {% include 'includes/detail_field.html' with name='name' label='Name' only %}
+                {% include 'includes/detail_field.html' with name='sku' label='SKU' only %}
+                {% include 'includes/detail_field.html' with name='barcode' label='Barcode' only %}
+                {% include 'includes/detail_field.html' with name='status_name' label='Status' only %}
+                {% include 'includes/detail_field.html' with name='category_name' label='Category' only %}
+                {% include 'includes/detail_field.html' with name='supplier_name' label='Preferred supplier' only %}
+                {% include 'includes/detail_field.html' with name='unit_name' label='Base unit' only %}
+                {% include 'includes/detail_field.html' with name='unit_code' label='Unit code' only %}
+                {% include 'includes/detail_field.html' with name='cost_price' label='Cost per base unit' kind='money' only %}
+                {% include 'includes/detail_field.html' with name='description' label='Description' full=True only %}
+                {% include 'includes/detail_field.html' with name='attributes' label='Specifications' kind='json' full=True only %}
+            </dl>
+        </section>
+        <section class="user-form-card mb-6" aria-labelledby="material-stock-heading">
+            <h2 id="material-stock-heading" class="section-title mb-6">Warehouse stock</h2>
+            <dl class="profile-grid">
+                {% include 'includes/detail_field.html' with name='warehouse_name' label='Warehouse' only %}
+                {% include 'includes/detail_field.html' with name='quantity' label='On hand' only %}
+                {% include 'includes/detail_field.html' with name='reorder_level' label='Reorder level' only %}
+                {% include 'includes/detail_field.html' with name='low_stock' label='Low stock' kind='boolean' only %}
+            </dl>
+        </section>
+        {% include 'includes/detail_audit.html' %}
+    </div>
+    <noscript><p class="form-error">Enable JavaScript to load raw material details.</p></noscript>
+</div>
+{% endblock %}
+{% block workspace_js %}<script type="module" src="{% static 'raw_material/js/material_detail.js' %}"></script>{% endblock %}

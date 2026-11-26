@@ -10,6 +10,7 @@ from django.db.models import F, Q
 from django.utils import timezone
 
 from common.models import TradeStatus, TimeStampedModel
+from inventory.models import RAW_MATERIAL_TYPE
 from .instrument_models import Coupon, CouponRedemption, GiftCard, GiftCardTransaction
 
 
@@ -74,6 +75,8 @@ class SalesLineAmounts:
                 product = self.product
             except self._meta.get_field('product').related_model.DoesNotExist:
                 return
+            if product.product_type_id == RAW_MATERIAL_TYPE:
+                raise ValidationError({'product': 'Choose a sellable product.'})
             if self.unit_id != product.unit_id:
                 raise ValidationError({'unit': 'Use the product unit. Unit conversion is not supported yet.'})
 

@@ -94,8 +94,8 @@ def validate_input(serializer, data):
 
 
 def products():
-    return Product.objects.filter(currency_id=settings.INVENTORY_BASE_CURRENCY, currency__is_active=True,
-                                  status_id='active', status__is_active=True)
+    return Product.objects.regular_products().filter(currency_id=settings.INVENTORY_BASE_CURRENCY, currency__is_active=True,
+                                                     status_id='active', status__is_active=True)
 
 
 def price(product, date):

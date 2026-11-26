@@ -17,6 +17,7 @@ from accounting.services import (
 )
 from hrm.models import Employee
 from hrm.permissions import PAYROLL_DETAIL, PAYROLL_PAYMENT_VIEW, REVIEW_LEAVE_PERMISSION
+from inventory.models import RAW_MATERIAL_TYPE
 from warehouse.models import WareHouse
 from warehouse.scope import all_warehouse_access, warehouse_scope
 from .models import AuditLog
@@ -44,6 +45,7 @@ POLICIES = dict.fromkeys('''
 '''.split(), Visibility())
 POLICIES.update(dict.fromkeys('''
     warehouse.stock warehouse.stockadjustment warehouse.stockcount purchase.purchaseorder sale.salesorder sale.salesquotation
+    raw_material.rawmaterial
     accounting.expense accounting.income accounting.financialaccount
 '''.split(), Visibility(('warehouse_id',))))
 POLICIES.update({
@@ -268,6 +270,8 @@ def saved(sender, instance, created, raw, using, update_fields, **kwargs):
     if raw:
         return
     resource = sender._meta.label_lower
+    if resource == 'inventory.product' and instance.product_type_id == RAW_MATERIAL_TYPE:
+        return
     fields = set(update_fields or ())
     if fields and ((resource == 'auth.user' and fields <= {'last_login'}) or (
         resource == 'account.account' and fields <= {'otp', 'otp_expires_at', 'updated_at'}
@@ -288,6 +292,8 @@ def saved(sender, instance, created, raw, using, update_fields, **kwargs):
 
 
 def deleted(sender, instance, using, **kwargs):
+    if sender._meta.label_lower == 'inventory.product' and instance.product_type_id == RAW_MATERIAL_TYPE:
+        return
     record_activity(instance, 'deleted', using=using)
 
 

@@ -3,7 +3,7 @@ from django.core.exceptions import PermissionDenied
 from django.db.models import Q
 
 from people.models import Party
-from .models import Brand, Currency, Product, ProductCategory, ProductType, UnitOfMeasure
+from .models import RAW_MATERIAL_TYPE, Brand, Currency, Product, ProductCategory, ProductType, UnitOfMeasure
 
 
 class CatalogAdmin(admin.ModelAdmin):
@@ -37,7 +37,7 @@ class ProductLookupAdmin(CatalogAdmin):
 
 @admin.register(ProductType)
 class ProductTypeAdmin(ProductLookupAdmin):
-    default_codes = ('goods',)
+    default_codes = ('goods', RAW_MATERIAL_TYPE)
 
 
 @admin.register(ProductCategory)
@@ -87,8 +87,14 @@ class ProductAdmin(CatalogAdmin):
         ('Audit', {'fields': ('create_by', 'modified_by', 'created_at', 'updated_at'), 'classes': ('collapse',)}),
     ]
 
+    def get_queryset(self, request):
+        return super().get_queryset(request).regular_products()
+
     def get_form(self, request, obj=None, **kwargs):
         form = super().get_form(request, obj, **kwargs)
+        if 'product_type' in form.base_fields:
+            field = form.base_fields['product_type']
+            field.queryset = field.queryset.exclude(code=RAW_MATERIAL_TYPE)
         if 'supplier' in form.base_fields:
             current = obj.supplier_id if obj else None
             form.base_fields['supplier'].queryset = Party.all_objects.filter(

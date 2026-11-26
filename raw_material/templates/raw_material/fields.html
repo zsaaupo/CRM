@@ -1,0 +1,13 @@
+{% include 'inventory/includes/field.html' with name='name' label='Material name' required=True maxlength=255 %}
+{% include 'inventory/includes/field.html' with name='sku' label='SKU' required=True maxlength=64 %}
+{% include 'inventory/includes/field.html' with name='warehouse' label='Warehouse' field_type='select' required=True locked=warehouse_locked value=warehouse_default hint=warehouse_hint %}
+{% include 'inventory/includes/field.html' with name='unit' label='Base unit' field_type='select' required=True %}
+{% include 'inventory/includes/field.html' with name='category' label='Category' field_type='select' %}
+{% include 'inventory/includes/field.html' with name='supplier' label='Preferred supplier' field_type='select' %}
+{% include 'inventory/includes/field.html' with name='status' label='Status' field_type='select' required=True value='draft' %}
+{% include 'inventory/includes/field.html' with name='currency' label='Currency' field_type='select' required=True value=base_currency %}
+{% include 'inventory/includes/field.html' with name='cost_price' label='Cost per base unit' field_type='number' required=True value='0' %}
+{% include 'inventory/includes/field.html' with name='reorder_level' label='Reorder level' field_type='number' step='0.000001' hint='Low stock starts at this quantity. Leave blank to disable the threshold.' %}
+{% include 'inventory/includes/field.html' with name='barcode' label='Barcode' maxlength=64 %}
+{% include 'inventory/includes/field.html' with name='description' label='Description' field_type='textarea' %}
+{% include 'inventory/includes/field.html' with name='attributes' label='Specifications' field_type='textarea' json_field=True hint='Enter a JSON object, for example {"thickness_mm": 1.2}.' %}

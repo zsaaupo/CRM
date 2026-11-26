@@ -9,6 +9,14 @@ from django.db.models.functions import Lower, Trim
 from common.models import ProductStatus, TimeStampedModel
 
 
+RAW_MATERIAL_TYPE = 'raw-material'
+
+
+class ProductQuerySet(models.QuerySet):
+    def regular_products(self):
+        return self.exclude(product_type_id=RAW_MATERIAL_TYPE)
+
+
 class ProductCategory(TimeStampedModel):
     name = models.CharField(max_length=150)
     code = models.CharField(max_length=40, unique=True)
@@ -89,6 +97,8 @@ class Currency(TimeStampedModel):
 
 
 class Product(TimeStampedModel):
+    objects = ProductQuerySet.as_manager()
+
     # Identification and classification. Each sellable variant gets its own SKU.
     public_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     sku = models.CharField(max_length=64, unique=True)

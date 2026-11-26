@@ -201,7 +201,7 @@ class SalesOptionsAPIView(SalesConcurrencyMixin, WarehouseScopeAPIMixin, BaseAPI
                  'sale_price': str(row.sale_price),
                  'minimum_sale_price': str(row.minimum_sale_price) if row.minimum_sale_price is not None else None,
                  'tax_rate': str(row.product_tax)}
-                for row in Product.objects.select_related('unit').order_by('name', 'pk')
+                for row in Product.objects.regular_products().select_related('unit').order_by('name', 'pk')
             ]
         if self.include_payment_accounts:
             options['payment_account'] = payment_account_options(available_payment_accounts(request.warehouse_scope))

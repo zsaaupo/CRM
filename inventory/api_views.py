@@ -11,7 +11,7 @@ from rest_framework.response import Response
 from account.permissions import HasRequiredPermissions
 from common.view import BaseDetailAPIView, BaseListAPIView, BaseListCreateAPIView, BaseUpdateAPIView
 from people.models import Party
-from .models import Brand, Currency, Product, ProductCategory, ProductType, UnitOfMeasure
+from .models import RAW_MATERIAL_TYPE, Brand, Currency, Product, ProductCategory, ProductType, UnitOfMeasure
 from .serializers import (
     BrandSerializer, CurrencySerializer, ProductCategorySerializer, ProductSerializer,
     ProductDetailSerializer, ProductTypeSerializer, StatusSerializer, UnitOfMeasureSerializer,
@@ -28,7 +28,7 @@ class ProductOptionsAPIView(APIView):
     http_method_names = ['get', 'head', 'options']
 
     def get_base_products(self):
-        return Product.objects.filter(variant_of__isnull=True)
+        return Product.objects.regular_products().filter(variant_of__isnull=True)
 
     def get_suppliers(self):
         return Party.objects.filter(is_supplier=True)
@@ -43,20 +43,20 @@ class ProductOptionsAPIView(APIView):
         return choices
 
     def get(self, request):
-        def choices(model, value_field='pk', include_code=False):
+        def choices(queryset, value_field='pk', include_code=False):
             fields = [value_field, 'name'] + (['code'] if include_code and value_field != 'code' else [])
             return [{'value': row[value_field],
                      'label': f"{row['name']} ({row['code']})" if include_code else row['name']}
-                    for row in model.objects.order_by('name', 'pk').values(*fields)]
+                    for row in queryset.order_by('name', 'pk').values(*fields)]
 
         return Response({
-            'product_type': choices(ProductType, 'code'),
-            'status': choices(ProductStatus, 'code'),
-            'category': choices(ProductCategory),
-            'brand': choices(Brand),
-            'unit': choices(UnitOfMeasure, include_code=True),
+            'product_type': choices(ProductType.objects.exclude(code=RAW_MATERIAL_TYPE), 'code'),
+            'status': choices(ProductStatus.objects.all(), 'code'),
+            'category': choices(ProductCategory.objects.all()),
+            'brand': choices(Brand.objects.all()),
+            'unit': choices(UnitOfMeasure.objects.all(), include_code=True),
             'supplier': self.supplier_choices(),
-            'currency': choices(Currency, 'code', include_code=True),
+            'currency': choices(Currency.objects.all(), 'code', include_code=True),
             'variant_of': [{'value': row['pk'], 'label': f"{row['sku']} — {row['name']}"}
                            for row in self.get_base_products()
                            .order_by('name', 'pk').values('pk', 'sku', 'name')],
@@ -67,7 +67,7 @@ class ProductEditOptionsAPIView(ProductOptionsAPIView):
     required_permissions = ('inventory.view_product', 'inventory.change_product')
 
     def get(self, request, pk):
-        self.product = get_object_or_404(Product, pk=pk)
+        self.product = get_object_or_404(Product.objects.regular_products(), pk=pk)
         return super().get(request)
 
     def get_base_products(self):
@@ -81,14 +81,16 @@ class ProductEditOptionsAPIView(ProductOptionsAPIView):
 
 class ProductListCreateAPIView(BaseListCreateAPIView):
     serializer_class = ProductSerializer
-    queryset = Product.objects.select_related('product_type', 'status', 'category', 'brand', 'unit', 'variant_of', 'currency')
+    queryset = Product.objects.regular_products().select_related(
+        'product_type', 'status', 'category', 'brand', 'unit', 'variant_of', 'currency',
+    )
     response_key = 'product'
     search_fields = ['name', 'sku', 'barcode', 'manufacturer', 'manufacturer_part_number']
 
 
 class ProductDetailAPIView(BaseDetailAPIView):
     serializer_class = ProductDetailSerializer
-    queryset = Product.objects.select_related(
+    queryset = Product.objects.regular_products().select_related(
         'product_type', 'status', 'category', 'brand', 'unit', 'supplier', 'variant_of', 'currency',
     )
 
@@ -138,7 +140,7 @@ class ProductTypeListCreateAPIView(BaseListCreateAPIView):
 class ProductTypeDetailAPIView(BaseDetailAPIView):
     serializer_class = ProductTypeSerializer
     queryset = ProductType.objects.all()
-    protected_codes = ('goods',)
+    protected_codes = ('goods', RAW_MATERIAL_TYPE)
 
 
 class StatusListCreateAPIView(BaseListCreateAPIView):
@@ -156,7 +158,7 @@ class StatusDetailAPIView(BaseDetailAPIView):
 
 class ProductListAPIView(BaseListAPIView):
     serializer_class = ProductSerializer
-    queryset = Product.objects.select_related('product_type', 'status', 'category', 'brand', 'unit', 'variant_of', 'currency')
+    queryset = ProductListCreateAPIView.queryset
     search_fields = ['name', 'sku', 'barcode', 'manufacturer', 'manufacturer_part_number']
 
 

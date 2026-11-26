@@ -6,7 +6,7 @@ from rest_framework import serializers
 
 from common.serializers import AUDIT_FIELDS, CatalogSerializer
 from people.models import Party
-from .models import Brand, Currency, Product, ProductCategory, ProductType, UnitOfMeasure
+from .models import RAW_MATERIAL_TYPE, Brand, Currency, Product, ProductCategory, ProductType, UnitOfMeasure
 
 
 class ProductCategorySerializer(CatalogSerializer):
@@ -71,6 +71,11 @@ class ProductSerializer(CatalogSerializer):
     status = serializers.SlugRelatedField(slug_field='code', queryset=ProductStatus.objects.all(), required=False)
     image = serializers.ImageField(required=False, allow_null=True)
     supplier = serializers.PrimaryKeyRelatedField(queryset=Party.all_objects.all(), required=False, allow_null=True)
+
+    def validate_product_type(self, value):
+        if value.code == RAW_MATERIAL_TYPE:
+            raise serializers.ValidationError('Use the Raw Material catalog to create raw materials.')
+        return value
 
     class Meta:
         model = Product

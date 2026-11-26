@@ -47,6 +47,7 @@ INSTALLED_APPS = [
     'hrm',
     'accounting',
     'audit_log',
+    'raw_material',
 ]
 
 MIDDLEWARE = [
@@ -73,6 +74,7 @@ TEMPLATES = [
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
                 'inventory.context_processors.inventory_navigation',
+                'raw_material.context_processors.raw_material_navigation',
                 'warehouse.context_processors.warehouse_navigation',
                 'purchase.context_processors.purchase_navigation',
                 'sale.context_processors.sale_navigation',

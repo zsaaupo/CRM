@@ -111,7 +111,7 @@ class BarcodeSearchAPIView(BaseAPIMixin, APIView):
         if len(query) < (1 if exact else 2) or len(query) > 255:
             return Response([])
         identity = Q(barcode__iexact=query) | Q(sku__iexact=query)
-        products = Product.objects.all()
+        products = Product.objects.regular_products()
         if exact:
             # Some scanners report UPC-A with the equivalent EAN-13 leading zero.
             if (len(query) == 12 or query.startswith('0')) and retail_barcode(query) is not None:
@@ -146,7 +146,9 @@ class PrintBarcodesAPIView(BaseAPIMixin, APIView):
         serializer.is_valid(raise_exception=True)
         job = serializer.validated_data
         items = job['items']
-        products = Product.objects.select_related('currency').in_bulk([item['product_id'] for item in items])
+        products = Product.objects.regular_products().select_related('currency').in_bulk(
+            [item['product_id'] for item in items],
+        )
         if len(products) != len(items):
             raise serializers.ValidationError({'items': 'Remove products that are no longer in the catalog.'})
         try:
