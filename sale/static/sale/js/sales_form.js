@@ -1,4 +1,4 @@
-import { getJSON, postJSON, patchJSON } from "../../js/api.js";
+import { getJSON, postJSON, patchJSON, postFormData } from "../../js/api.js";
 
 const headerFields = ["customer", "customer_reference", "warehouse", "billing_address", "shipping_address", "order_date", "expected_delivery_date", "currency", "exchange_rate", "status", "shipping_cost", "notes", "payment_account"];
 const quotationFields = [...headerFields.filter(name => name !== "status" && name !== "payment_account"), "valid_until", "terms"];
@@ -37,6 +37,7 @@ export function initializeSalesForm(form) {
     const addButton = find("add-line");
     const retry = find("retry");
     const lines = find("lines");
+    const csv = find("csv");
     const spinner = form.querySelector("[data-submit-spinner]");
     const label = form.querySelector("[data-submit-label]");
     const field = (name) => form.elements.namedItem(name);
@@ -55,6 +56,12 @@ export function initializeSalesForm(form) {
         status.dataset.tone = tone;
         status.textContent = text;
         status.hidden = false;
+    }
+
+    function setControlsDisabled(disabled) {
+        header.disabled = submit.disabled = disabled;
+        if (addButton) addButton.disabled = disabled;
+        if (csv) csv.disabled = disabled;
     }
 
     function choices(select, records, placeholder) {
@@ -79,7 +86,7 @@ export function initializeSalesForm(form) {
     }
 
     function updateLineNumbers() {
-        const rows = [...lines.querySelectorAll("[data-sale-line]")];
+        const rows = [...(lines?.querySelectorAll("[data-sale-line]") ?? [])];
         rows.forEach((row, index) => {
             const title = `Item ${index + 1}`;
             row.querySelector("[data-line-heading]").textContent = title;
@@ -143,7 +150,7 @@ export function initializeSalesForm(form) {
         const base = field("currency").value === options.base_currency;
         field("exchange_rate").value = base ? "1.00000000" : currency?.exchange_rate ?? "";
         field("exchange_rate").readOnly = base;
-        for (const row of lines.children) {
+        for (const row of lines?.children ?? []) {
             const product = options.product.find((item) => String(item.value) === row.querySelector('[data-line-field="product"]').value);
             row.querySelector('[data-line-field="unit_price"]').value = product?.currency === field('currency').value ? product.sale_price : '';
         }
@@ -167,7 +174,7 @@ export function initializeSalesForm(form) {
         if (loading || busy) return;
         loading = true;
         ready = false;
-        header.disabled = submit.disabled = addButton.disabled = true;
+        setControlsDisabled(true);
         retry.hidden = true;
         form.setAttribute("aria-busy", "true");
         message(`Loading ${documentName} choices...`, "info");
@@ -181,7 +188,9 @@ export function initializeSalesForm(form) {
             readOnly = isLocked(record);
             if (readOnly) throw new Error(lockedMessage);
             if (!quotation && !Array.isArray(data.payment_account)) throw new Error("Could not load payment accounts. Try again.");
-            for (const name of quotation ? ["currency", "product"] : ["currency", "status", "product"]) {
+            const requiredOptions = quotation ? ["currency"] : ["currency", "status"];
+            if (!csv) requiredOptions.push("product");
+            for (const name of requiredOptions) {
                 if (!Array.isArray(data[name])) throw new Error(`Could not load ${documentName} choices. Please try again.`);
                 if (!data[name].length) throw new Error(`No ${name} records are available. Add the missing records or contact your administrator, then try again.`);
             }
@@ -224,10 +233,12 @@ export function initializeSalesForm(form) {
             if (!quotation) updatePaymentAccounts(record?.payment_account ?? "");
             updateDateLimits();
             ready = true;
-            lines.replaceChildren();
-            for (const item of quotation ? record?.items || [] : items) addLine(false, item);
-            if (!lines.children.length) addLine();
-            header.disabled = submit.disabled = addButton.disabled = false;
+            if (lines) {
+                lines.replaceChildren();
+                for (const item of quotation ? record?.items || [] : items) addLine(false, item);
+                if (!lines.children.length) addLine();
+            }
+            setControlsDisabled(false);
             status.hidden = true;
         } catch (error) {
             message(error.status === 403 ? "Your session or permissions have changed. Refresh this page and try again."
@@ -256,7 +267,7 @@ export function initializeSalesForm(form) {
             } else {
                 const box = [...form.querySelectorAll("[data-error-for]")].find((node) => node.dataset.errorFor === name);
                 if (box) {
-                    box.textContent = errorText(value);
+                    box.textContent = name === "file" && Array.isArray(value) ? value.map(errorText).join("\n") : errorText(value);
                     box.hidden = false;
                     field(name).setAttribute("aria-invalid", "true");
                 }
@@ -271,7 +282,7 @@ export function initializeSalesForm(form) {
     }
 
     retry.addEventListener("click", load);
-    addButton.addEventListener("click", () => addLine(true));
+    addButton?.addEventListener("click", () => addLine(true));
     field("currency").addEventListener("change", updateCurrency);
     if (!quotation) field("warehouse").addEventListener("change", () => updatePaymentAccounts());
     field('customer').addEventListener('change', () => {
@@ -291,20 +302,21 @@ export function initializeSalesForm(form) {
         for (const box of form.querySelectorAll("[data-error-for], [data-line-error]")) box.hidden = true;
         for (const input of form.querySelectorAll('[aria-invalid="true"]')) input.removeAttribute("aria-invalid");
         if (!form.reportValidity()) return;
-        if (!lines.children.length) {
+        if (lines && !lines.children.length) {
             message("Add at least one product.");
             return;
         }
-        const payload = salesPayload(form);
+        const payload = csv ? new FormData(form) : salesPayload(form);
         if (isEdit && String(payload.customer ?? '') === String(originalCustomer ?? '')) delete payload.customer;
         busy = true;
-        header.disabled = submit.disabled = addButton.disabled = true;
-        for (const row of lines.children) row.disabled = true;
+        setControlsDisabled(true);
+        for (const row of lines?.children ?? []) row.disabled = true;
         form.setAttribute("aria-busy", "true");
         label.textContent = isEdit ? "Saving changes..." : `Creating ${documentName}...`;
         spinner.hidden = false;
         try {
             if (isEdit) await patchJSON(form.action, payload, field('csrfmiddlewaretoken').value);
+            else if (csv) await postFormData(form.action, payload, field('csrfmiddlewaretoken').value);
             else await postJSON(form.action, payload, field("csrfmiddlewaretoken").value);
             window.location.assign(form.dataset.successUrl);
         } catch (error) {
@@ -314,15 +326,16 @@ export function initializeSalesForm(form) {
                 if (readOnly) ready = false;
             }
             showErrors(error.errors);
+            const details = csv && error.errors?.file ? '' : errorText(error.errors);
             message(readOnly ? lockedMessage
                 : error.status === 403 ? "Your session or permissions have changed. Refresh this page and try again."
-                : error.status === 400 ? `Please check the ${documentName} details. ${errorText(error.errors)}`
+                : error.status === 400 ? `Please check the ${documentName} details.${details ? ` ${details}` : ''}`
                 : error.message || `Could not save the ${documentName}. Please try again.`);
             status.focus();
         } finally {
             busy = false;
-            header.disabled = submit.disabled = addButton.disabled = readOnly;
-            for (const row of lines.children) row.disabled = readOnly;
+            setControlsDisabled(readOnly);
+            for (const row of lines?.children ?? []) row.disabled = readOnly;
             updateLineNumbers();
             form.setAttribute("aria-busy", "false");
             label.textContent = saveLabel;

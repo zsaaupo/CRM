@@ -46,7 +46,7 @@ function line() {
 }
 
 async function setup({ completed = false, failPage = false, conflict = false, edit = true, restricted = false,
-    minimumPrice = '8.0000', quotation = false } = {}) {
+    minimumPrice = '8.0000', quotation = false, csvImport = false } = {}) {
     const form = new Element('form');
     const fields = Object.fromEntries(['customer', 'warehouse', 'customer_reference', 'order_date', 'expected_delivery_date', 'currency',
         'billing_address', 'shipping_address', 'exchange_rate', 'status', 'shipping_cost', 'notes', 'payment_account',
@@ -59,20 +59,33 @@ async function setup({ completed = false, failPage = false, conflict = false, ed
     }
     fields.csrfmiddlewaretoken.value = 'csrf';
     const parts = Object.fromEntries(['status', 'header', 'submit', 'add-line', 'retry', 'lines'].map(name => [name, new Element()]));
+    const fileError = new Element();
+    if (csvImport) {
+        delete parts.lines;
+        delete parts['add-line'];
+        parts.csv = new Element('fieldset');
+        fields.file = new Element('input');
+        fields.file.files = [{name: 'sale.csv'}];
+        fileError.dataset.errorFor = 'file';
+    }
     const spinner = new Element(); const label = new Element(); label.textContent = edit ? 'Save changes' : 'Create sale';
-    form.action = edit ? '/update/7/' : '/create/';
+    form.action = csvImport ? '/import/' : edit ? '/update/7/' : '/create/';
     form.dataset = { method: edit ? 'PATCH' : 'POST', optionsUrl: '/options/', detailUrl: '/detail/7/',
         itemsUrl: '/items/?sales_order=7', successUrl: quotation ? '/quotations/' : '/sales/',
         documentType: quotation ? 'quotation' : 'sale' };
     form.elements = { namedItem: name => fields[name] };
     form.querySelector = selector => selector === '[data-submit-spinner]' ? spinner : selector === '[data-submit-label]' ? label
         : parts[selector.match(/^\[data-sale-(.*)\]$/)?.[1]];
-    form.querySelectorAll = selector => selector === '[data-sale-line]' ? parts.lines.children : [];
-    parts.lines.querySelectorAll = () => parts.lines.children;
+    form.querySelectorAll = selector => {
+        if (selector === '[data-sale-line]') return parts.lines?.children ?? [];
+        return csvImport && selector.startsWith('[data-error-for]') ? [fileError] : [];
+    };
+    if (parts.lines) parts.lines.querySelectorAll = () => parts.lines.children;
     const options = { warehouse_scope: {all_warehouses: !restricted, warehouse: restricted ? 1 : null}, base_currency: 'BDT', customer: [], warehouse: [{ value: 1, label: 'Main' }],
         payment_account: [{ value: 30, label: 'Main bank', warehouse: 1 }, { value: 31, label: 'Shared', warehouse: null }],
         currency: [{ value: 'BDT', label: 'Taka', exchange_rate: '1' }, { value: 'USD', label: 'Dollar', exchange_rate: '120' }],
         status: [{ value: 'draft', label: 'Draft' }, { value: 'review', label: 'Review' }], product: [{ value: 5, label: 'Rice', unit: 9, unit_label: 'Pieces (PCS)', currency: 'BDT', minimum_sale_price: minimumPrice }] };
+    if (csvImport) delete options.product;
     const record = { id: 7, is_completed: completed, customer: 44, customer_name: 'Historical customer', warehouse: restricted ? 1 : 2,
         payment_account: restricted ? 30 : 31,
         warehouse_name: 'Inactive branch', customer_reference: 'REF', order_date: '2026-11-15', expected_delivery_date: null,
@@ -85,6 +98,14 @@ async function setup({ completed = false, failPage = false, conflict = false, ed
         document: { querySelector: () => null, getElementById: () => ({ content: { firstElementChild: line() } }),
             createElement: tag => new Element(tag), createElementNS: (ns, tag) => new Element(tag) },
         window: { location: { origin: 'https://crm.test', assign: url => redirects.push(url) } }, URL,
+        FormData: class extends Map {
+            constructor(source) {
+                assert.equal(source, form);
+                assert.equal(parts.csv.disabled, false);
+                super(Object.entries(fields).filter(([, field]) => !field.disabled)
+                    .map(([name, field]) => [name, field.files?.[0] ?? field.value]));
+            }
+        },
         getJSON: async url => {
             calls.push(url);
             if (url === '/options/') return structuredClone(options);
@@ -95,6 +116,12 @@ async function setup({ completed = false, failPage = false, conflict = false, ed
                 results: structuredClone(items.slice((page - 1) * 20, page * 20)) };
         },
         postJSON: async (url, data, csrf) => { assert.equal(csrf, 'csrf'); saved.push({ method: 'POST', url, data: structuredClone(data) }); },
+        postFormData: async (url, data, csrf) => {
+            assert.equal(csrf, 'csrf');
+            saved.push({ method: 'POST-MULTIPART', url, data });
+            if (saved.length === 1) throw Object.assign(new Error(), {status: 400,
+                errors: {file: ['Row 2: Unknown SKU.', 'Row 3: Invalid quantity.']}});
+        },
         patchJSON: async (url, data, csrf) => {
             assert.equal(csrf, 'csrf'); saved.push({ method: 'PATCH', url, data: structuredClone(data) });
             if (conflict) { record.is_completed = true; throw Object.assign(new Error('Completed sale'), { status: 409 }); }
@@ -103,7 +130,7 @@ async function setup({ completed = false, failPage = false, conflict = false, ed
     vm.runInContext(source, context);
     context.testForm = form;
     await vm.runInContext('initializeSalesForm(testForm).ready', context);
-    return { form, fields, parts, saved, redirects, calls, context };
+    return { form, fields, parts, saved, redirects, calls, context, fileError };
 }
 
 
@@ -148,6 +175,24 @@ await creator.form.listeners.submit(event);
 assert.equal(creator.saved[0].data.status, 'review');
 assert.equal(creator.saved[0].data.payment_account, '31');
 console.log('Sales edit UI passed: custom status, all item pages, saved prices and IDs, completion read-only guard, concurrent completion, creation and success redirect.');
+
+const importer = await setup({edit: false, csvImport: true, restricted: true});
+assert.equal(importer.parts.submit.disabled, false, importer.parts.status.textContent);
+assert.deepEqual(importer.calls, ['/options/']);
+importer.fields.payment_account.value = '30';
+await importer.form.listeners.submit(event);
+assert.equal(importer.saved[0].method, 'POST-MULTIPART');
+assert.equal(importer.saved[0].url, '/import/');
+assert.equal(importer.saved[0].data.get('file').name, 'sale.csv');
+assert.equal(importer.saved[0].data.get('payment_account'), '30');
+assert.equal(importer.saved[0].data.has('warehouse'), false);
+assert.equal(importer.fileError.textContent, 'Row 2: Unknown SKU.\nRow 3: Invalid quantity.');
+assert.equal(importer.fileError.hidden, false);
+assert.deepEqual(importer.redirects, []);
+await importer.form.listeners.submit(event);
+assert.equal(importer.fileError.hidden, true);
+assert.deepEqual(importer.redirects, ['/sales/']);
+console.log('Sales CSV form passed: multipart upload, assigned warehouse, row errors, and retry.');
 
 const restrictedCreator = await setup({edit: false, restricted: true});
 assert.equal(restrictedCreator.fields.warehouse.disabled, true);

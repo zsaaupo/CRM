@@ -83,7 +83,7 @@ class ProductAdmin(CatalogAdmin):
         ('Identification', {'fields': ('sku', 'name', 'barcode', 'public_id', 'product_type', 'status')}),
         ('Classification and content', {'fields': ('category', 'brand', 'unit', 'supplier', 'variant_of', 'description', 'image', 'manufacturer', 'manufacturer_part_number', 'attributes')}),
         ('Pricing and tax', {'fields': ('currency', 'cost_price', 'sale_price', 'minimum_sale_price', 'Whole_sale_price', 'product_tax', 'is_returnable')}),
-        ('Label promotion', {'fields': ('promo_price', 'promo_start_date', 'promo_end_date')}),
+            ('Label promotion', {'fields': ('promo_price', 'promo_start_date', 'promo_end_date', 'is_featured')}),
         ('Audit', {'fields': ('create_by', 'modified_by', 'created_at', 'updated_at'), 'classes': ('collapse',)}),
     ]
 

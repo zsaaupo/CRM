@@ -7,6 +7,7 @@ from django.views.decorators.cache import never_cache
 from rest_framework import serializers
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.generics import GenericAPIView
+from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -23,6 +24,7 @@ from warehouse.scope import (
 )
 from account.permissions import has_role_permissions
 
+from .imports import SalesOrderCSVImportSerializer, sale_csv_template
 from .models import SalesOrder, SalesOrderItem, SalesQuotation, SalesQuotationItem, quotation_valid_until
 from .services import (
     ACTION_PERMISSIONS, ITEM_VIEW, QUOTE_ADD, QUOTE_DETAIL, QuotationBusy, SaleBusy, Status,
@@ -33,6 +35,9 @@ from .serializers import (
     SalesOrderCreateSerializer, SalesOrderDetailSerializer, SalesOrderItemFilterSerializer,
     SalesOrderItemSerializer, SalesOrderLineSerializer, SalesOrderSerializer, SaleCompleteSerializer, replace_sales_lines,
 )
+
+
+SALE_ADD_PERMISSIONS = ('sale.add_salesorder', 'sale.add_salesorderitem')
 
 
 class SalesConcurrencyMixin:
@@ -58,6 +63,18 @@ class SalesOrderListCreateAPIView(SalesConcurrencyMixin, WarehouseScopeAPIMixin,
         if serializer.validated_data.get('items') and not has_role_permissions(self.request.user, ('sale.add_salesorderitem',)):
             raise PermissionDenied('You do not have permission to add sale order items.')
         super().perform_create(serializer)
+
+
+class SalesOrderImportAPIView(SalesOrderListCreateAPIView):
+    required_permissions = SALE_ADD_PERMISSIONS
+    serializer_class = SalesOrderCSVImportSerializer
+    parser_classes = [MultiPartParser]
+
+    def get_serializer_class(self):
+        return self.serializer_class
+
+    def get(self, request):
+        return sale_csv_template()
 
 
 class SalesOrderListAPIView(SalesConcurrencyMixin, WarehouseScopeAPIMixin, BaseListAPIView):
@@ -149,10 +166,11 @@ class SaleCompleteAPIView(SalesConcurrencyMixin, WarehouseScopeAPIMixin, BaseAPI
 class SalesOptionsAPIView(SalesConcurrencyMixin, WarehouseScopeAPIMixin, BaseAPIMixin, APIView):
     """Reference data for sale creation without catalog management permissions."""
 
-    required_permissions = ('sale.add_salesorder', 'sale.add_salesorderitem')
+    required_permissions = SALE_ADD_PERMISSIONS
     http_method_names = ['get', 'head', 'options']
     customer_queryset = Party.objects.filter(is_customer=True)
     include_payment_accounts = True
+    include_products = True
 
     def get(self, request):
         options = {
@@ -175,15 +193,16 @@ class SalesOptionsAPIView(SalesConcurrencyMixin, WarehouseScopeAPIMixin, BaseAPI
                 {'value': row.code, 'label': row.name}
                 for row in TradeStatus.objects.order_by('name', 'pk')
             ],
-            'product': [
+        }
+        if self.include_products:
+            options['product'] = [
                 {'value': row.pk, 'label': f'{row.sku} — {row.name}', 'unit': row.unit_id,
                  'unit_label': f'{row.unit.name} ({row.unit.code})', 'currency': row.currency_id,
                  'sale_price': str(row.sale_price),
                  'minimum_sale_price': str(row.minimum_sale_price) if row.minimum_sale_price is not None else None,
                  'tax_rate': str(row.product_tax)}
                 for row in Product.objects.select_related('unit').order_by('name', 'pk')
-            ],
-        }
+            ]
         if self.include_payment_accounts:
             options['payment_account'] = payment_account_options(available_payment_accounts(request.warehouse_scope))
         return Response(options)
@@ -191,6 +210,10 @@ class SalesOptionsAPIView(SalesConcurrencyMixin, WarehouseScopeAPIMixin, BaseAPI
 
 class SalesEditOptionsAPIView(SalesOptionsAPIView):
     required_permissions = ('sale.view_salesorder', 'sale.change_salesorder', 'sale.view_salesorderitem')
+
+
+class SalesImportOptionsAPIView(SalesOptionsAPIView):
+    include_products = False
 
 # Sales quotations
 

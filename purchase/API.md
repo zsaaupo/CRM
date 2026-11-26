@@ -72,6 +72,28 @@ in this POST body. Each item uses the fields in the item example below, except
 item and line numbers must be unique. If any header or item is invalid, nothing
 is saved. Omitting `items` still permits header-only API creation.
 
+## Import a purchase from CSV
+
+Open **Purchase list → Import CSV** to download a template and upload product
+lines for one order. `GET /purchase/api/purchase-orders/import/` downloads the
+template. `POST /purchase/api/purchase-orders/import/` accepts
+`multipart/form-data` with `file`, `currency`, `exchange_rate`, `payment_account`,
+and optional order header fields such as `supplier` and `warehouse`.
+`GET /purchase/api/purchase-orders/import/options/` loads the header choices.
+These routes require both order and item add permissions and use the normal
+warehouse scope.
+
+The UTF-8 CSV requires `sku` and `quantity`. Optional columns are `unit_price`,
+`discount_amount`, `tax_rate`, and `description`. The SKU identifies an existing
+product and its unit. A blank price uses the catalog cost when the currencies
+match. Supply a price in the purchase currency when they differ. Blank discounts
+and tax rates use zero. The order preserves file order. The file limit is 1,000
+product rows and 5 MB.
+
+Invalid lines return 400 with CSV row numbers under `file`. A successful import
+returns 201 with `purchase_order`. The imported order starts unreceived, and the
+normal Receive action adds stock and posts payment.
+
 ## Create an item
 
 `POST /purchase/api/purchase-order-items/`

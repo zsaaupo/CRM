@@ -7,6 +7,7 @@ from django.utils import timezone
 
 from account.page_views import ProtectedAccountPageView
 from accounting.services import SALES_PAYMENT_VIEW, available_payment_accounts
+from common.csv_files import MAX_PRODUCT_CSV_ROWS
 from warehouse.scope import WarehouseScopePageMixin, scoped_queryset, warehouse_scope
 
 from .models import SalesQuotation, SalesReturn, quotation_valid_until
@@ -31,6 +32,7 @@ class SalesListPageView(WarehouseScopePageMixin, ProtectedAccountPageView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        can_add = has_role_permissions(self.request.user, SALES_CREATE_PERMISSIONS)
         context.update({
             'page_section': 'sale', 'page_mode': 'list', 'page_label': 'Sales list',
             'section_label': 'Sales', 'resource': {'singular': 'sale', 'plural': 'sales'},
@@ -38,7 +40,9 @@ class SalesListPageView(WarehouseScopePageMixin, ProtectedAccountPageView):
             'add_url': reverse('sale_pages:create-sale'),
             'list_api_url': reverse('sale:sales-order-list-view'),
             'view_url_template': reverse('sale_pages:sale-detail', args=[0]),
-            'can_add': has_role_permissions(self.request.user, SALES_CREATE_PERMISSIONS),
+            'can_add': can_add,
+            'secondary_url': reverse('sale_pages:import-sale') if can_add else '',
+            'secondary_label': 'Import CSV',
             'can_delete': has_role_permissions(self.request.user, ('sale.delete_salesorder', 'sale.delete_salesorderitem')),
             'list_description': 'Customer orders, dates and totals.',
             'columns': [
@@ -109,6 +113,18 @@ class SalesCreatePageView(WarehouseScopePageMixin, ProtectedAccountPageView):
             'create_api_url': reverse('sale:sales-order-list'),
             'options_api_url': reverse('sale:sale-options'),
             'base_currency': settings.INVENTORY_BASE_CURRENCY,
+        })
+        return context
+
+
+class SalesImportPageView(SalesCreatePageView):
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context.update({
+            'page_label': 'Import sale', 'form_heading': 'Import sale', 'save_label': 'Import sale',
+            'create_api_url': reverse('sale:sales-order-import'),
+            'options_api_url': reverse('sale:sales-import-options'),
+            'csv_import': True, 'max_csv_rows': f'{MAX_PRODUCT_CSV_ROWS:,}',
         })
         return context
 

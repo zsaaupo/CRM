@@ -4,10 +4,13 @@
 {% block content %}
 <div class="workspace-content">
     <div class="page-heading">
-        <div><p class="page-eyebrow">Purchase</p><h1 class="page-title">{{ form_heading|default:'Create purchase' }}<span class="text-emerald-600">.</span></h1><p class="page-description">{% if page_mode == 'edit' %}Update this purchase and its products before receiving it.{% else %}Record an order and the products you are purchasing.{% endif %}</p></div>
-        <a href="{{ list_url }}" class="secondary-button">Back to purchases <span aria-hidden="true">&rarr;</span></a>
+        <div><p class="page-eyebrow">Purchase</p><h1 class="page-title">{{ form_heading|default:'Create purchase' }}<span class="text-emerald-600">.</span></h1><p class="page-description">{% if csv_import %}Upload product lines for one purchase. Receiving the purchase adds stock and records payment.{% elif page_mode == 'edit' %}Update this purchase and its products before receiving it.{% else %}Record an order and the products you are purchasing.{% endif %}</p></div>
+        <div class="flex flex-wrap gap-3">
+            {% if not form_method and not csv_import %}<a href="{% url 'purchase_pages:import-purchase' %}" class="secondary-button">Import CSV</a>{% endif %}
+            <a href="{{ list_url }}" class="secondary-button">Back to purchases <span aria-hidden="true">&rarr;</span></a>
+        </div>
     </div>
-    <form method="post" action="{{ create_api_url }}" data-purchase-form data-method="{{ form_method|default:'POST' }}" data-options-url="{{ options_api_url }}" data-detail-url="{{ detail_api_url }}" data-items-url="{{ items_api_url }}" data-success-url="{{ list_url }}" novalidate>
+    <form method="post" action="{{ create_api_url }}"{% if csv_import %} enctype="multipart/form-data"{% endif %} data-purchase-form data-method="{{ form_method|default:'POST' }}" data-options-url="{{ options_api_url }}" data-detail-url="{{ detail_api_url }}" data-items-url="{{ items_api_url }}" data-success-url="{{ list_url }}" novalidate>
         {% csrf_token %}
         <div class="form-status mb-5" data-purchase-status role="status" aria-live="polite" tabindex="-1" hidden></div>
         <button type="button" class="secondary-button mb-5" data-purchase-retry hidden>Try loading again</button>
@@ -29,6 +32,11 @@
                 {% include 'inventory/includes/field.html' with name='notes' label='Notes' field_type='textarea' only %}
             </div>
         </fieldset>
+        {% if csv_import %}
+        <fieldset class="user-form-card mt-6" data-purchase-csv disabled>
+            {% include 'includes/order_csv_field.html' with catalog_price='catalog cost' document_type='purchase' %}
+        </fieldset>
+        {% else %}
         <section class="user-form-card mt-6" aria-labelledby="purchase-items-heading">
             <div class="flex items-center justify-between gap-4">
                 <h2 id="purchase-items-heading" class="section-title">Products</h2>
@@ -37,10 +45,11 @@
             <p class="section-description">Add at least one product. Prices and shipping use the selected order currency. Totals are calculated when you save.</p>
             <div class="space-y-6" data-purchase-lines></div>
         </section>
+        {% endif %}
         <div class="user-form-actions"><a href="{{ list_url }}" class="secondary-button">Cancel</a><button type="submit" class="primary-button compact-primary" data-purchase-submit disabled><span data-submit-label>{{ save_label|default:'Create purchase' }}</span><span class="button-spinner" data-submit-spinner hidden aria-hidden="true"></span></button></div>
         <noscript><p class="form-error">Enable JavaScript to load choices and create a purchase.</p></noscript>
     </form>
-    <template id="purchase-line-template">
+    {% if not csv_import %}<template id="purchase-line-template">
         <fieldset class="rounded-xl border border-stone-200 p-5" data-purchase-line>
             <legend class="sr-only" data-line-legend>Purchase item</legend>
             <div class="mb-5 flex items-center justify-between gap-4"><h3 class="section-title" data-line-heading>Item</h3><button type="button" class="icon-button inventory-delete-button" data-line-remove title="Remove item" aria-label="Remove item"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div>
@@ -55,7 +64,7 @@
                 {% include 'purchase/includes/line_field.html' with name='description' label='Description' field_type='text' optional=True only %}
             </div>
         </fieldset>
-    </template>
+    </template>{% endif %}
 </div>
 {% endblock %}
 {% block workspace_js %}<script type="module" src="{% static 'purchase/js/purchase_form.js' %}"></script>{% endblock %}

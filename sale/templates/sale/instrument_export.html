@@ -1,0 +1,4 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>{{ report.title }}</title><style>@page {size: A4 landscape} table{width:100%;border-collapse:collapse}th,td{padding:6px;text-align:left;border-bottom:1px solid #ccc}</style></head><body>
+<h1>{{ report.title }}</h1><table><thead><tr>{% for col in report.headers %}<th>{{ col }}</th>{% endfor %}</tr></thead>
+<tbody>{% for row in report.rows %}<tr>{% for cell in row %}<td>{{ cell }}</td>{% endfor %}</tr>{% endfor %}</tbody></table></body></html>
+

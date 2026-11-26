@@ -1,0 +1,69 @@
+{% extends "layouts/dashboard.html" %}
+{% load static %}
+{% block title %}{{ title }} | eManager{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'sale/instruments.css' %}">{% endblock %}
+{% block content %}
+<div class="workspace-content" id="instruments" data-purpose="{% if is_card %}gift_card{% else %}coupon{% endif %}"
+     data-api="{% if is_card %}{% url 'sale:gift-cards' %}{% else %}{% url 'sale:coupons' %}{% endif %}"
+     data-detail="{% url 'sale_pages:gift-card-detail' 0 %}" data-generator="{% url 'common:generate-code' %}">
+    <div class="page-heading">
+        <div><p class="page-eyebrow">Sales</p><h1 class="page-title">{{ title }}<span class="text-emerald-600">.</span></h1></div>
+        {% if form %}<button type="button" class="primary-button compact-primary" id="add" aria-controls="create" aria-expanded="false">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke-linecap="round"/></svg>
+            {% if is_card %}Issue gift card{% else %}Create coupon{% endif %}
+        </button>{% endif %}
+    </div>
+    <p id="notice" class="form-status mb-5" role="status" aria-live="polite" hidden></p>
+    {% if form %}
+    <form id="create" class="user-form-card mb-6" hidden>
+        {% csrf_token %}
+        <h2 class="section-title">{% if is_card %}New gift card{% else %}New coupon{% endif %}</h2>
+        <p class="section-description">{% if is_card %}Leave both owner fields empty to issue a bearer card.{% else %}The total use limit is shared across all tills.{% endif %}</p>
+        <div class="user-form-grid">
+            {% for field in form.visible_fields %}
+            <div>
+                <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                {% if field.name == 'card_no' or field.name == 'code' %}
+                <div class="flex items-center gap-2">{{ field }}<button type="button" id="generate" class="secondary-button">Generate</button></div>
+                {% else %}{{ field }}{% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        {% for field in form.hidden_fields %}{{ field }}{% endfor %}
+        <div class="user-form-actions"><button type="button" id="cancel" class="secondary-button">Cancel</button><button type="submit" class="primary-button compact-primary">{% if is_card %}Issue gift card{% else %}Create coupon{% endif %}</button></div>
+    </form>
+    {% else %}{% csrf_token %}{% endif %}
+    <section class="users-panel" aria-label="{{ title }}">
+        <div class="users-toolbar">
+            <h2 class="section-title">All {{ title|lower }} <span id="count" class="user-count" hidden></span></h2>
+            <div class="users-search">
+                <label for="search" class="sr-only">Search {{ title|lower }}</label>
+                <input id="search" type="search" class="form-input" placeholder="Search {{ title|lower }}..." autocomplete="off">
+            </div>
+        </div>
+        <div class="users-toolbar instrument-actions">
+            <label class="flex items-center gap-2 text-xs text-stone-600">Rows <select class="form-input" id="limit"><option>10</option><option>25</option><option>50</option><option value="all">All</option></select></label>
+            <div class="flex flex-wrap gap-2">
+                <button type="button" class="secondary-button" data-export="csv">CSV</button>
+                <button type="button" class="secondary-button" data-export="xlsx">Excel</button>
+                <button type="button" class="secondary-button" data-export="pdf">PDF</button>
+                <button type="button" class="secondary-button" id="print">Print</button>
+                {% if can_change %}<button type="button" class="secondary-button" id="deactivate" disabled>Deactivate selected</button>{% endif %}
+            </div>
+        </div>
+        <div class="users-table-scroll"><table class="users-table">
+            <caption class="sr-only">{{ title }}</caption>
+            <thead><tr><th scope="col"><input type="checkbox" id="select-all" aria-label="Select this page"></th>
+                {% for key,label in columns %}<th scope="col"><button type="button" data-sort="{{ key }}">{{ label }}</button></th>{% endfor %}
+            </tr></thead>
+            <tbody id="rows"></tbody><tfoot id="totals"></tfoot>
+        </table></div>
+        <nav class="users-pagination" aria-label="{{ title }} pages">
+            <span id="page" role="status">Loading {{ title|lower }}...</span>
+            <div class="flex gap-2"><button type="button" id="prev" class="secondary-button" disabled>Previous</button><button type="button" id="next" class="secondary-button" disabled>Next</button></div>
+        </nav>
+    </section>
+</div>
+{% endblock %}
+{% block workspace_js %}<script type="module" src="{% static 'sale/js/instruments.js' %}"></script>{% endblock %}
+

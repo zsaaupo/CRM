@@ -4,10 +4,13 @@
 {% block content %}
 <div class="workspace-content">
     <div class="page-heading">
-        <div><p class="page-eyebrow">Sales</p><h1 class="page-title">{{ form_heading|default:'Create sale' }}<span class="text-emerald-600">.</span></h1>{% if not quotation %}<p class="page-description">Record a customer order and its products.</p>{% endif %}</div>
-        <a href="{{ list_url }}" class="secondary-button">Back to {% if quotation %}quotations{% else %}sales{% endif %} <span aria-hidden="true">&rarr;</span></a>
+        <div><p class="page-eyebrow">Sales</p><h1 class="page-title">{{ form_heading|default:'Create sale' }}<span class="text-emerald-600">.</span></h1>{% if csv_import %}<p class="page-description">Upload product lines for one sale. Stock and payment are recorded when you complete it.</p>{% elif not quotation %}<p class="page-description">Record a customer order and its products.</p>{% endif %}</div>
+        <div class="flex flex-wrap gap-3">
+            {% if not quotation and not form_method and not csv_import %}<a href="{% url 'sale_pages:import-sale' %}" class="secondary-button">Import CSV</a>{% endif %}
+            <a href="{{ list_url }}" class="secondary-button">Back to {% if quotation %}quotations{% else %}sales{% endif %} <span aria-hidden="true">&rarr;</span></a>
+        </div>
     </div>
-    <form method="post" action="{{ create_api_url }}" data-sale-form data-document-type="{% if quotation %}quotation{% else %}sale{% endif %}" data-method="{{ form_method|default:'POST' }}" data-detail-url="{{ detail_api_url }}" data-items-url="{{ items_api_url }}" data-options-url="{{ options_api_url }}" data-success-url="{{ list_url }}" novalidate>
+    <form method="post" action="{{ create_api_url }}"{% if csv_import %} enctype="multipart/form-data"{% endif %} data-sale-form data-document-type="{% if quotation %}quotation{% else %}sale{% endif %}" data-method="{{ form_method|default:'POST' }}" data-detail-url="{{ detail_api_url }}" data-items-url="{{ items_api_url }}" data-options-url="{{ options_api_url }}" data-success-url="{{ list_url }}" novalidate>
         {% csrf_token %}
         <div class="form-status mb-5" data-sale-status role="status" aria-live="polite" tabindex="-1" hidden></div>
         <button type="button" class="secondary-button mb-5" data-sale-retry hidden>Try loading again</button>
@@ -40,6 +43,11 @@
                 {% include 'inventory/includes/field.html' with name='shipping_address' label='Shipping address' field_type='textarea' only %}
             </div>
         </fieldset>
+        {% if csv_import %}
+        <fieldset class="user-form-card mt-6" data-sale-csv disabled>
+            {% include 'includes/order_csv_field.html' with catalog_price='catalog price' document_type='sale' %}
+        </fieldset>
+        {% else %}
         <section class="user-form-card mt-6" aria-labelledby="sale-items-heading">
             <div class="flex items-center justify-between gap-4">
                 <h2 id="sale-items-heading" class="section-title">Products</h2>
@@ -48,10 +56,11 @@
             <p class="section-description">Add at least one product. Prices and shipping use the selected order currency. Totals are calculated when you save.</p>
             <div class="space-y-6" data-sale-lines></div>
         </section>
+        {% endif %}
         <div class="user-form-actions"><a href="{{ list_url }}" class="secondary-button">Cancel</a><button type="submit" class="primary-button compact-primary" data-sale-submit disabled><span data-submit-label>{{ save_label|default:'Create sale' }}</span><span class="button-spinner" data-submit-spinner hidden aria-hidden="true"></span></button></div>
         <noscript><p class="form-error">Enable JavaScript to load choices and save this {% if quotation %}quotation{% else %}sale{% endif %}.</p></noscript>
     </form>
-    <template id="sale-line-template">
+    {% if not csv_import %}<template id="sale-line-template">
         <fieldset class="rounded-xl border border-stone-200 p-5" data-sale-line>
             <legend class="sr-only" data-line-legend>Sales item</legend>
             <div class="mb-5 flex items-center justify-between gap-4"><h3 class="section-title" data-line-heading>Item</h3><button type="button" class="icon-button inventory-delete-button" data-line-remove title="Remove item" aria-label="Remove item"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div>
@@ -67,7 +76,7 @@
                 {% include 'sale/includes/line_field.html' with name='description' label='Description' field_type='text' optional=True only %}
             </div>
         </fieldset>
-    </template>
+    </template>{% endif %}
 </div>
 {% endblock %}
 {% block workspace_js %}<script type="module" src="{% static 'sale/js/sales_form.js' %}"></script>{% endblock %}

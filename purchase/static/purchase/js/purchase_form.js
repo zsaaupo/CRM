@@ -1,4 +1,4 @@
-import { getJSON, postJSON, patchJSON } from "../../js/api.js";
+import { getJSON, postJSON, patchJSON, postFormData } from "../../js/api.js";
 
 const headerFields = ["supplier", "warehouse", "supplier_reference", "order_date", "expected_date", "currency", "exchange_rate", "status", "shipping_cost", "notes", "payment_account"];
 const lineFields = ["product", "unit", "quantity", "unit_price", "discount_amount", "tax_rate", "description"];
@@ -30,6 +30,7 @@ export function initializePurchaseForm(form) {
     const addButton = find("add-line");
     const retry = find("retry");
     const lines = find("lines");
+    const csv = find("csv");
     const spinner = form.querySelector("[data-submit-spinner]");
     const label = form.querySelector("[data-submit-label]");
     const field = (name) => form.elements.namedItem(name);
@@ -47,6 +48,12 @@ export function initializePurchaseForm(form) {
         status.dataset.tone = tone;
         status.textContent = text;
         status.hidden = false;
+    }
+
+    function setControlsDisabled(disabled) {
+        header.disabled = submit.disabled = disabled;
+        if (addButton) addButton.disabled = disabled;
+        if (csv) csv.disabled = disabled;
     }
 
     function choices(select, records, placeholder) {
@@ -71,6 +78,7 @@ export function initializePurchaseForm(form) {
     }
 
     function updateLineNumbers() {
+        if (!lines) return;
         const rows = [...lines.querySelectorAll("[data-purchase-line]")];
         rows.forEach((row, index) => {
             const title = `Item ${index + 1}`;
@@ -144,7 +152,7 @@ export function initializePurchaseForm(form) {
         loading = true;
         ready = false;
         readOnly = false;
-        header.disabled = submit.disabled = addButton.disabled = true;
+        setControlsDisabled(true);
         retry.hidden = true;
         form.setAttribute("aria-busy", "true");
         message("Loading purchase choices...", "info");
@@ -160,7 +168,7 @@ export function initializePurchaseForm(form) {
                 throw new Error("This purchase has been received and is read-only. Return to the purchase list.");
             }
             if (!Array.isArray(data.payment_account)) throw new Error("Could not load payment accounts. Try again.");
-            for (const name of ["currency", "status", "product"]) {
+            for (const name of csv ? ["currency", "status"] : ["currency", "status", "product"]) {
                 if (!Array.isArray(data[name])) throw new Error("Could not load purchase choices. Please try again.");
                 if (!data[name].length) throw new Error(`No ${name} records are available. Add the missing records or contact your administrator, then try again.`);
             }
@@ -202,8 +210,8 @@ export function initializePurchaseForm(form) {
                 lines.replaceChildren();
                 for (const item of items) addLine(false, item);
             }
-            if (!lines.children.length) addLine();
-            header.disabled = submit.disabled = addButton.disabled = false;
+            if (lines && !lines.children.length) addLine();
+            setControlsDisabled(false);
             status.hidden = true;
         } catch (error) {
             message(error.status === 403 ? "Your session or permissions have changed. Refresh this page and try again."
@@ -217,7 +225,7 @@ export function initializePurchaseForm(form) {
 
     function showErrors(errors) {
         for (const [name, value] of Object.entries(errors || {})) {
-            if (name === "items" && Array.isArray(value)) {
+            if (lines && name === "items" && Array.isArray(value)) {
                 const rows = [...lines.querySelectorAll("[data-purchase-line]")];
                 value.forEach((itemErrors, index) => {
                     if (!rows[index] || !itemErrors || typeof itemErrors !== "object") return;
@@ -232,7 +240,7 @@ export function initializePurchaseForm(form) {
             } else {
                 const box = [...form.querySelectorAll("[data-error-for]")].find((node) => node.dataset.errorFor === name);
                 if (box) {
-                    box.textContent = errorText(value);
+                    box.textContent = name === "file" && Array.isArray(value) ? value.map(errorText).join("\n") : errorText(value);
                     box.hidden = false;
                     field(name).setAttribute("aria-invalid", "true");
                 }
@@ -241,7 +249,7 @@ export function initializePurchaseForm(form) {
     }
 
     retry.addEventListener("click", load);
-    addButton.addEventListener("click", () => addLine(true));
+    addButton?.addEventListener("click", () => addLine(true));
     field("currency").addEventListener("change", updateCurrency);
     field("warehouse").addEventListener("change", () => updatePaymentAccounts());
     field("order_date").addEventListener("change", () => { field("expected_date").min = field("order_date").value; });
@@ -254,20 +262,21 @@ export function initializePurchaseForm(form) {
         for (const box of form.querySelectorAll("[data-error-for], [data-line-error]")) box.hidden = true;
         for (const input of form.querySelectorAll('[aria-invalid="true"]')) input.removeAttribute("aria-invalid");
         if (!form.reportValidity()) return;
-        if (!lines.children.length) {
+        if (lines && !lines.children.length) {
             message("Add at least one product.");
             return;
         }
-        const payload = purchasePayload(form);
+        const payload = csv ? new FormData(form) : purchasePayload(form);
         if (isEdit && String(payload.supplier ?? "") === String(originalSupplier ?? "")) delete payload.supplier;
         busy = true;
-        header.disabled = submit.disabled = addButton.disabled = true;
-        for (const row of lines.children) row.disabled = true;
+        setControlsDisabled(true);
+        for (const row of lines?.children ?? []) row.disabled = true;
         form.setAttribute("aria-busy", "true");
-        label.textContent = isEdit ? "Saving changes..." : "Creating purchase...";
+        label.textContent = isEdit ? "Saving changes..." : csv ? "Importing purchase..." : "Creating purchase...";
         spinner.hidden = false;
         try {
             if (isEdit) await patchJSON(form.action, payload, field("csrfmiddlewaretoken").value);
+            else if (csv) await postFormData(form.action, payload, field("csrfmiddlewaretoken").value);
             else await postJSON(form.action, payload, field("csrfmiddlewaretoken").value);
             window.location.assign(form.dataset.successUrl);
         } catch (error) {
@@ -277,16 +286,17 @@ export function initializePurchaseForm(form) {
                 if (readOnly) ready = false;
             }
             showErrors(error.errors);
+            const details = csv && error.errors?.file ? "" : errorText(error.errors);
             message(readOnly ? "This purchase has been received and is read-only. Return to the purchase list."
                 : error.status === 403 ? "Your session or permissions have changed. Refresh this page and try again."
                 : error.status === 404 ? "This purchase could not be found. Return to the purchase list."
-                : error.status === 400 ? `Please check the purchase details. ${errorText(error.errors)}`
+                : error.status === 400 ? `Please check the purchase details.${details ? ` ${details}` : ""}`
                 : error.message || "Could not save the purchase. Please try again.");
             status.focus();
         } finally {
             busy = false;
-            header.disabled = submit.disabled = addButton.disabled = readOnly;
-            for (const row of lines.children) row.disabled = readOnly;
+            setControlsDisabled(readOnly);
+            for (const row of lines?.children ?? []) row.disabled = readOnly;
             updateLineNumbers();
             form.setAttribute("aria-busy", "false");
             label.textContent = saveLabel;

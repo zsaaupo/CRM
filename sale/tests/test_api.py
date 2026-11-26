@@ -5,18 +5,19 @@ from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group, Permission
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import IntegrityError
 from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
 
-from accounting.models import FinancialAccount
+from accounting.models import FinancialAccount, SalesPayment
 from common.models import ProductStatus, TradeStatus
 from inventory.models import Currency, Product, UnitOfMeasure
 from people.models import Party
 from sale.models import SalesOrder, SalesOrderItem
 from sale.serializers import SalesOrderItemSerializer, SalesOrderSerializer
-from warehouse.models import Stock
+from warehouse.models import RoleWarehouseAccess, Stock, WareHouse
 
 
 class SalesAPITests(TestCase):
@@ -48,6 +49,112 @@ class SalesAPITests(TestCase):
     def item_payload(self, **changes):
         return {'sales_order': self.order.pk, 'line_number': 2, 'product': self.product.pk, 'unit': self.unit.pk,
                 'quantity': '3.000000', 'unit_price': '10.0000', 'discount_amount': '2.0000', 'tax_rate': '15', **changes}
+
+    def import_csv(self, contents, **changes):
+        return self.client.post(reverse('sale:sales-order-import'), self.order_payload(
+            file=SimpleUploadedFile('sale.csv', contents, content_type='text/csv'), **changes,
+        ), format='multipart')
+
+    def test_csv_import_uses_catalog_defaults_and_saves_an_uncompleted_sale(self):
+        self.grant(SalesOrder, 'add')
+        self.grant(SalesOrderItem, 'add')
+        warehouse = WareHouse.objects.create(name='Sales branch')
+        stock = Stock.objects.create(warehouse=warehouse, product=self.product, quantity=10)
+        self.product.sale_price, self.product.product_tax = Decimal('12.5000'), Decimal('10')
+        self.product.save(update_fields=['sale_price', 'product_tax'])
+        box = UnitOfMeasure.objects.create(name='Box', code='SALE-BOX')
+        other = Product.objects.create(sku='001,BOX', name='Box', currency_id='BDT', unit=box, product_tax=18)
+
+        response = self.import_csv(
+            b'\xef\xbb\xbf Quantity, SKU, unit_price, discount_amount, tax_rate, description\r\n'
+            b'2.5,KEYBOARD,,,,\r\n\r\n1,"001,BOX",10,3,0,"Box, small"\r\n',
+            warehouse=warehouse.pk, expected_delivery_date='', is_completed='true',
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+        order = response.data['sales_order']
+        self.assertEqual(order['status'], 'draft')
+        self.assertFalse(order['is_completed'])
+        self.assertEqual(order['grand_total'], '41.3750')
+        items = list(SalesOrderItem.objects.filter(sales_order_id=order['id']))
+        self.assertEqual([item.line_number for item in items], [1, 2])
+        self.assertEqual([item.product_id for item in items], [self.product.pk, other.pk])
+        self.assertEqual([item.unit_id for item in items], [self.unit.pk, box.pk])
+        self.assertEqual([item.tax_rate for item in items], [Decimal('10'), Decimal(0)])
+        self.assertEqual(items[1].description, 'Box, small')
+        self.assertTrue(all(item.create_by == self.user.username for item in items))
+        stock.refresh_from_db()
+        self.assertEqual(stock.quantity, 10)
+        self.assertFalse(SalesPayment.objects.filter(sales_order_id=order['id']).exists())
+
+    def test_csv_import_reports_invalid_rows_and_rolls_back_a_failed_insert(self):
+        self.grant(SalesOrder, 'add')
+        self.grant(SalesOrderItem, 'add')
+        url = reverse('sale:sales-order-import')
+        missing = self.client.post(url, self.order_payload(), format='multipart')
+        self.assertEqual(missing.status_code, 400, missing.data)
+        self.assertIn('file', missing.data)
+        for contents in (b'sku,invalid\nKEYBOARD,2\n', b'sku,quantity\n', b'sku,quantity\n"KEYBOARD,2\n'):
+            response = self.import_csv(contents)
+            self.assertEqual(response.status_code, 400, response.data)
+            self.assertIn('file', response.data)
+        response = self.import_csv(b'sku,quantity,unit_price,discount_amount,tax_rate\n'
+                                   b'KEYBOARD,1,5,0,10\nUNKNOWN,1,5,0,0\nKEYBOARD,0,5,0,0\n'
+                                   b'KEYBOARD,1,5,6,0\nKEYBOARD,1,5,0,101\n')
+        self.assertEqual(response.status_code, 400, response.data)
+        self.assertEqual([message.split(':')[0] for message in response.data['file']], ['Row 3', 'Row 4', 'Row 5', 'Row 6'])
+        with patch('sale.serializers.SalesOrderItem.objects.create', side_effect=IntegrityError('line insert failed')):
+            response = self.import_csv(b'sku,quantity\nKEYBOARD,2\n')
+        self.assertEqual(response.status_code, 400, response.data)
+        self.assertEqual(SalesOrder.objects.count(), 1)
+        self.assertEqual(SalesOrderItem.objects.count(), 1)
+
+    def test_csv_import_requires_explicit_price_for_a_different_currency(self):
+        self.grant(SalesOrder, 'add')
+        self.grant(SalesOrderItem, 'add')
+        Currency.objects.create(code='USD', name='Dollar', exchange_rate=120)
+        order = {'currency': 'USD', 'exchange_rate': '120'}
+        response = self.import_csv(b'sku,quantity\nKEYBOARD,2\n', **order)
+        self.assertEqual(response.status_code, 400, response.data)
+        self.assertIn('unit price in USD', response.data['file'][0])
+        response = self.import_csv(b'sku,quantity,unit_price\nKEYBOARD,2,0\n', **order)
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data['sales_order']['grand_total'], '0.0000')
+
+    def test_csv_import_page_template_options_and_warehouse_scope(self):
+        self.grant(SalesOrder, 'view', 'add')
+        url = reverse('sale:sales-order-import')
+        page = reverse('sale_pages:import-sale')
+        listing = reverse('sale_pages:sale-list')
+        self.assertNotContains(self.client.get(listing), f'href="{page}"')
+        self.assertEqual(self.client.get(url).status_code, 403)
+        self.assertEqual(self.client.get(page).status_code, 403)
+        self.assertEqual(self.import_csv(b'sku,quantity\nKEYBOARD,1\n').status_code, 403)
+
+        self.grant(SalesOrderItem, 'add')
+        self.assertContains(self.client.get(listing), f'href="{page}"')
+        self.assertContains(self.client.get(reverse('sale_pages:create-sale')), f'href="{page}"')
+        self.assertContains(self.client.get(page), f'action="{url}"')
+        self.assertContains(self.client.get(page), 'name="file"')
+        template = self.client.get(url)
+        self.assertEqual(template.status_code, 200)
+        self.assertEqual(template.content.decode('utf-8-sig').strip(),
+                         'sku,quantity,unit_price,discount_amount,tax_rate,description')
+
+        main = WareHouse.objects.create(name='Assigned branch')
+        other = WareHouse.objects.create(name='Other branch')
+        RoleWarehouseAccess.objects.filter(role=self.role).update(all_warehouses=False, warehouse=main)
+        self.payment_account.warehouse = main
+        self.payment_account.save(update_fields=['warehouse'])
+        options = self.client.get(reverse('sale:sales-import-options'))
+        self.assertEqual(options.status_code, 200, options.data)
+        self.assertEqual(options.data['warehouse'], [{'value': main.pk, 'label': main.name}])
+        self.assertNotIn('product', options.data)
+        sheet = b'sku,quantity\nKEYBOARD,1\n'
+        denied = self.import_csv(sheet, warehouse=other.pk)
+        self.assertEqual(denied.status_code, 403, denied.data)
+        response = self.import_csv(sheet)
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data['sales_order']['warehouse'], main.pk)
 
     def resources(self):
         return [(SalesOrder, 'sales-order', 'sales_order', self.order_payload()),

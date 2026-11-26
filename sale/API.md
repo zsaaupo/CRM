@@ -1,5 +1,61 @@
 # Sales APIs and pages
 
+## Point of sale
+
+Open **Sales → Point of sale** at `/sale/pos/`. Cashiers need warehouse access and the
+`view_salesorder`, `view_salesorderitem`, `add_salesorder`, `add_salesorderitem`, and `change_salesorder`
+permissions. Quick customer creation uses the existing People add permission.
+
+The catalog lists active products in the base currency with positive stock at the selected warehouse.
+Mark products **Featured in POS** on the inventory form. Scanning matches an exact barcode first, then an exact SKU.
+The checkout uses the product price or its promotion for the transaction date. Decimal quantities use the product's own unit.
+The server quotes line discounts, then allocates the order discount and coupon before calculating tax.
+Product tax rates apply unless the cashier supplies an override. POS line amounts and tenders round to the currency cent.
+
+Cash needs an active cash account available to the sale warehouse. Card and cheque need a bank account and
+a reference for the externally accepted payment. Gift cards redeem their existing balance. For customer deposits,
+issue a **Customer deposit account** under **Sales → Gift cards**, choose the customer, and enter the amount
+already funded. Recharge that account for later deposits. At the till, select the customer to use their balance.
+Both stored-value tenders release the original liability. A return restores stored value first, then refunds
+the original collection accounts. Shipping is excluded from merchandise returns.
+
+| Route under `/sale/api/pos/` | Behavior |
+| --- | --- |
+| `GET catalog/`, `GET customers/` | Search available products or eligible customers. Catalog accepts warehouse, date, scan, q, category, brand, featured and page. |
+| `POST quote/` | Send warehouse, date, optional customer, items and adjustments. Returns server prices, totals and the quote fingerprint. |
+| `POST draft/` | Send a cart, UUID key and revision. Saves the cashier's cart without reserving stock or consuming funds. |
+| `POST checkout/` | Send the same cart, key, revision, quote fingerprint and tender allocations. Retry the original request after a timeout. |
+| `GET history/` | Show this cashier's recent tickets at the requested warehouse. |
+| `GET tickets/<uuid>/`, `POST tickets/<uuid>/` | Resume a draft or reopen its receipt. POST the current revision to discard a draft. |
+
+Checkout commits the sale, stock deduction, coupon use, tender postings and receipt together.
+A changed quote or conflicting ticket revision returns 409 so the cashier can review it before paying.
+
+## Coupons and gift cards
+
+Open **Sales → Coupons** or **Sales → Gift cards**. Each menu uses its corresponding sale model's view permission.
+Issuing requires add permission. Recharging, changing expiry and deactivating require change permission.
+The programs are shared across warehouses. A cashier with warehouse access and `sale.add_salesorder` can validate a presented code without access to the management list.
+
+| Endpoint | Behavior |
+| --- | --- |
+| `POST /common/api/codes/generate/` | Send `{"purpose":"coupon"}` or `{"purpose":"gift_card"}` to receive a candidate in `code`. The database enforces uniqueness at issue. Other apps can register a model, field, length and alphabet in `common/codes.py`. |
+| `GET/POST /sale/api/coupons/` | Create with `kind` (flat or percentage), `value`, `quantity` and optional `code`. One code has one shared use limit. Flat amounts use the base currency. |
+| `POST /sale/api/coupons/validate/` | Send `code` and eligible `subtotal` for a preview. Validation leaves the quantity available. |
+| `GET/POST /sale/api/gift-cards/` | Issue with `amount`, `expired_date`, optional 16-digit `card_no`, and optionally one of `customer_id` or `user_id`. Omit both owners to issue a bearer card. |
+| `POST /sale/api/gift-cards/<id>/recharge/` | Send a positive `amount`. Send a stable UUID `request_key` on issue and recharge to make retries safe. |
+| `POST /sale/api/gift-cards/<id>/expiry/` | Send the new `expired_date` as YYYY-MM-DD. The card is valid through that date. |
+| `POST /sale/api/gift-cards/validate/` | Send `card_no` and, for customer-owned cards, `customer_id`. Staff-owned cards are checked against the authenticated user. Owner checks default on via `POS_STRICT_GIFT_CARD_OWNER`. |
+| `POST /sale/api/{coupons,gift-cards}/deactivate/` | Send an `ids` array. Deactivating used gift cards is rejected. Financial history is retained. |
+| `GET /sale/gift-cards/<id>/card.png?download=1` | Download the visible card with its current balance and expiration date. |
+
+List endpoints accept `page`, `per_page` (10, 25, 50, all), `search`, `sort_by` and `sort_dir`.
+Include `payable_amount` in gift-card validation to preview `tender_amount` and `remaining_due` for split payment.
+Gift-card totals cover the filtered list. Exports include all columns and use the selected rows, or the entire current page when no rows are selected.
+
+POS checkout consumes coupons and stored-value tenders inside sale completion. Issue, recharge, redemption
+and refund each record a corresponding liability movement in accounting.
+
 Base path: `/sale/api/`. Session authentication and Django model permissions are
 required. Writes require a valid session cookie and `X-CSRFToken`. JSON, form
 and multipart parsers match the existing base APIs.
@@ -66,6 +122,27 @@ For the example, subtotal is 28, tax is 4.2 and grand total is 37.2.
 Nested creation requires add permission for both orders and items. Everything
 is saved in one transaction. Omitting items permits header-only API creation;
 when provided, items must be nonempty and cannot contain existing IDs.
+
+## Import a sale from CSV
+
+Open **Sales list → Import CSV** to download a template and upload the product
+lines for one sale. `GET /sale/api/sales-orders/import/` downloads the template.
+`POST /sale/api/sales-orders/import/` accepts `multipart/form-data` with `file`,
+`currency`, `exchange_rate`, `payment_account`, and any optional order header
+fields from the create API. `GET /sale/api/sales-orders/import/options/` returns
+the header choices for the import form. These routes use the same order and item
+add permissions and warehouse scope as regular sales creation.
+
+The UTF-8 CSV requires `sku` and `quantity`. Optional columns are `unit_price`,
+`discount_amount`, `tax_rate`, and `description`. Each SKU must match an existing
+product. A blank price uses the catalog price when the currencies match. Supply
+a price in the sale currency when they differ. A blank tax uses the catalog tax
+rate, and a blank discount uses zero. Each line uses its product unit, and the
+sale preserves file order. The limit is 1,000 product rows and 5 MB.
+
+An invalid file returns 400 with errors under `file`, including row numbers for
+invalid lines. A successful import returns 201 with `sales_order`. The order
+starts uncompleted. Completing it applies the stock deduction and payment.
 
 ## Update and delete
 

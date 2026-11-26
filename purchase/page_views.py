@@ -5,6 +5,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from account.page_views import ProtectedAccountPageView
+from common.csv_files import MAX_PRODUCT_CSV_ROWS
 from warehouse.scope import WarehouseScopePageMixin, warehouse_scope
 
 from .models import PurchaseReturn
@@ -26,6 +27,7 @@ class PurchaseListPageView(WarehouseScopePageMixin, ProtectedAccountPageView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        can_add = has_role_permissions(self.request.user, PURCHASE_CREATE_PERMISSIONS)
         context.update({
             'page_section': 'purchase', 'page_mode': 'list', 'page_label': 'Purchase list',
             'section_label': 'Purchase', 'resource': {'singular': 'purchase', 'plural': 'purchases'},
@@ -33,7 +35,9 @@ class PurchaseListPageView(WarehouseScopePageMixin, ProtectedAccountPageView):
             'add_url': reverse('purchase_pages:create-purchase'),
             'list_api_url': reverse('purchase:purchase-order-list-view'),
             'view_url_template': reverse('purchase_pages:purchase-detail', args=[0]),
-            'can_add': has_role_permissions(self.request.user, PURCHASE_CREATE_PERMISSIONS),
+            'can_add': can_add,
+            'secondary_url': reverse('purchase_pages:import-purchase') if can_add else '',
+            'secondary_label': 'Import CSV',
             'can_delete': has_role_permissions(self.request.user, ('purchase.delete_purchaseorder', 'purchase.delete_purchaseorderitem')),
             'columns': [
                 {'key': key, 'label': label, 'type': kind}
@@ -91,6 +95,18 @@ class PurchaseCreatePageView(WarehouseScopePageMixin, ProtectedAccountPageView):
             'create_api_url': reverse('purchase:purchase-order-list'),
             'options_api_url': reverse('purchase:purchase-options'),
             'base_currency': settings.INVENTORY_BASE_CURRENCY,
+        })
+        return context
+
+
+class PurchaseImportPageView(PurchaseCreatePageView):
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context.update({
+            'page_label': 'Import purchase', 'form_heading': 'Import purchase', 'save_label': 'Import purchase',
+            'create_api_url': reverse('purchase:purchase-order-import'),
+            'options_api_url': reverse('purchase:purchase-import-options'),
+            'csv_import': True, 'max_csv_rows': f'{MAX_PRODUCT_CSV_ROWS:,}',
         })
         return context
 

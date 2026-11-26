@@ -112,12 +112,15 @@
             {% include 'hrm/includes/sidebar_group.html' with menu=hrm_loan_menu group_key='loan' group_label='Loan' %}
         </div>
         {% endif %}
-        {% if sale_access.view or sale_access.returns or sale_access.quotations %}
+        {% if sale_access.view or sale_access.returns or sale_access.quotations or sale_access.coupons or sale_access.gift_cards %}
         <button type="button" class="sidebar-link sidebar-group-toggle {% if page_section == 'sale' %}is-current{% endif %}" data-nav-toggle data-sales-toggle aria-controls="sales-submenu" aria-expanded="{% if page_section == 'sale' %}true{% else %}false{% endif %}">
             <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M3 3h2l3 12h10l3-8H6M9 20h.01M18 20h.01" stroke-linecap="round" stroke-linejoin="round"/></svg>
             <span>Sales</span><svg class="sidebar-chevron" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m9 5 7 7-7 7" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
         <div id="sales-submenu" class="sidebar-submenu" {% if page_section != 'sale' %}hidden{% endif %}>
+            {% if sale_access.pos %}<a href="{% url 'sale_pages:pos' %}" data-nav-item class="sidebar-sub-link {% if sale_area == 'pos' %}is-current{% endif %}">Point of sale</a>{% endif %}
+            {% if sale_access.coupons %}<a href="{% url 'sale_pages:coupons' %}" data-nav-item class="sidebar-sub-link {% if sale_area == 'coupons' %}is-current{% endif %}">Coupons</a>{% endif %}
+            {% if sale_access.gift_cards %}<a href="{% url 'sale_pages:gift-cards' %}" data-nav-item class="sidebar-sub-link {% if sale_area == 'gift-cards' %}is-current{% endif %}">Gift cards</a>{% endif %}
             {% if sale_access.view %}<a href="{% url 'sale_pages:sale-list' %}" data-nav-item class="sidebar-sub-link {% if page_section == 'sale' and not sale_area and page_mode != 'add' %}is-current{% endif %}" {% if page_section == 'sale' and not sale_area and page_mode != 'add' %}aria-current="page"{% endif %}>Sales list</a>{% endif %}
             {% if sale_access.add %}<a href="{% url 'sale_pages:create-sale' %}" data-nav-item class="sidebar-sub-link {% if page_section == 'sale' and not sale_area and page_mode == 'add' %}is-current{% endif %}" {% if page_section == 'sale' and not sale_area and page_mode == 'add' %}aria-current="page"{% endif %}>Create sale</a>{% endif %}
             {% if sale_access.quotations %}<a href="{% url 'sale_pages:quotation-list' %}" data-nav-item class="sidebar-sub-link {% if sale_area == 'quotations' %}is-current{% endif %}" {% if sale_area == 'quotations' and page_mode == 'list' %}aria-current="page"{% endif %}>Quotations</a>{% endif %}

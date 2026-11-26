@@ -20,6 +20,13 @@ def base_currency():
     return settings.INVENTORY_BASE_CURRENCY
 
 
+class GiftCardLiabilityEntry(models.Model):
+    """Positive movements increase outstanding stored value, negative ones release it."""
+    transaction = models.OneToOneField('sale.GiftCardTransaction', on_delete=models.PROTECT)
+    movement = models.DecimalField(max_digits=12, decimal_places=2)
+    currency = models.CharField(max_length=3, default=base_currency)
+
+
 class TransferType(models.TextChoices):
     FUND_TRANSFER = 'fund_transfer', 'Fund transfer'
     MONEY_TRANSFER = 'money_transfer', 'Money transfer'

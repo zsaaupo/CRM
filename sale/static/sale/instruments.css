@@ -1,0 +1,13 @@
+#instruments .instrument-actions { flex-wrap: wrap; padding-block: 12px; }
+#instruments .users-table tfoot { background: #fafaf9; font-weight: 600; font-variant-numeric: tabular-nums; }
+#instruments th[aria-sort="ascending"] button::after { content: " ↑"; }
+#instruments th[aria-sort="descending"] button::after { content: " ↓"; }
+
+@media print {
+    .workspace-sidebar, .workspace-topbar, .skip-link, #add, #create, #notice,
+    #instruments .users-toolbar, #instruments .users-pagination, #instruments input { display: none !important; }
+    .workspace-main, .workspace-content { margin: 0 !important; padding: 0 !important; }
+    #instruments .users-panel, #instruments .users-table-scroll { overflow: visible; }
+    #instruments .users-table th, #instruments .users-table td { padding: 5px; }
+}
+

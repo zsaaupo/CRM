@@ -145,6 +145,7 @@ USE_TZ = True
 
 # Exchange rates express base-currency units per one unit of the selected currency.
 INVENTORY_BASE_CURRENCY = os.environ.get('INVENTORY_BASE_CURRENCY', 'BDT').strip().upper()
+POS_STRICT_GIFT_CARD_OWNER = os.environ.get('POS_STRICT_GIFT_CARD_OWNER', 'true').strip().lower() in ('1', 'true', 'yes')
 
 
 # Static files (CSS, JavaScript, Images)

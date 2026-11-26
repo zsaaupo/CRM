@@ -1,0 +1,55 @@
+{% extends "layouts/dashboard.html" %}
+{% load static %}
+{% block title %}Gift card | eManager{% endblock %}
+{% block content %}
+<div class="workspace-content">
+    <div class="page-heading">
+        <div><p class="page-eyebrow">Sales</p><h1 class="page-title">Gift card<span class="text-emerald-600">.</span></h1></div>
+        <div class="flex flex-wrap gap-3">
+            <a class="secondary-button" href="{% url 'sale_pages:gift-cards' %}">Back to gift cards <span aria-hidden="true">&rarr;</span></a>
+            <a class="primary-button compact-primary" href="{% url 'sale_pages:gift-card-image' card.pk %}?download=1" download>Download card (PNG)</a>
+        </div>
+    </div>
+    <p id="notice" class="form-status mb-5" role="status" aria-live="polite" hidden></p>
+    <div class="grid items-start gap-6 mb-6 lg:grid-cols-2">
+        <img class="w-full rounded-2xl" src="{% url 'sale_pages:gift-card-image' card.pk %}" alt="Gift card {{ card.card_no }}, balance {{ currency }} {{ row.balance }}, expires {{ row.expired_date }}">
+        <section class="user-form-card">
+            <h2 class="section-title mb-6">Card details</h2>
+            <dl class="profile-grid">
+                <div><dt>Owner</dt><dd>{{ row.owner }}</dd></div>
+                <div><dt>Status</dt><dd><span class="user-status-badge {% if row.status == 'Active' %}is-active{% else %}is-inactive{% endif %}">{{ row.status }}</span></dd></div>
+                <div><dt>Loaded</dt><dd>{{ currency }} {{ row.amount }}</dd></div>
+                <div><dt>Spent</dt><dd>{{ currency }} {{ row.expense }}</dd></div>
+                <div><dt>Issued by</dt><dd>{{ row.created_by }}</dd></div>
+                <div><dt>Expiration date</dt><dd>{% if card.is_deposit %}Customer deposit · No expiry{% else %}{{ card.expired_date }}{% endif %}</dd></div>
+            </dl>
+        </section>
+    </div>
+    {% if can_change %}<div class="grid gap-6 mb-6 lg:grid-cols-2">
+        <form class="user-form-card" data-card-action action="{% url 'sale:gift-card-recharge' card.pk %}">
+            {% csrf_token %}{{ recharge.request_key }}
+            <h2 class="section-title mb-5">Recharge card</h2>
+            <label class="form-label" for="{{ recharge.amount.id_for_label }}">Amount ({{ currency }})</label>{{ recharge.amount }}
+            <div class="user-form-actions"><button type="submit" class="primary-button compact-primary">Recharge</button></div>
+        </form>
+        {% if not card.is_deposit %}<form class="user-form-card" data-card-action action="{% url 'sale:gift-card-expiry' card.pk %}">
+            {% csrf_token %}
+            <h2 class="section-title mb-5">Edit expiration</h2>
+            <label class="form-label" for="{{ expiry.expired_date.id_for_label }}">Expiration date</label>{{ expiry.expired_date }}
+            <div class="user-form-actions"><button type="submit" class="secondary-button">Update expiration</button></div>
+        </form>
+        {% endif %}
+    </div>{% endif %}
+    <section class="users-panel">
+        <div class="users-toolbar"><h2 class="section-title">Transaction history</h2></div>
+        <div class="users-table-scroll"><table class="users-table">
+            <thead><tr><th scope="col">Date</th><th scope="col">Action</th><th scope="col">Amount ({{ currency }})</th><th scope="col">Balance after ({{ currency }})</th><th scope="col">Recorded by</th></tr></thead>
+            <tbody>{% for entry in entries %}
+                <tr><td>{{ entry.created_at }}</td><td>{{ entry.get_kind_display }}</td><td>{{ entry.amount }}</td><td>{{ entry.balance_after }}</td><td>{{ entry.created_by }}</td></tr>
+            {% endfor %}</tbody>
+        </table></div>
+    </section>
+</div>
+{% endblock %}
+{% block workspace_js %}<script type="module" src="{% static 'sale/js/instruments.js' %}"></script>{% endblock %}
+

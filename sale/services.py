@@ -59,7 +59,7 @@ def delete_order(order, request):
     order.delete()
 
 
-def complete_sale(actor, sale_id):
+def complete_sale(actor, sale_id, *, settle=None):
     if not has_role_permissions(actor, ('sale.change_salesorder',)):
         raise PermissionDenied('You do not have permission to complete a sale.')
     try:
@@ -109,7 +109,10 @@ def complete_sale(actor, sale_id):
                 if stock.quantity != expected_quantity:
                     raise ValidationError({'quantity': 'The database cannot store this resulting stock quantity accurately.'})
                 record_activity(stock, 'stock_changed', actor=actor)
-            post_completed_sale_payment(order, scope, actor, date=timezone.localdate(now))
+            if settle is None:
+                post_completed_sale_payment(order, scope, actor, date=timezone.localdate(now))
+            else:
+                settle(order, scope, actor)
             record_activity(order, 'completed', actor=actor)
             return order, True
     except OperationalError as exc:

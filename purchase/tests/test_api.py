@@ -5,19 +5,20 @@ from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group, Permission
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import IntegrityError
 from django.db.models.deletion import ProtectedError
 from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
 
-from accounting.models import FinancialAccount
+from accounting.models import FinancialAccount, PurchasePayment
 from common.models import TradeStatus
 from inventory.models import Currency, Product, UnitOfMeasure
 from people.models import Party
 from purchase.models import PurchaseOrder, PurchaseOrderItem
 from purchase.serializers import PurchaseOrderItemSerializer, PurchaseOrderSerializer
-from warehouse.models import Stock, WareHouse
+from warehouse.models import RoleWarehouseAccess, Stock, WareHouse
 
 
 class PurchaseAPITests(TestCase):
@@ -45,6 +46,131 @@ class PurchaseAPITests(TestCase):
     def order_payload(self, **changes):
         return {'currency': 'BDT', 'exchange_rate': '1.00000000', 'supplier': self.supplier.pk,
                 'payment_account': self.payment_account.pk, **changes}
+
+    def import_csv(self, contents, **changes):
+        payload = self.order_payload(file=SimpleUploadedFile('purchase.csv', contents, content_type='text/csv'), **changes)
+        return self.client.post(reverse('purchase:purchase-order-import'), payload, format='multipart')
+
+    def test_csv_import_uses_catalog_cost_and_leaves_stock_and_payment_to_receiving(self):
+        self.grant(PurchaseOrder, 'add', 'change')
+        self.grant(PurchaseOrderItem, 'add')
+        warehouse = WareHouse.objects.create(name='Receiving warehouse')
+        stock = Stock.objects.create(warehouse=warehouse, product=self.product, quantity=10)
+        self.payment_account.opening_balance = Decimal(100)
+        self.payment_account.save(update_fields=['opening_balance'])
+        self.product.cost_price, self.product.sale_price, self.product.product_tax = Decimal('12.5'), Decimal(20), Decimal(18)
+        self.product.save(update_fields=['cost_price', 'sale_price', 'product_tax'])
+        box = UnitOfMeasure.objects.create(name='Box', code='PURCHASE-BOX')
+        other = Product.objects.create(sku='001,BOX', name='Box', currency_id='BDT', unit=box)
+        response = self.import_csv(
+            b'\xef\xbb\xbf Quantity, SKU, unit_price, discount_amount, tax_rate, description\r\n'
+            b'2.5,KEYBOARD,,,,\r\n\r\n1,"001,BOX",10,3,10,"Box, small"\r\n',
+            warehouse=warehouse.pk, expected_date='', shipping_cost='2', is_received='true',
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+        order = response.data['purchase_order']
+        self.assertEqual(order['supplier'], self.supplier.pk)
+        self.assertEqual(order['status'], 'draft')
+        self.assertFalse(order['is_received'])
+        self.assertEqual(order['grand_total'], '40.9500')
+        items = list(PurchaseOrderItem.objects.filter(purchase_order_id=order['id']))
+        self.assertEqual([item.product_id for item in items], [self.product.pk, other.pk])
+        self.assertEqual([item.line_number for item in items], [1, 2])
+        self.assertEqual([item.unit_id for item in items], [self.unit.pk, box.pk])
+        self.assertEqual([item.tax_rate for item in items], [Decimal(0), Decimal(10)])
+        self.assertEqual(items[1].description, 'Box, small')
+        self.assertTrue(all(item.create_by == self.user.username for item in items))
+        stock.refresh_from_db()
+        self.assertEqual(stock.quantity, 10)
+        self.assertFalse(Stock.objects.filter(warehouse=warehouse, product=other).exists())
+        self.assertFalse(PurchasePayment.objects.filter(purchase_order_id=order['id']).exists())
+
+        received = self.client.post(reverse('purchase:purchase-order-receive'), {
+            'purchase_id': order['id'], 'is_received': True,
+        }, format='json')
+        self.assertEqual(received.status_code, 200, received.data)
+        stock.refresh_from_db()
+        self.assertEqual(stock.quantity, Decimal('12.5'))
+        self.assertEqual(Stock.objects.get(warehouse=warehouse, product=other).quantity, 1)
+        payment = PurchasePayment.objects.get(purchase_order_id=order['id'])
+        self.assertEqual(payment.amount, Decimal('40.9500'))
+
+    def test_csv_import_rejects_bad_files_and_saves_nothing_on_bad_rows_or_failed_insert(self):
+        self.grant(PurchaseOrder, 'add')
+        self.grant(PurchaseOrderItem, 'add')
+        missing = self.client.post(reverse('purchase:purchase-order-import'), self.order_payload(), format='multipart')
+        self.assertEqual(missing.status_code, 400, missing.data)
+        self.assertIn('file', missing.data)
+        for contents in (b'sku,invalid\nKEYBOARD,2\n', b'sku,quantity\n', b'sku,quantity\n"KEYBOARD,2\n'):
+            response = self.import_csv(contents)
+            self.assertEqual(response.status_code, 400, response.data)
+            self.assertIn('file', response.data)
+        response = self.import_csv(b'sku,quantity,unit_price,discount_amount,tax_rate\n'
+                                   b'KEYBOARD,1,5,0,10\nUNKNOWN,1,5,0,0\nKEYBOARD,0,5,0,0\n'
+                                   b'KEYBOARD,1,5,6,0\nKEYBOARD,1,5,0,101\n')
+        self.assertEqual(response.status_code, 400, response.data)
+        self.assertEqual([message.split(':')[0] for message in response.data['file']], ['Row 3', 'Row 4', 'Row 5', 'Row 6'])
+        create = PurchaseOrderItem.objects.create
+
+        def fail_second_line(**values):
+            if values['line_number'] == 2:
+                raise IntegrityError('line insert failed')
+            return create(**values)
+
+        with patch('purchase.serializers.PurchaseOrderItem.objects.create', side_effect=fail_second_line):
+            response = self.import_csv(b'sku,quantity\nKEYBOARD,1\nKEYBOARD,2\n')
+        self.assertEqual(response.status_code, 400, response.data)
+        self.assertEqual(PurchaseOrder.objects.count(), 1)
+        self.assertEqual(PurchaseOrderItem.objects.count(), 1)
+
+    def test_csv_import_requires_an_explicit_price_in_a_different_currency(self):
+        self.grant(PurchaseOrder, 'add')
+        self.grant(PurchaseOrderItem, 'add')
+        Currency.objects.create(code='USD', name='Dollar', exchange_rate=120)
+        order = {'currency': 'USD', 'exchange_rate': '120'}
+        response = self.import_csv(b'sku,quantity\nKEYBOARD,2\n', **order)
+        self.assertEqual(response.status_code, 400, response.data)
+        self.assertIn('unit price in USD', response.data['file'][0])
+        response = self.import_csv(b'sku,quantity,unit_price\nKEYBOARD,2,3.25\n', **order)
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data['purchase_order']['grand_total'], '6.5000')
+
+    def test_csv_import_page_template_options_and_warehouse_scope(self):
+        self.grant(PurchaseOrder, 'view', 'add')
+        url = reverse('purchase:purchase-order-import')
+        page = reverse('purchase_pages:import-purchase')
+        listing = reverse('purchase_pages:purchase-list')
+        sheet = b'sku,quantity\nKEYBOARD,1\n'
+        self.assertNotContains(self.client.get(listing), f'href="{page}"')
+        self.assertEqual(self.client.get(url).status_code, 403)
+        self.assertEqual(self.client.get(page).status_code, 403)
+        self.assertEqual(self.import_csv(sheet).status_code, 403)
+
+        self.grant(PurchaseOrderItem, 'add')
+        self.assertContains(self.client.get(listing), f'href="{page}"')
+        self.assertContains(self.client.get(reverse('purchase_pages:create-purchase')), f'href="{page}"')
+        import_page = self.client.get(page)
+        self.assertContains(import_page, f'action="{url}"')
+        self.assertContains(import_page, 'name="file"')
+        template = self.client.get(url)
+        self.assertEqual(template.status_code, 200)
+        self.assertEqual(template.content.decode('utf-8-sig').strip(),
+                         'sku,quantity,unit_price,discount_amount,tax_rate,description')
+
+        main = WareHouse.objects.create(name='Assigned branch')
+        other = WareHouse.objects.create(name='Other branch')
+        RoleWarehouseAccess.objects.filter(role=self.role).update(all_warehouses=False, warehouse=main)
+        self.payment_account.warehouse = main
+        self.payment_account.save(update_fields=['warehouse'])
+        options = self.client.get(reverse('purchase:purchase-import-options'))
+        self.assertEqual(options.status_code, 200, options.data)
+        self.assertEqual(options.data['warehouse'], [{'value': main.pk, 'label': str(main)}])
+        self.assertNotIn('product', options.data)
+        denied = self.import_csv(sheet, warehouse=other.pk)
+        self.assertEqual(denied.status_code, 403, denied.data)
+        response = self.import_csv(sheet)
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data['purchase_order']['warehouse'], main.pk)
 
     def test_purchase_creation_requires_an_eligible_payment_account(self):
         self.grant(PurchaseOrder, 'add')

@@ -1,0 +1,78 @@
+{% extends "layouts/dashboard.html" %}
+{% load static %}
+{% block title %}Point of sale | eManager{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'sale/pos.css' %}">{% endblock %}
+{% block content %}
+<div class="workspace-content" id="pos" data-base="{% url 'sale:pos-catalog' %}" data-people="{% url 'people:party-list' %}"
+     data-card="{% url 'sale:gift-card-validate' %}" data-currency="{{ currency }}" data-cashier="{{ request.user.pk }}">
+    {% csrf_token %}
+    <header class="page-heading"><div><p class="page-eyebrow">Sales</p><h1 class="page-title">Point of sale<span class="text-emerald-600">.</span></h1></div>
+        <button type="button" class="secondary-button" id="recent">Recent transactions</button>
+    </header>
+    <p role="status" aria-live="polite" id="pos-notice" class="form-status mb-5" hidden></p>
+    <div class="pos-layout">
+        <section class="users-panel">
+            <div class="users-toolbar"><h2 class="section-title">Current sale</h2><span class="user-count" id="item-count">0 items</span></div>
+            <div class="pos-pad pos-fields">
+                <label>Warehouse<select class="form-input" id="warehouse">{% for w in warehouses %}<option value="{{ w.pk }}">{{ w.name }}</option>{% empty %}<option value="">No active warehouse</option>{% endfor %}</select></label>
+                <label>Transaction date<input class="form-input" type="date" id="sale-date" value="{{ today|date:'Y-m-d' }}" max="{{ today|date:'Y-m-d' }}"></label>
+                <div class="pos-wide"><label for="customer-search">Customer</label><div class="pos-row"><input id="customer-search" class="form-input" placeholder="Walk-in · Search name, phone or code" autocomplete="off">
+                    {% if can_add_customer %}<button type="button" class="secondary-button" id="add-customer">Add customer</button>{% endif %}</div>
+                    <div id="customer-results" aria-live="polite"></div></div>
+            </div>
+            <div class="users-table-scroll"><table class="users-table"><thead><tr><th>Product</th><th>Price</th><th>Qty</th><th>Discount / unit</th><th>Subtotal</th><th><span class="sr-only">Remove</span></th></tr></thead><tbody id="cart-lines"></tbody></table></div>
+            <div class="pos-pad">
+                <details id="adjustments"><summary>Discount, coupon, tax and shipping</summary>
+                    <div class="pos-fields mt-4">
+                        <label>Order discount<select class="form-input" id="discount-type"><option value="flat">Flat amount</option><option value="percentage">Percentage</option></select></label>
+                        <label>Discount value<input class="form-input" type="number" min="0" step=".01" id="discount" value="0"></label>
+                        <label>Coupon code<input class="form-input" id="coupon" maxlength="40"></label>
+                        <label>Tax override (%)<input class="form-input" type="number" min="0" max="100" step=".0001" id="tax-rate" placeholder="Product rates"></label>
+                        <label>Shipping ({{ currency }})<input class="form-input" type="number" min="0" step=".01" id="shipping" value="0"></label>
+                    </div>
+                </details>
+                <dl class="pos-totals">
+                    <div><dt>Subtotal</dt><dd id="subtotal">—</dd></div><div><dt>Order discount</dt><dd id="discount-total">—</dd></div>
+                    <div><dt>Coupon</dt><dd id="coupon-total">—</dd></div><div><dt>Tax</dt><dd id="tax">—</dd></div>
+                    <div><dt>Shipping</dt><dd id="shipping-total">—</dd></div><div class="pos-grand"><dt>Grand total</dt><dd id="grand">—</dd></div>
+                </dl>
+                <div class="pos-actions"><button class="secondary-button" id="cancel-cart">Cancel cart</button><button class="secondary-button" id="park" disabled>Save draft</button>
+                    <button class="primary-button compact-primary" id="pay" disabled>Take payment</button></div>
+            </div>
+        </section>
+        <section class="users-panel pos-catalog"><div class="users-toolbar"><h2 class="section-title">Product catalog</h2></div>
+            <div class="pos-pad"><label class="form-label" for="lookup">Search or scan barcode</label><input id="lookup" class="form-input" type="search" placeholder="Product name, SKU or barcode" autocomplete="off">
+                <div class="pos-fields mt-4"><label>Category<select class="form-input" id="category"><option value="">All categories</option>{% for c in categories %}<option value="{{ c.pk }}">{{ c.name }}</option>{% endfor %}</select></label>
+                    <label>Brand<select class="form-input" id="brand"><option value="">All brands</option>{% for b in brands %}<option value="{{ b.pk }}">{{ b.name }}</option>{% endfor %}</select></label></div>
+                <label class="pos-check"><input type="checkbox" id="featured"> Featured only</label>
+                <div id="tiles" class="pos-tiles"></div>
+            </div>
+            <nav class="users-pagination"><button class="secondary-button" id="catalog-prev" disabled>Previous</button><span id="catalog-page"></span><button class="secondary-button" id="catalog-next" disabled>Next</button></nav>
+        </section>
+    </div>
+    <dialog id="payment" class="role-dialog pos-dialog"><h2 class="section-title">Payment</h2>
+        <p class="section-description" id="amount-due"></p><div id="tenders"></div>
+        <button type="button" class="text-button" id="split">+ Add another payment</button>
+        <p id="remaining" class="section-description"></p>
+        <div class="user-form-actions"><button class="secondary-button" data-close>Back to cart</button><button class="primary-button compact-primary" id="complete">Complete sale</button></div>
+    </dialog>
+    <template id="tender-template"><fieldset class="pos-fields pos-tender">
+        <label>Method<select class="form-input" name="method"><option value="cash">Cash</option><option value="card">Card</option><option value="cheque">Cheque</option><option value="gift_card">Gift card</option><option value="deposit">Customer deposit</option></select></label>
+        <label>Amount<input class="form-input" name="amount" type="number" min=".01" step=".01"></label>
+        <label>Receive into<select class="form-input" name="account">{% for a in accounts %}<option value="{{ a.pk }}" data-type="{{ a.type }}" data-warehouse="{{ a.warehouse_id|default:'' }}">{{ a.name }}</option>{% endfor %}</select></label>
+        <label>Cash received<input class="form-input" name="received" type="number" min="0" step=".01" placeholder="Exact amount"></label>
+        <label>Payment reference<input class="form-input" name="reference" maxlength="100" placeholder="Terminal or cheque reference"></label>
+        <label>Gift card number<input class="form-input" name="card_no" inputmode="numeric" maxlength="16" autocomplete="off"></label>
+        <button class="text-button" type="button" data-balance>Check balance</button><button class="text-button" type="button" data-remove>Remove payment</button>
+    </fieldset></template>
+    <dialog id="history" class="role-dialog pos-dialog"><h2 class="section-title">Recent transactions</h2><div id="history-rows" class="pos-history"></div>
+        <nav class="users-pagination" aria-label="Transaction pages"><button class="secondary-button" id="history-prev">Previous</button><span id="history-page"></span><button class="secondary-button" id="history-next">Next</button></nav>
+        <div class="user-form-actions"><button class="secondary-button" data-close>Close</button></div></dialog>
+    <dialog id="receipt" class="role-dialog pos-dialog"><div id="receipt-body"></div><div class="user-form-actions"><button class="secondary-button" data-close>Close</button><button class="primary-button compact-primary" id="print-receipt">Print receipt</button></div></dialog>
+    {% if can_add_customer %}<dialog id="new-customer" class="role-dialog"><form id="customer-form"><h2 class="section-title mb-5">Add customer</h2><div class="pos-fields">
+        <label>Name<input class="form-input" name="name" required maxlength="200"></label><label>Customer code<input class="form-input" name="code" required maxlength="40"></label>
+        <label>Phone<input class="form-input" name="phone" maxlength="32"></label></div>
+        <div class="user-form-actions"><button type="button" class="secondary-button" data-close>Cancel</button><button class="primary-button compact-primary">Create customer</button></div></form></dialog>{% endif %}
+</div>
+{% endblock %}
+{% block workspace_js %}<script type="module" src="{% static 'sale/js/pos.js' %}"></script>{% endblock %}

@@ -58,7 +58,8 @@ class SalesReturnDetailSerializer(SalesReturnSerializer):
         if not record.is_completed:
             return None
         amounts = record.refund_payments.values_list('amount', flat=True)
-        return format(sum(amounts, ZERO), '.4f')
+        stored = record.giftcardtransaction_set.filter(kind='refund').values_list('amount', flat=True)
+        return format(sum(amounts, ZERO) + sum(stored, ZERO), '.4f')
 
     def get_currency(self, record):
         return base_currency()

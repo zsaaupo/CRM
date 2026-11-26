@@ -40,5 +40,6 @@
         {% include 'inventory/includes/field.html' with name='Whole_sale_price' label='Wholesale price' field_type='number' only %}
         {% include 'inventory/includes/field.html' with name='product_tax' label='Tax rate (%)' field_type='number' required=True value='0' maximum='100' only %}
         {% include 'inventory/includes/field.html' with name='is_returnable' label='Returnable' field_type='checkbox' checked=True only %}
+        {% include 'inventory/includes/field.html' with name='is_featured' label='Featured in POS' field_type='checkbox' only %}
     </div>
 </fieldset>

@@ -1,0 +1,6 @@
+<legend class="sr-only">Product CSV</legend>
+<label class="form-label" for="id_file">Product CSV</label>
+<input class="form-input" id="id_file" name="file" type="file" accept=".csv,text/csv" required aria-describedby="id_file_hint id_file_error">
+<p id="id_file_hint" class="section-description">Upload a UTF-8 CSV with <code>sku</code> and <code>quantity</code> columns, up to {{ max_csv_rows }} product rows and 5 MB. A blank <code>unit_price</code> uses the {{ catalog_price }} when the currencies match. Otherwise, enter the price in the {{ document_type }} currency.</p>
+<p id="id_file_error" data-error-for="file" class="form-error whitespace-pre-line" hidden></p>
+<a class="text-button mt-3" href="{{ create_api_url }}" download>Download CSV template</a>

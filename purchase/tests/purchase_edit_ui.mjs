@@ -47,21 +47,33 @@ function line() {
     return row;
 }
 
-async function setup({ received = false, failPage = false, conflict = false, edit = true, restricted = false } = {}) {
+async function setup({ received = false, failPage = false, conflict = false, edit = true, restricted = false, csvImport = false } = {}) {
     const form = new Element('form');
     const fields = Object.fromEntries(['supplier', 'warehouse', 'supplier_reference', 'order_date', 'expected_date', 'currency',
         'exchange_rate', 'status', 'shipping_cost', 'notes', 'payment_account', 'csrfmiddlewaretoken'].map(name => [name, new Element('input')]));
     fields.csrfmiddlewaretoken.value = 'csrf';
     const parts = Object.fromEntries(['status', 'header', 'submit', 'add-line', 'retry', 'lines'].map(name => [name, new Element()]));
+    const fileError = new Element();
+    if (csvImport) {
+        delete parts.lines;
+        delete parts['add-line'];
+        parts.csv = new Element('fieldset');
+        fields.file = new Element('input');
+        fields.file.files = [{name: 'purchase.csv'}];
+        fileError.dataset.errorFor = 'file';
+    }
     const spinner = new Element(); const label = new Element(); label.textContent = edit ? 'Save changes' : 'Create purchase';
-    form.action = edit ? '/update/7/' : '/create/';
+    form.action = csvImport ? '/import/' : edit ? '/update/7/' : '/create/';
     form.dataset = { method: edit ? 'PATCH' : 'POST', optionsUrl: '/options/', detailUrl: '/detail/7/',
         itemsUrl: '/items/?purchase_order=7', successUrl: '/purchases/' };
     form.elements = { namedItem: name => fields[name] };
     form.querySelector = selector => selector === '[data-submit-spinner]' ? spinner : selector === '[data-submit-label]' ? label
         : parts[selector.match(/^\[data-purchase-(.*)\]$/)?.[1]];
-    form.querySelectorAll = selector => selector === '[data-purchase-line]' ? parts.lines.children : [];
-    parts.lines.querySelectorAll = () => parts.lines.children;
+    form.querySelectorAll = selector => {
+        if (selector === '[data-purchase-line]') return parts.lines?.children ?? [];
+        return csvImport && selector.startsWith('[data-error-for]') ? [fileError] : [];
+    };
+    if (parts.lines) parts.lines.querySelectorAll = () => parts.lines.children;
     const options = { warehouse_scope: {all_warehouses: !restricted, warehouse: restricted ? 1 : null}, base_currency: 'BDT', supplier: [], warehouse: [{ value: 1, label: 'Main' }],
         payment_account: [{ value: 30, label: 'Main bank', warehouse: 1 },
             ...(restricted ? [] : [{ value: 31, label: 'Shared bank', warehouse: null }])],
@@ -70,6 +82,7 @@ async function setup({ received = false, failPage = false, conflict = false, edi
             { value: 5, label: 'Rice', unit: 9, unit_label: 'Pieces (PCS)', cost_price: '12.3456' },
             { value: 6, label: 'Free sample', unit: 9, unit_label: 'Pieces (PCS)', cost_price: '0.0000' },
         ] };
+    if (csvImport) delete options.product;
     const record = { id: 7, is_received: received, supplier: 44, supplier_name: 'Historical supplier', warehouse: restricted ? 1 : 2,
         payment_account: restricted ? 30 : 31,
         warehouse_name: 'Inactive branch', supplier_reference: 'REF', order_date: '2026-11-15', expected_date: null,
@@ -81,6 +94,14 @@ async function setup({ received = false, failPage = false, conflict = false, edi
         document: { querySelector: () => null, getElementById: () => ({ content: { firstElementChild: line() } }),
             createElement: tag => new Element(tag), createElementNS: (ns, tag) => new Element(tag) },
         window: { location: { origin: 'https://crm.test', assign: url => redirects.push(url) } }, URL,
+        FormData: class extends Map {
+            constructor(source) {
+                assert.equal(source, form);
+                assert.equal(parts.csv.disabled, false);
+                super(Object.entries(fields).filter(([, field]) => !field.disabled)
+                    .map(([name, field]) => [name, field.files?.[0] ?? field.value]));
+            }
+        },
         getJSON: async url => {
             calls.push(url);
             if (url === '/options/') return structuredClone(options);
@@ -91,6 +112,12 @@ async function setup({ received = false, failPage = false, conflict = false, edi
                 results: structuredClone(items.slice((page - 1) * 20, page * 20)) };
         },
         postJSON: async (url, data, csrf) => { assert.equal(csrf, 'csrf'); saved.push({ method: 'POST', url, data: structuredClone(data) }); },
+        postFormData: async (url, data, csrf) => {
+            assert.equal(csrf, 'csrf');
+            saved.push({ method: 'POST-MULTIPART', url, data });
+            if (saved.length === 1) throw Object.assign(new Error(), {status: 400,
+                errors: {file: ['Row 2: Unknown SKU.', 'Row 3: Invalid quantity.']}});
+        },
         patchJSON: async (url, data, csrf) => {
             assert.equal(csrf, 'csrf'); saved.push({ method: 'PATCH', url, data: structuredClone(data) });
             if (conflict) { record.is_received = true; throw Object.assign(new Error('Received purchase'), { status: 409 }); }
@@ -99,10 +126,28 @@ async function setup({ received = false, failPage = false, conflict = false, edi
     vm.runInContext(source, context);
     context.testForm = form;
     await vm.runInContext('initializePurchaseForm(testForm).ready', context);
-    return { form, fields, parts, saved, redirects, calls, context };
+    return { form, fields, parts, saved, redirects, calls, context, fileError };
 }
 
 const event = { preventDefault() {} };
+const importer = await setup({edit: false, restricted: true, csvImport: true});
+assert.equal(importer.parts.submit.disabled, false, importer.parts.status.textContent);
+assert.deepEqual(importer.calls, ['/options/']);
+importer.fields.payment_account.value = '30';
+await importer.form.listeners.submit(event);
+assert.equal(importer.saved[0].method, 'POST-MULTIPART');
+assert.equal(importer.saved[0].url, '/import/');
+assert.equal(importer.saved[0].data.get('file').name, 'purchase.csv');
+assert.equal(importer.saved[0].data.get('payment_account'), '30');
+assert.equal(importer.saved[0].data.has('warehouse'), false);
+assert.equal(importer.fileError.textContent, 'Row 2: Unknown SKU.\nRow 3: Invalid quantity.');
+assert.equal(importer.fileError.hidden, false);
+assert.deepEqual(importer.redirects, []);
+await importer.form.listeners.submit(event);
+assert.equal(importer.fileError.hidden, true);
+assert.deepEqual(importer.redirects, ['/purchases/']);
+console.log('Purchase CSV form passed: multipart upload, assigned warehouse, row errors, and retry.');
+
 const editor = await setup();
 assert.equal(editor.parts.lines.children.length, 26);
 assert.equal(editor.parts.submit.disabled, false);

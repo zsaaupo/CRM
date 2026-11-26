@@ -12,6 +12,7 @@ from django.http import HttpResponse
 from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
 
+from common.csv_files import csv_response
 
 COUNT_HEADERS = ('Product Name', 'Product Code', 'IMEI or Serial Numbers', 'Expected', 'Counted')
 MAX_COUNT_FILE = 5 * 1024 * 1024
@@ -97,15 +98,6 @@ def parse_count_file(upload):
     return entries
 
 
-def csv_response(filename, headers, rows):
-    content = StringIO(newline='')
-    writer = csv.writer(content)
-    writer.writerow(headers)
-    writer.writerows(rows)
-    return HttpResponse(content.getvalue().encode('utf-8-sig'), content_type='text/csv; charset=utf-8',
-                        headers={'Content-Disposition': f'attachment; filename="{filename}"'})
-
-
 def count_sheet(count, *, final=False):
     rows = (
         (csv_text(item.product_name), csv_text(item.sku), '',
@@ -116,13 +108,13 @@ def count_sheet(count, *, final=False):
     return csv_response(f'{count.reference_no}-{"counted" if final else "initial"}.csv', COUNT_HEADERS, rows)
 
 
-def xlsx_response(filename, headers, rows):
+def xlsx_response(filename, headers, rows, *, sheet_name='Stock counts'):
     """Write a single sheet with explicit text cells for references and labels."""
     spreadsheet = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main'
     office = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships'
     package = 'http://schemas.openxmlformats.org/package/2006'
     workbook = Element('workbook', {'xmlns': spreadsheet, 'xmlns:r': office})
-    SubElement(SubElement(workbook, 'sheets'), 'sheet', name='Stock counts', sheetId='1', attrib={'r:id': 'rId1'})
+    SubElement(SubElement(workbook, 'sheets'), 'sheet', name=sheet_name, sheetId='1', attrib={'r:id': 'rId1'})
     sheet = Element('worksheet', {'xmlns': spreadsheet})
     columns = SubElement(sheet, 'cols')
     for number, cells in enumerate(zip(headers, *rows), start=1):

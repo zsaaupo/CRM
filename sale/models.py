@@ -3,12 +3,14 @@ from datetime import timedelta
 from decimal import Decimal, ROUND_HALF_UP, localcontext
 
 from django.core.exceptions import ValidationError
+from django.conf import settings
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.db.models import F, Q
 from django.utils import timezone
 
 from common.models import TradeStatus, TimeStampedModel
+from .instrument_models import Coupon, CouponRedemption, GiftCard, GiftCardTransaction
 
 
 MONEY_PRECISION = Decimal('0.0001')
@@ -44,6 +46,7 @@ class SalesTotals:
 
 
 class SalesLineAmounts:
+    amount_precision = MONEY_PRECISION
     @property
     def net_amount(self):
         return self.calculate_amounts()[0]
@@ -60,8 +63,8 @@ class SalesLineAmounts:
         with localcontext() as context:
             context.prec = 50
             net = (Decimal(self.quantity) * Decimal(self.unit_price) - Decimal(self.discount_amount)).quantize(
-                MONEY_PRECISION, rounding=ROUND_HALF_UP)
-            tax = (net * Decimal(self.tax_rate) / Decimal('100')).quantize(MONEY_PRECISION, rounding=ROUND_HALF_UP)
+                self.amount_precision, rounding=ROUND_HALF_UP)
+            tax = (net * Decimal(self.tax_rate) / Decimal('100')).quantize(self.amount_precision, rounding=ROUND_HALF_UP)
             return net, tax, net + tax
 
     def clean(self):
@@ -142,6 +145,12 @@ class SalesOrder(SalesTotals, TimeStampedModel):
 
 
 class SalesOrderItem(SalesLineAmounts, TimeStampedModel):
+    pos_line = models.BooleanField(default=False, editable=False)
+
+    @property
+    def amount_precision(self):
+        return Decimal('0.01') if self.pos_line else MONEY_PRECISION
+
     sales_order = models.ForeignKey(SalesOrder, on_delete=models.PROTECT, related_name='items')
     line_number = models.PositiveIntegerField(validators=[MinValueValidator(1)])
     product = models.ForeignKey('inventory.Product', on_delete=models.PROTECT, related_name='sales_order_items')
@@ -173,6 +182,19 @@ class SalesOrderItem(SalesLineAmounts, TimeStampedModel):
 
 def generate_return_number():
     return f'SR-{uuid.uuid4().hex.upper()}'
+
+
+class POSTicket(models.Model):
+    key = models.UUIDField(primary_key=True)
+    cashier = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
+    warehouse = models.ForeignKey('warehouse.WareHouse', on_delete=models.PROTECT)
+    order = models.OneToOneField(SalesOrder, null=True, on_delete=models.PROTECT, related_name='pos_ticket')
+    revision = models.PositiveIntegerField(default=0)
+    cancelled = models.BooleanField(default=False)
+    cart = models.JSONField(default=dict)
+    receipt = models.JSONField(default=dict)
+    request_digest = models.CharField(max_length=64, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
 
 class SalesReturn(TimeStampedModel):

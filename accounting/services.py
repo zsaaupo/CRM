@@ -1,4 +1,5 @@
 from collections import defaultdict
+from uuid import uuid4
 from decimal import ROUND_HALF_UP, localcontext
 
 from django.db import connections, transaction
@@ -10,6 +11,8 @@ from rest_framework.exceptions import APIException, PermissionDenied, Validation
 
 from account.permissions import has_role_permissions
 from sale.models import MONEY_PRECISION
+from sale.models import GiftCardTransaction
+from sale.instruments import CENT, Kind, move_card
 from warehouse.scope import lock_warehouse_scope, scoped_queryset
 
 from .models import (
@@ -76,6 +79,11 @@ def sales_payment_totals(sales_order):
                 paid += amount
             else:
                 refunded += amount
+        for kind, amount in GiftCardTransaction.objects.filter(sale=sales_order).values_list('kind', 'amount'):
+            if kind == 'redeem':
+                paid += amount
+            elif kind == 'refund':
+                refunded += amount
         return total, paid, refunded
 
 
@@ -88,8 +96,9 @@ def return_refund_amount(order, quantities, previous):
         before += line_total * returned / line.quantity
         after += line_total * (returned + quantities.get(line.pk, 0)) / line.quantity
     rate = order.exchange_rate
-    return ((after * rate).quantize(MONEY_PRECISION, rounding=ROUND_HALF_UP)
-            - (before * rate).quantize(MONEY_PRECISION, rounding=ROUND_HALF_UP))
+    precision = CENT if hasattr(order, 'pos_ticket') else MONEY_PRECISION
+    return ((after * rate).quantize(precision, rounding=ROUND_HALF_UP)
+            - (before * rate).quantize(precision, rounding=ROUND_HALF_UP))
 
 
 def lock_rows(queryset):
@@ -257,6 +266,15 @@ def post_sales_return_refund(record, scope, actor, *, date, amount):
     """Refund the original collection accounts while the sale order is locked."""
     if amount <= ZERO:
         return
+    stored = defaultdict(lambda: ZERO)
+    for card_id, kind, value in GiftCardTransaction.objects.filter(sale_id=record.sales_order_id).values_list(
+            'card_id', 'kind', 'amount'):
+        stored[card_id] += value if kind == 'redeem' else -value
+    for card_id, balance in sorted(stored.items()):
+        refund = min(amount, balance)
+        if refund > ZERO:
+            move_card(card_id, Kind.REFUND, refund, actor, uuid4(), sale=record.sales_order, sale_return=record)
+            amount -= refund
     refundable = defaultdict(lambda: ZERO)
     entries = AccountTransaction.objects.filter(sales_payment__sales_order=record.sales_order_id)
     for account_id, direction, posted in entries.order_by().values_list('account_id', 'direction', 'amount').iterator():
@@ -279,6 +297,8 @@ def post_sales_return_refund(record, scope, actor, *, date, amount):
         amount -= refund
         if amount == ZERO:
             break
+    if amount > ZERO and hasattr(record.sales_order, 'pos_ticket'):
+        raise ValidationError('Refund exceeds the original tenders.')
 
 
 def post_received_purchase_payment(purchase_order, scope, actor, *, date):

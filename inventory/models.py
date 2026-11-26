@@ -120,6 +120,7 @@ class Product(TimeStampedModel):
     Whole_sale_price = models.DecimalField(max_digits=18, decimal_places=4, null=True, blank=True, validators=[MinValueValidator(0)])
     product_tax = models.DecimalField(max_digits=7, decimal_places=4, default=Decimal('0'), validators=[MinValueValidator(0), MaxValueValidator(100)])
     is_returnable = models.BooleanField(default=True)
+    is_featured = models.BooleanField(default=False, help_text='Show in the featured POS catalog.')
 
     class Meta:
         ordering = ['name', 'pk']

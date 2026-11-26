@@ -13,11 +13,12 @@ from rest_framework.exceptions import APIException, ValidationError
 
 from account.page_views import ProtectedAccountPageView
 from account.permissions import has_role_permissions
+from common.csv_files import csv_response
 from report.rendering import ReportUnavailable, render_pdf
 from .models import StockCount
 from .scope import WarehouseScopePageMixin, scoped_queryset, warehouse_scope
 from .stock_count_api import StockCountCreateSerializer, StockCountFinalizeSerializer, count_page
-from .stock_count_files import csv_response, csv_text, decimal_text, xlsx_response
+from .stock_count_files import csv_text, decimal_text, xlsx_response
 from .stock_counts import (
     ADD_COUNT, COUNT_ORDERING, DRAFT_COUNT_ADJUSTMENT, FINALIZE_COUNT, VIEW_COUNT, count_options,
     create_finalized_count_adjustment, create_stock_count, finalize_stock_count, match_counts, summarize_count,

@@ -4,6 +4,7 @@ from django.db.models import OuterRef, Subquery
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import never_cache
 from rest_framework.exceptions import PermissionDenied
+from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.generics import GenericAPIView
@@ -18,12 +19,16 @@ from warehouse.models import WareHouse
 from warehouse.scope import WarehouseScopeAPIMixin, scoped_queryset, warehouse_scope, warehouse_scope_options
 from account.permissions import has_role_permissions
 
+from .imports import PurchaseOrderCSVImportSerializer, purchase_csv_template
 from .models import PurchaseOrder, PurchaseOrderItem
 from .services import PurchaseBusy, PurchaseDeleteGuardMixin, receive_purchase
 from .serializers import (
     PurchaseOrderCreateSerializer, PurchaseOrderDetailSerializer, PurchaseOrderItemFilterSerializer,
     PurchaseOrderItemSerializer, PurchaseOrderSerializer, PurchaseReceiveSerializer,
 )
+
+
+PURCHASE_ADD_PERMISSIONS = ('purchase.add_purchaseorder', 'purchase.add_purchaseorderitem')
 
 
 class PurchaseConcurrencyMixin:
@@ -51,6 +56,18 @@ class PurchaseOrderListCreateAPIView(PurchaseConcurrencyMixin, WarehouseScopeAPI
         if serializer.validated_data.get('items') and not has_role_permissions(self.request.user, ('purchase.add_purchaseorderitem',)):
             raise PermissionDenied('You do not have permission to add purchase order items.')
         super().perform_create(serializer)
+
+
+class PurchaseOrderImportAPIView(PurchaseOrderListCreateAPIView):
+    required_permissions = PURCHASE_ADD_PERMISSIONS
+    serializer_class = PurchaseOrderCSVImportSerializer
+    parser_classes = [MultiPartParser]
+
+    def get_serializer_class(self):
+        return self.serializer_class
+
+    def get(self, request):
+        return purchase_csv_template()
 
 
 class PurchaseOrderListAPIView(PurchaseConcurrencyMixin, WarehouseScopeAPIMixin, BaseListAPIView):
@@ -134,11 +151,12 @@ class PurchaseReceiveAPIView(PurchaseConcurrencyMixin, WarehouseScopeAPIMixin, B
 class PurchaseOptionsAPIView(PurchaseConcurrencyMixin, WarehouseScopeAPIMixin, BaseAPIMixin, APIView):
     """Reference data for purchase creation without catalog management permissions."""
 
-    required_permissions = ('purchase.add_purchaseorder', 'purchase.add_purchaseorderitem')
+    required_permissions = PURCHASE_ADD_PERMISSIONS
     http_method_names = ['get', 'head', 'options']
+    include_products = True
 
     def get(self, request):
-        return Response({
+        options = {
             'base_currency': settings.INVENTORY_BASE_CURRENCY,
             'warehouse_scope': warehouse_scope_options(request.user),
             'supplier': [
@@ -159,13 +177,19 @@ class PurchaseOptionsAPIView(PurchaseConcurrencyMixin, WarehouseScopeAPIMixin, B
                 {'value': row.code, 'label': row.name}
                 for row in TradeStatus.objects.order_by('name', 'pk')
             ],
-            'product': [
+        }
+        if self.include_products:
+            options['product'] = [
                 {'value': row.pk, 'label': f'{row.sku} — {row.name}', 'unit': row.unit_id,
                  'unit_label': f'{row.unit.name} ({row.unit.code})', 'cost_price': str(row.cost_price)}
                 for row in Product.objects.select_related('unit').order_by('name', 'pk')
-            ],
-        })
+            ]
+        return Response(options)
 
 
 class PurchaseEditOptionsAPIView(PurchaseOptionsAPIView):
     required_permissions = ('purchase.view_purchaseorder', 'purchase.change_purchaseorder', 'purchase.view_purchaseorderitem')
+
+
+class PurchaseImportOptionsAPIView(PurchaseOptionsAPIView):
+    include_products = False
