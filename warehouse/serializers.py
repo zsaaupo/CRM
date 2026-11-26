@@ -6,10 +6,12 @@ from django.db.models import Prefetch
 from django.utils import timezone
 from rest_framework import serializers
 
+from inventory.models import Product
 from .access import check_assignment_scope, lock_assignment_write
 from .models import Stock, RoleWarehouseAccess, WareHouse, WarehouseTransfer, WarehouseTransferItem
 from .scope import WarehouseScopedSerializerMixin, lock_warehouse_scope, warehouse_scope
 from .services import check_transfer_warehouses, lock_transfer, require_transfer_permission, TransferCompleted
+from .transfer_files import MAX_TRANSFER_CSV_ERRORS, parse_transfer_rows
 
 
 class WareHouseSerializer(WarehouseScopedSerializerMixin, CatalogSerializer):
@@ -177,6 +179,42 @@ class WarehouseTransferSerializer(CatalogSerializer):
                     record_activity(existing[item['id']], 'updated', actor=actor)
         record = super().update(self.instance, validated_data)
         return self.loaded_record(record)
+
+
+class TransferCSVItemsField(serializers.FileField):
+    def to_internal_value(self, data):
+        rows = parse_transfer_rows(super().to_internal_value(data))
+        sku_length = Product._meta.get_field('sku').max_length
+        skus = {sku for _, sku, _ in rows if 0 < len(sku) <= sku_length}
+        products = Product.objects.select_related('unit').in_bulk(skus, field_name='sku')
+        quantity_field = WarehouseTransferLineSerializer().fields['quantity']
+        items, errors = [], []
+        for line_number, (row, sku, raw_quantity) in enumerate(rows, start=1):
+            product = products.get(sku)
+            if not product:
+                message = f'Unknown SKU {sku!r}.' if sku in skus else f'Enter a SKU of up to {sku_length} characters.'
+                errors.append(f'Row {row}: {message}')
+            else:
+                try:
+                    quantity = quantity_field.run_validation(raw_quantity)
+                except serializers.ValidationError as exc:
+                    errors.append(f'Row {row}, quantity: {" ".join(exc.detail)}')
+                else:
+                    items.append({'line_number': line_number, 'product': product,
+                                  'unit': product.unit, 'quantity': quantity})
+            if len(errors) == MAX_TRANSFER_CSV_ERRORS:
+                break
+        if errors:
+            raise serializers.ValidationError(errors)
+        return items
+
+
+class WarehouseTransferImportSerializer(WarehouseTransferSerializer):
+    items = WarehouseTransferLineSerializer(many=True, read_only=True)
+    file = TransferCSVItemsField(source='items', write_only=True)
+
+    class Meta(WarehouseTransferSerializer.Meta):
+        fields = [*WarehouseTransferSerializer.Meta.fields, 'file']
 
 
 class TransferCompleteSerializer(serializers.Serializer):

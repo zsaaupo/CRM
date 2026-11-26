@@ -13,6 +13,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import close_old_connections, connections
 from django.test import TestCase, TransactionTestCase
 from django.urls import reverse
+from rest_framework.exceptions import ValidationError
 from rest_framework.test import APIClient
 
 from audit_log.models import AuditLog
@@ -123,33 +124,44 @@ class StockCountTests(TestCase):
         self.assertTrue(AuditLog.objects.filter(resource='warehouse.stockcount', action='finalized',
                                                object_id=str(count_id)).exists())
 
-    def test_posts_add_and_subtract_once_and_blocks_overlapping_count(self):
+    def test_finalization_drafts_once_and_completion_blocks_overlapping_variances(self):
         first, second = self.create_count(), self.create_count()
-        posted = self.finalize(first, post_adjustment=True)
-        self.assertEqual(posted.status_code, 200, posted.data)
+        retired = self.finalize(first, post_adjustment=True)
+        self.assertEqual(retired.status_code, 400, retired.data)
+        self.assertIn('post_adjustment', retired.data)
+        self.assertEqual(StockCount.objects.get(pk=first).status, StockCount.Status.PENDING)
+        for count_id in (first, second):
+            result = self.finalize(count_id, create_adjustment=True)
+            self.assertEqual(result.status_code, 200, result.data)
+        self.assertFalse(self.finalize(first, create_adjustment=True).data['finalized_now'])
+        self.assertEqual(StockAdjustment.objects.count(), 2)
+        self.assertEqual(Stock.objects.get(warehouse=self.main, product=self.rice).quantity, 10)
+        self.assertEqual(Stock.objects.get(warehouse=self.main, product=self.oil).quantity, 2)
         adjustment = StockCount.objects.get(pk=first).adjustment
-        self.assertTrue(adjustment.is_completed)
+        self.assertFalse(adjustment.is_completed)
         self.assertEqual(list(adjustment.items.values_list('operation', 'quantity')), [('add', 1), ('subtract', 1)])
+        complete_url = reverse('warehouse:adjustment-complete')
+        self.assertEqual(self.client.post(complete_url, {'adjustment_id': adjustment.pk}, format='json').status_code, 200)
+        second_adjustment = StockCount.objects.get(pk=second).adjustment
+        conflict = self.client.post(complete_url, {'adjustment_id': second_adjustment.pk}, format='json')
+        self.assertEqual(conflict.status_code, 409, conflict.data)
         self.assertEqual(Stock.objects.get(warehouse=self.main, product=self.rice).quantity, 11)
         self.assertEqual(Stock.objects.get(warehouse=self.main, product=self.oil).quantity, 1)
         self.assertEqual(Stock.objects.get(warehouse=self.other, product=self.rice).quantity, 30)
-        self.assertFalse(self.finalize(first, post_adjustment=True).data['finalized_now'])
-        conflict = self.finalize(second, post_adjustment=True)
-        self.assertEqual(conflict.status_code, 409, conflict.data)
-        self.assertEqual(StockCount.objects.get(pk=second).status, 'pending')
-        self.assertEqual(StockAdjustment.objects.count(), 1)
 
-    def test_moves_that_net_to_zero_still_block_posting(self):
+    def test_moves_that_net_to_zero_still_block_adjustment_completion(self):
         count_id = self.create_count()
         stock = Stock.objects.get(warehouse=self.main, product=self.rice)
         for quantity in (9, 10):
             stock.quantity = quantity
             stock.save(update_fields=['quantity'])
-        result = self.finalize(count_id, post_adjustment=True)
+        self.assertEqual(self.finalize(count_id, create_adjustment=True).status_code, 200)
+        adjustment = StockCount.objects.get(pk=count_id).adjustment
+        result = self.client.post(reverse('warehouse:adjustment-complete'), {'adjustment_id': adjustment.pk}, format='json')
         self.assertEqual(result.status_code, 409, result.data)
-        self.assertEqual(self.finalize(count_id).status_code, 200)
         self.assertTrue(self.report(count_id).data['items'][0]['stock_moved'])
-        self.assertFalse(StockAdjustment.objects.exists())
+        adjustment.refresh_from_db()
+        self.assertFalse(adjustment.is_completed)
 
     def test_final_report_drafts_each_difference_once_even_when_net_variance_is_zero(self):
         count_id = self.create_count()
@@ -243,9 +255,8 @@ class StockCountTests(TestCase):
 
     def test_adjustment_failure_rolls_back_all_stock_count_changes(self):
         count_id = self.create_count()
-        new_unit = UnitOfMeasure.objects.create(name='Box', code='COUNT-BOX')
-        Product.objects.filter(pk=self.oil.pk).update(unit=new_unit)
-        result = self.finalize(count_id, post_adjustment=True)
+        with patch('warehouse.stock_counts.create_variance_adjustment', side_effect=ValidationError('Draft failed.')):
+            result = self.finalize(count_id, create_adjustment=True)
         self.assertEqual(result.status_code, 400, result.data)
         count = StockCount.objects.get(pk=count_id)
         self.assertEqual(count.status, 'pending')
@@ -263,11 +274,21 @@ class StockCountTests(TestCase):
         self.client.force_login(user)
         listing = self.client.get(reverse('warehouse:stock-count-list'), {'page_size': 'all'}).data
         self.assertEqual([count['id'] for count in listing['results']], [own])
-        self.assertEqual(self.finalize(own, post_adjustment=True).status_code, 403)
+        self.assertEqual(self.finalize(own, create_adjustment=True).status_code, 403)
         self.assertEqual(self.finalize(hidden).status_code, 404)
         file = reverse('warehouse:stock-count-initial-file', args=[hidden])
         self.assertEqual(self.client.get(file).status_code, 404)
         self.assertEqual(self.client.get(reverse('warehouse_pages:stock-count-finalize', args=[hidden])).status_code, 404)
+        page = reverse('warehouse_pages:stock-count-finalize', args=[own])
+        review = self.client.post(page, {'inline_counts': '[{"sku":"00120","counted_qty":"11"},{"sku":"OIL","counted_qty":"1"}]'})
+        self.assertContains(review, 'Review stock adjustment')
+        self.assertNotContains(review, 'value="create"')
+        token = review.context['review_token']
+        denied = self.client.post(page, {'adjustment_action': 'create', 'adjustment_review': token})
+        self.assertContains(denied, 'Review stock adjustment', status_code=403)
+        self.assertEqual(StockCount.objects.get(pk=own).status, StockCount.Status.PENDING)
+        self.assertRedirects(self.client.post(page, {'adjustment_action': 'cancel', 'adjustment_review': token}),
+                             reverse('warehouse_pages:stock-count-list'))
 
     def test_pages_and_list_exports(self):
         add_url = reverse('warehouse_pages:add-stock-count')
@@ -282,7 +303,7 @@ class StockCountTests(TestCase):
         self.assertContains(self.client.get(finalize_url), 'Download initial CSV')
         response = self.client.post(finalize_url, {
             'input_method': 'inline',
-            **{f'count_{item.pk}': '0' for item in count.items.all()},
+            **{f'count_{item.pk}': str(item.expected_qty) for item in count.items.all()},
         })
         self.assertRedirects(response, reverse('warehouse_pages:stock-count-report', args=[count.pk]))
         self.assertContains(self.client.get(list_url), 'Final Report')
@@ -297,9 +318,72 @@ class StockCountTests(TestCase):
             self.assertEqual(self.client.get(list_url, {'export': 'pdf'}).content, b'%PDF-1.7')
             self.assertIn(count.reference_no, render.call_args.args[0]['rows'][0])
 
+    def test_inline_finalize_reviews_each_difference_and_creates_one_draft(self):
+        count = StockCount.objects.get(pk=self.create_count())
+        url = reverse('warehouse_pages:stock-count-finalize', args=[count.pk])
+        self.assertNotContains(self.client.get(url), 'name="post_adjustment"')
+        quantities = {'00120': '11', 'OIL': '1'}
+        review = self.client.post(url, {f'count_{item.pk}': quantities[item.sku] for item in count.items.all()})
+        self.assertContains(review, 'data-stock-count-review')
+        self.assertContains(review, 'Product 00120')
+        self.assertContains(review, 'Product OIL')
+        self.assertContains(review, '2.5001')
+        self.assertContains(review, 'value="create"')
+        self.assertContains(review, 'value="cancel"')
+        count.refresh_from_db()
+        self.assertEqual(count.status, StockCount.Status.PENDING)
+        self.assertFalse(count.items.filter(counted_qty__isnull=False).exists())
+        self.assertFalse(StockAdjustment.objects.exists())
+
+        report_url = reverse('warehouse_pages:stock-count-report', args=[count.pk])
+        data = {'adjustment_action': 'create', 'adjustment_review': review.context['review_token']}
+        self.assertRedirects(self.client.post(url, data), report_url)
+        self.assertRedirects(self.client.post(url, data), report_url)
+        count.refresh_from_db()
+        self.assertEqual(count.status, StockCount.Status.FINALIZED)
+        self.assertEqual(StockAdjustment.objects.count(), 1)
+        self.assertFalse(count.adjustment.is_completed)
+        self.assertEqual(list(count.adjustment.items.values_list('operation', 'quantity')), [('add', 1), ('subtract', 1)])
+        self.assertEqual(Stock.objects.get(warehouse=self.main, product=self.rice).quantity, 10)
+        self.assertEqual(Stock.objects.get(warehouse=self.main, product=self.oil).quantity, 2)
+
+    def test_csv_finalize_cancel_saves_reviewed_counts_and_returns_to_list(self):
+        count_id = self.create_count()
+        url = reverse('warehouse_pages:stock-count-finalize', args=[count_id])
+        sheet = b'Product Name,Product Code,IMEI or Serial Numbers,Expected,Counted\nOil,OIL,,2,0\nRice,00120,,10,12\n'
+        review = self.client.post(url, {'input_method': 'csv', 'file': SimpleUploadedFile('counted.csv', sheet)})
+        self.assertContains(review, 'Review stock adjustment')
+        token = review.context['review_token']
+        other = self.create_count()
+        other_url = reverse('warehouse_pages:stock-count-finalize', args=[other])
+        invalid = self.client.post(other_url, {'adjustment_action': 'cancel', 'adjustment_review': token})
+        self.assertContains(invalid, 'Submit the counts again', status_code=400)
+        self.assertEqual(StockCount.objects.get(pk=other).status, StockCount.Status.PENDING)
+        self.assertRedirects(self.client.post(url, {'adjustment_action': 'cancel', 'adjustment_review': token}),
+                             reverse('warehouse_pages:stock-count-list'))
+        count = StockCount.objects.get(pk=count_id)
+        self.assertEqual(count.status, StockCount.Status.FINALIZED)
+        self.assertEqual(dict(count.items.values_list('sku', 'counted_qty')), {'00120': Decimal(12), 'OIL': Decimal(0)})
+        self.assertFalse(StockAdjustment.objects.exists())
+
+    def test_blind_finalize_saves_before_revealing_expected_quantities(self):
+        count_id = self.create_count(blind_count=True)
+        url = reverse('warehouse_pages:stock-count-finalize', args=[count_id])
+        self.assertNotContains(self.client.get(url), '>Expected<')
+        count = StockCount.objects.get(pk=count_id)
+        review = self.client.post(url, {f'count_{item.pk}': '1' for item in count.items.all()})
+        self.assertContains(review, '>Expected<')
+        report_url = reverse('warehouse_pages:stock-count-report', args=[count_id])
+        self.assertContains(review, f'formaction="{report_url}"')
+        count.refresh_from_db()
+        self.assertEqual(count.status, StockCount.Status.FINALIZED)
+        self.assertFalse(StockAdjustment.objects.exists())
+        self.assertRedirects(self.client.post(url, {'adjustment_action': 'cancel'}),
+                             reverse('warehouse_pages:stock-count-list'))
+
 
 class StockCountConcurrencyTests(TransactionTestCase):
-    def test_simultaneous_finalizations_post_one_adjustment(self):
+    def test_simultaneous_finalizations_save_one_draft(self):
         actor = get_user_model().objects.create_superuser(username='count-race')
         Currency.objects.get_or_create(code='BDT', defaults={'name': 'Taka', 'exchange_rate': 1})
         ProductType.objects.get_or_create(code='goods', defaults={'name': 'Goods'})
@@ -318,7 +402,7 @@ class StockCountConcurrencyTests(TransactionTestCase):
                 barrier.wait(timeout=10)
                 for attempt in range(20):
                     try:
-                        return finalize_stock_count(actor, count.pk, entries, post_adjustment=True)[1]
+                        return finalize_stock_count(actor, count.pk, entries, create_adjustment=True)[1]
                     except CountConflict:
                         if attempt == 19:
                             raise
@@ -329,5 +413,5 @@ class StockCountConcurrencyTests(TransactionTestCase):
         with ThreadPoolExecutor(max_workers=2) as pool:
             first, second = pool.submit(finish), pool.submit(finish)
             self.assertEqual(sorted([first.result(), second.result()]), [False, True])
-        self.assertEqual(Stock.objects.get(warehouse=warehouse, product=product).quantity, 12)
-        self.assertEqual(StockAdjustment.objects.count(), 1)
+        self.assertEqual(Stock.objects.get(warehouse=warehouse, product=product).quantity, 10)
+        self.assertFalse(StockAdjustment.objects.get().is_completed)

@@ -28,6 +28,13 @@ if (finish) {
     });
 }
 
+const review = document.querySelector('[data-stock-count-review]');
+if (review && typeof review.showModal === 'function') {
+    review.close();
+    review.showModal();
+    review.addEventListener('cancel', event => event.preventDefault());
+}
+
 const list = document.querySelector('[data-stock-count-list]');
 if (list) {
     const toggles = [...list.querySelectorAll('[data-count-column-toggle]')];

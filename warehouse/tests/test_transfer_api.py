@@ -3,6 +3,7 @@ from unittest.mock import Mock, patch
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import IntegrityError
 from django.db.models import Sum
 from django.test import TestCase
@@ -11,6 +12,7 @@ from rest_framework.test import APIClient
 
 from inventory.models import Product, UnitOfMeasure
 from warehouse.models import Stock, WareHouse, WarehouseTransfer, WarehouseTransferItem
+from warehouse.transfer_files import MAX_TRANSFER_CSV_BYTES, MAX_TRANSFER_CSV_ROWS
 from .helpers import assign_warehouse_role
 
 
@@ -33,6 +35,7 @@ class WarehouseTransferAPITests(TestCase):
         self.detail_url = reverse('warehouse:transfer-detail', args=[self.record.pk])
         self.update_url = reverse('warehouse:transfer-update', args=[self.record.pk])
         self.complete_url = reverse('warehouse:transfer-complete')
+        self.import_url = reverse('warehouse:transfer-import')
 
     def login(self, user):
         self.client.force_login(user)
@@ -52,6 +55,120 @@ class WarehouseTransferAPITests(TestCase):
 
     def balances(self):
         return dict(Stock.objects.filter(product=self.product).values_list('warehouse_id', 'quantity'))
+
+    def import_csv(self, content, filename='transfer.csv', **changes):
+        return self.client.post(self.import_url, {
+            'source_warehouse': self.source.pk, 'destination_warehouse': self.destination.pk,
+            'file': SimpleUploadedFile(filename, content, content_type='text/csv'), **changes,
+        }, format='multipart')
+
+    def test_csv_import_creates_audited_draft_and_stock_moves_on_completion(self):
+        unit = UnitOfMeasure.objects.create(name='Box', code='TRANSFER-BOX')
+        other = Product.objects.create(name='Box item', sku='001,BOX', unit=unit, currency_id='BDT')
+        Stock.objects.create(warehouse=self.source, product=other, quantity=2)
+        response = self.import_csv(b'\xef\xbb\xbf Quantity , SKU \r\n2.500001,TRANSFER-API\r\n'
+                                   b'\r\n1,"001,BOX"\r\n0.499999,TRANSFER-API\r\n',
+                                   transfer_date='2026-11-20', notes='Branch replenishment', is_completed=True)
+        self.assertEqual(response.status_code, 201, response.data)
+        draft = response.data['warehouse_transfer']
+        self.assertFalse(draft['is_completed'])
+        self.assertEqual(draft['transfer_date'], '2026-11-20')
+        self.assertEqual(draft['notes'], 'Branch replenishment')
+        self.assertEqual(draft['create_by'], self.actor.username)
+        self.assertEqual([
+            (line['line_number'], line['product'], line['unit'], line['quantity']) for line in draft['items']
+        ], [
+            (1, self.product.pk, self.product.unit_id, '2.500001'),
+            (2, other.pk, unit.pk, '1.000000'),
+            (3, self.product.pk, self.product.unit_id, '0.499999'),
+        ])
+        self.assertEqual(self.balances(), {self.source.pk: Decimal('10')})
+        self.assertFalse(Stock.objects.filter(warehouse=self.destination).exists())
+        response = self.complete(transfer_id=draft['id'])
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(self.balances(), {self.source.pk: Decimal('7'), self.destination.pk: Decimal('3')})
+        self.assertEqual(Stock.objects.get(warehouse=self.destination, product=other).quantity, Decimal('1'))
+
+    def test_csv_import_reports_bad_rows_and_rolls_back_failed_inserts(self):
+        response = self.import_csv(b'sku,quantity\nTRANSFER-API,2\n\nMISSING,1\nTRANSFER-API,0\nTRANSFER-API,1.0000001\n')
+        self.assertEqual(response.status_code, 400, response.data)
+        self.assertEqual([error.split(',')[0].split(':')[0] for error in response.data['file']],
+                         ['Row 4', 'Row 5', 'Row 6'])
+        valid_csv = b'sku,quantity\nTRANSFER-API,1\nTRANSFER-API,2\n'
+        create = WarehouseTransferItem.objects.create
+
+        def fail_second_line(**item):
+            if item['line_number'] == 2:
+                raise IntegrityError('item failure')
+            return create(**item)
+
+        with patch('warehouse.serializers.WarehouseTransferItem.objects.create', side_effect=fail_second_line):
+            self.assertEqual(self.import_csv(valid_csv).status_code, 400)
+        self.assertEqual(WarehouseTransfer.objects.count(), 1)
+        self.assertEqual(WarehouseTransferItem.objects.count(), 1)
+        self.assertEqual(self.balances(), {self.source.pk: Decimal('10')})
+
+    def test_csv_import_rejects_invalid_files_and_warehouses(self):
+        valid_csv = b'sku,quantity\nTRANSFER-API,1\n'
+        files = [
+            (b'sku,wrong\nTRANSFER-API,1\n', 'transfer.csv'), (b'sku,quantity\n', 'transfer.csv'),
+            (b'sku,quantity\nTRANSFER-API,1,extra\n', 'transfer.csv'),
+            (b'sku,quantity\n"TRANSFER-API,1\n', 'transfer.csv'),
+            (b'sku,quantity\n\xff,1\n', 'transfer.csv'), (valid_csv, 'transfer.txt'),
+            (valid_csv.ljust(MAX_TRANSFER_CSV_BYTES + 1), 'transfer.csv'),
+            (valid_csv + b'TRANSFER-API,1\n' * MAX_TRANSFER_CSV_ROWS, 'transfer.csv'),
+        ]
+        for content, filename in files:
+            response = self.import_csv(content, filename)
+            self.assertEqual(response.status_code, 400, response.data)
+            self.assertIn('file', response.data)
+        self.assertIn('file', self.client.post(self.import_url, {}, format='multipart').data)
+        self.other.is_active = False
+        self.other.save(update_fields=['is_active'])
+        for destination in (self.source, self.other):
+            response = self.import_csv(valid_csv, destination_warehouse=destination.pk)
+            self.assertEqual(response.status_code, 400, response.data)
+            self.assertIn('destination_warehouse', response.data)
+        self.assertEqual(WarehouseTransfer.objects.count(), 1)
+
+    def test_csv_import_page_template_and_permissions(self):
+        page_url = reverse('warehouse_pages:import-transfer')
+        list_page = reverse('warehouse_pages:transfer-list')
+        self.assertContains(self.client.get(list_page), f'href="{page_url}"')
+        page = self.client.get(page_url)
+        self.assertContains(page, f'action="{self.import_url}"')
+        self.assertContains(page, 'name="file"')
+        self.assertContains(page, 'Download CSV template')
+        template = self.client.get(self.import_url)
+        self.assertEqual(template.status_code, 200)
+        self.assertIn('warehouse-transfer-template.csv', template['Content-Disposition'])
+        self.assertEqual(template.content.decode('utf-8-sig').strip(), 'sku,quantity')
+
+        no_csrf = APIClient(enforce_csrf_checks=True)
+        no_csrf.force_login(self.actor)
+        self.assertEqual(no_csrf.post(self.import_url, {}, format='multipart').status_code, 403)
+        user = get_user_model().objects.create_user(username='transfer-import-role')
+        access = assign_warehouse_role(user, all_warehouses=True)
+        permissions = Permission.objects.filter(content_type__app_label='warehouse', content_type__model='warehousetransfer')
+        add = permissions.get(codename='add_warehousetransfer')
+        access.role.permissions.set([permissions.get(codename='view_warehousetransfer')])
+        self.login(user)
+        valid_csv = b'sku,quantity\nTRANSFER-API,1\n'
+        self.assertNotContains(self.client.get(list_page), f'href="{page_url}"')
+        self.assertEqual(self.client.get(page_url).status_code, 403)
+        self.assertEqual(self.client.get(self.import_url).status_code, 403)
+        self.assertEqual(self.import_csv(valid_csv).status_code, 403)
+
+        access.role.permissions.add(add)
+        self.assertEqual(self.client.get(page_url).status_code, 200)
+        self.assertEqual(self.import_csv(valid_csv).status_code, 201)
+
+        access.all_warehouses, access.warehouse = False, self.source
+        access.save()
+        self.assertNotContains(self.client.get(list_page), f'href="{page_url}"')
+        self.assertEqual(self.client.get(page_url).status_code, 403)
+        self.assertEqual(self.client.get(self.import_url).status_code, 403)
+        self.assertEqual(self.import_csv(valid_csv).status_code, 403)
 
     def test_draft_crud_uses_audit_and_never_changes_stock(self):
         response = self.client.post(self.list_url, self.payload(is_completed=True), format='json')

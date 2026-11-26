@@ -4,7 +4,7 @@ from .page_views import (
     AdjustmentAddPageView, AdjustmentDetailPageView, AdjustmentEditPageView, AdjustmentListPageView,
     StockChartPageView, StockDetailPageView, StockListPageView, WarehouseReportPageView,
     WareHouseAddPageView, WareHouseEditPageView, WareHouseListPageView,
-    TransferListPageView, TransferAddPageView, TransferEditPageView, TransferDetailPageView,
+    TransferListPageView, TransferAddPageView, TransferEditPageView, TransferDetailPageView, TransferImportPageView,
 )
 
 
@@ -27,6 +27,7 @@ urlpatterns = [
     path('adjustments/<int:pk>/', AdjustmentDetailPageView.as_view(), name='adjustment-detail'),
     path('transfers/', TransferListPageView.as_view(), name='transfer-list'),
     path('transfers/add/', TransferAddPageView.as_view(), name='add-transfer'),
+    path('transfers/import/', TransferImportPageView.as_view(), name='import-transfer'),
     path('transfers/<int:pk>/edit/', TransferEditPageView.as_view(), name='edit-transfer'),
     path('transfers/<int:pk>/', TransferDetailPageView.as_view(), name='transfer-detail'),
     path('stocks/', StockListPageView.as_view(), name='stock-list'),

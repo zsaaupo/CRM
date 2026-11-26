@@ -16,8 +16,9 @@ from .api_views import (
     RoleWarehouseAccessOptionsAPIView,
     WareHouseDetailAPIView, WareHouseListAPIView, WareHouseListCreateAPIView,
     WareHouseUpdateAPIView,
-    WarehouseTransferListCreateAPIView, WarehouseTransferListAPIView, WarehouseTransferDetailAPIView,
-    WarehouseTransferUpdateAPIView, TransferCompleteAPIView, TransferOptionsAPIView, TransferEditOptionsAPIView,
+    WarehouseTransferDetailAPIView, WarehouseTransferImportAPIView, WarehouseTransferListAPIView,
+    WarehouseTransferListCreateAPIView, WarehouseTransferUpdateAPIView,
+    TransferCompleteAPIView, TransferOptionsAPIView, TransferEditOptionsAPIView,
 )
 
 
@@ -42,6 +43,7 @@ urlpatterns = [
     path('adjustments/<int:pk>/update/', StockAdjustmentUpdateAPIView.as_view(), name='adjustment-update'),
     path('transfers/options/', TransferOptionsAPIView.as_view(), name='transfer-options'),
     path('transfers/edit-options/', TransferEditOptionsAPIView.as_view(), name='transfer-edit-options'),
+    path('transfers/import/', WarehouseTransferImportAPIView.as_view(), name='transfer-import'),
     path('transfers/complete/', TransferCompleteAPIView.as_view(), name='transfer-complete'),
     path('transfers/', WarehouseTransferListCreateAPIView.as_view(), name='transfer-list'),
     path('transfers/list/', WarehouseTransferListAPIView.as_view(), name='transfer-list-view'),

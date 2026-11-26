@@ -3,7 +3,7 @@
 {% block title %}{{ form_heading }} | eManager{% endblock %}
 {% block content %}
 <div class="workspace-content">
-    <div class="page-heading"><div><p class="page-eyebrow">Warehouses</p><h1 class="page-title">{{ form_heading }}<span class="text-emerald-600">.</span></h1><p class="page-description">{{ form_description }}</p></div><a href="{{ list_url }}" class="secondary-button">Back to transfers <span aria-hidden="true">&rarr;</span></a></div>
+    <div class="page-heading"><div><p class="page-eyebrow">Warehouses</p><h1 class="page-title">{{ form_heading }}<span class="text-emerald-600">.</span></h1><p class="page-description">{{ form_description }}</p></div><div class="flex flex-wrap gap-3">{% if not form_method %}<a href="{% url 'warehouse_pages:import-transfer' %}" class="secondary-button">Import CSV</a>{% endif %}<a href="{{ list_url }}" class="secondary-button">Back to transfers <span aria-hidden="true">&rarr;</span></a></div></div>
     <form method="post" action="{{ create_api_url }}" data-transfer-form data-method="{{ form_method|default:'POST' }}" data-options-url="{{ options_api_url }}" data-detail-url="{{ detail_api_url }}" data-success-url="{{ list_url }}" novalidate>
         {% csrf_token %}
         <div class="form-status mb-5" data-transfer-status role="status" aria-live="polite" tabindex="-1" hidden></div>

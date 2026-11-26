@@ -1,0 +1,19 @@
+{% for name, label in warehouse_fields %}
+<div>
+    <label class="form-label" for="id_{{ name }}">{{ label }}</label>
+    <select class="form-input" id="id_{{ name }}" name="{{ name }}" required aria-describedby="id_{{ name }}_error">
+        <option value="">Choose a warehouse</option>
+        {% for warehouse in warehouses %}<option value="{{ warehouse.pk }}">{{ warehouse }}</option>{% endfor %}
+    </select>
+    <p id="id_{{ name }}_error" data-error-for="{{ name }}" class="form-error" hidden></p>
+</div>
+{% endfor %}
+{% include 'inventory/includes/field.html' with name='transfer_date' label='Transfer date' field_type='date' required=True value=today|date:'Y-m-d' only %}
+{% include 'inventory/includes/field.html' with name='notes' label='Notes' field_type='textarea' only %}
+<div class="user-form-full">
+    <label class="form-label" for="id_file">Product CSV</label>
+    <input class="form-input" id="id_file" name="file" type="file" accept=".csv,text/csv" required aria-describedby="id_file_hint id_file_error">
+    <p id="id_file_hint" class="section-description">Upload a UTF-8 CSV with <code>sku</code> and <code>quantity</code> columns, up to {{ max_csv_rows }} product rows and 5 MB. Use existing SKUs and enter positive quantities in each product's unit, with up to six decimal places.</p>
+    <p id="id_file_error" data-error-for="file" class="form-error" hidden></p>
+    <a class="text-button mt-3" href="{{ create_api_url }}" download>Download CSV template</a>
+</div>

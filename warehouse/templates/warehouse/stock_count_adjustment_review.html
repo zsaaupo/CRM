@@ -1,0 +1,41 @@
+<dialog class="role-dialog stock-count-review" data-stock-count-review open
+        aria-labelledby="stock-count-review-title" aria-describedby="stock-count-review-hint">
+    <h2 id="stock-count-review-title" class="section-title" tabindex="-1" autofocus>Review stock adjustment</h2>
+    <p class="mt-2 text-sm text-stone-500">{{ count.warehouse_name }} &middot; {{ count.reference_no }}</p>
+    <p id="stock-count-review-hint" class="section-description">
+        {% if can_create_adjustment %}Create a draft for the differences below. Stock changes when the adjustment is completed.{% endif %}
+        Cancel saves the count and returns to the stock count list.
+    </p>
+    {% include 'warehouse/stock_count_errors.html' %}
+    <form method="post">
+        {% csrf_token %}
+        {% if review_token %}<input type="hidden" name="adjustment_review" value="{{ review_token }}">{% endif %}
+        <div class="users-table-scroll stock-count-review-lines" tabindex="0" role="region" aria-label="Stock count differences">
+            <table class="users-table">
+                <thead><tr>
+                    <th scope="col">SKU</th><th scope="col">Product</th><th scope="col">Unit</th>
+                    <th scope="col">Expected</th><th scope="col">Counted</th><th scope="col">Quantity change</th>
+                    <th scope="col">Variance value</th>
+                </tr></thead>
+                <tbody>
+                {% for item in differences %}
+                    <tr>
+                        <td class="font-mono">{{ item.sku }}</td><td>{{ item.product_name }}</td>
+                        <td>{{ item.unit_code }}</td><td>{{ item.expected_qty|floatformat:'-6u' }}</td>
+                        <td>{{ item.counted_qty|floatformat:'-6u' }}</td>
+                        <td>{% if item.variance_qty > 0 %}+{% endif %}{{ item.variance_qty|floatformat:'-6u' }}</td>
+                        <td>{{ item.variance_value|floatformat:'-10u' }} {{ item.currency_code }}</td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <div class="user-form-actions">
+            <button type="submit" name="adjustment_action" value="cancel" class="secondary-button">Cancel</button>
+            {% if can_create_adjustment %}
+            <button type="submit" name="adjustment_action" value="create" class="primary-button compact-primary"
+                    {% if not review_token %}formaction="{% url 'warehouse_pages:stock-count-report' count.pk %}"{% endif %}>Create adjustment</button>
+            {% endif %}
+        </div>
+    </form>
+</dialog>

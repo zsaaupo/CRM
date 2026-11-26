@@ -10,7 +10,7 @@
             {% if can_create_adjustment %}
             <form method="post" action="{% url 'warehouse_pages:stock-count-report' count.pk %}">
                 {% csrf_token %}
-                <button type="submit" class="primary-button compact-primary">Create Draft Adjustment</button>
+                <button type="submit" class="primary-button compact-primary">Create Adjustment</button>
             </form>
             {% endif %}
         </div>

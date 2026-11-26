@@ -20,7 +20,6 @@ from .scope import check_warehouse, lock_warehouse_scope, scoped_queryset
 VIEW_COUNT = ('warehouse.view_stockcount',)
 ADD_COUNT = (*VIEW_COUNT, 'warehouse.add_stockcount')
 FINALIZE_COUNT = (*VIEW_COUNT, 'warehouse.change_stockcount')
-POST_ADJUSTMENT = ('warehouse.add_stockadjustment', 'warehouse.change_stockadjustment')
 DRAFT_COUNT_ADJUSTMENT = (*VIEW_COUNT, 'warehouse.add_stockadjustment')
 
 COUNT_ORDERING = {
@@ -227,15 +226,13 @@ def validate_count_adjustment(adjustment, changes):
     require_current_stock(items)
 
 
-def finalize_stock_count(actor, count_id, entries, *, post_adjustment=False):
-    from .adjustments import complete_adjustment
-
+def finalize_stock_count(actor, count_id, entries, *, create_adjustment=False):
     try:
         with transaction.atomic():
             scope = lock_warehouse_scope(actor)
             authorize(actor, FINALIZE_COUNT)
-            if post_adjustment:
-                authorize(actor, POST_ADJUSTMENT)
+            if create_adjustment:
+                authorize(actor, DRAFT_COUNT_ADJUSTMENT)
             records = scoped_queryset(StockCount.objects.filter(pk=count_id), scope)
             pending = records.filter(status=StockCount.Status.PENDING)
             claimed = pending.update(status=StockCount.Status.PENDING)
@@ -255,11 +252,9 @@ def finalize_stock_count(actor, count_id, entries, *, post_adjustment=False):
                 if any(stored[item.pk] != item.counted_qty for item in items):
                     raise ValidationError({'items': ['The database cannot store one or more counts accurately.']})
 
-            differences = [item for item in items if item.variance_qty] if post_adjustment else []
+            differences = [item for item in items if item.variance_qty] if create_adjustment else []
             if differences:
-                require_current_stock(differences)
-                draft = create_variance_adjustment(actor, count, differences)
-                count.adjustment, _ = complete_adjustment(actor, draft.pk)
+                count.adjustment = create_variance_adjustment(actor, count, differences)
             count.status = StockCount.Status.FINALIZED
             count.finalized_at = timezone.now()
             count.finalized_by = count.modified_by = actor.get_username()
@@ -267,6 +262,8 @@ def finalize_stock_count(actor, count_id, entries, *, post_adjustment=False):
             pending.update(adjustment=count.adjustment, status=count.status, finalized_at=count.finalized_at,
                            finalized_by=count.finalized_by, modified_by=count.modified_by, updated_at=count.updated_at)
             record_activity(count, 'finalized', actor=actor)
+            if differences:
+                record_activity(count, 'adjustment_drafted', actor=actor)
             return count, True
     except OperationalError as exc:
         if 'locked' in str(exc).lower() or 'deadlock' in str(exc).lower():

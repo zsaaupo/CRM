@@ -8,6 +8,7 @@ from django.conf import settings
 from .activity import available_reports
 from .models import StockAdjustment, WareHouse
 from .scope import WarehouseScopePageMixin, all_warehouse_access, has_warehouse_scope, scoped_queryset, warehouse_scope
+from .transfer_files import MAX_TRANSFER_CSV_ROWS
 
 
 class WarehouseReportPageView(ProtectedAccountPageView):
@@ -160,6 +161,7 @@ class TransferListPageView(WarehouseScopePageMixin, ProtectedAccountPageView):
         context = super().get_context_data(**kwargs)
         user = self.request.user
         can_write = all_warehouse_access(warehouse_scope(user))
+        can_add = can_write and has_role_permissions(user, ('warehouse.add_warehousetransfer',))
         can_change = can_write and has_role_permissions(user, ('warehouse.change_warehousetransfer',))
         can_delete = can_write and has_role_permissions(user, ('warehouse.delete_warehousetransfer',))
         context.update({
@@ -169,7 +171,9 @@ class TransferListPageView(WarehouseScopePageMixin, ProtectedAccountPageView):
             'add_url': reverse('warehouse_pages:add-transfer'),
             'list_api_url': reverse('warehouse:transfer-list-view'),
             'view_url_template': reverse('warehouse_pages:transfer-detail', args=[0]),
-            'can_add': can_write and has_role_permissions(user, ('warehouse.add_warehousetransfer',)),
+            'can_add': can_add,
+            'secondary_url': reverse('warehouse_pages:import-transfer') if can_add else '',
+            'secondary_label': 'Import CSV',
             'can_delete': can_delete,
             'list_description': 'Move products between warehouses. Completed transfers are read-only.',
             'columns': [{'key': key, 'label': label, 'type': kind} for key, label, kind in [
@@ -212,6 +216,28 @@ class TransferAddPageView(WarehouseScopePageMixin, ProtectedAccountPageView):
             'today': timezone.localdate(),
         })
         return context
+
+
+class TransferImportPageView(WarehouseScopePageMixin, ProtectedAccountPageView):
+    requires_all_warehouses = TransferAddPageView.requires_all_warehouses
+    permission_required = TransferAddPageView.permission_required
+    template_name = 'inventory/add.html'
+
+    def get_context_data(self, **kwargs):
+        return super().get_context_data(
+            page_section='warehouses', page_mode='transfer-import', page_label='Import warehouse transfer',
+            section_label='Warehouses', resource={'singular': 'transfer', 'plural': 'transfers'},
+            form_heading='Import warehouse transfer', save_label='Import draft',
+            form_description='Upload product quantities to create a draft transfer. Stock moves when you complete it.',
+            fields_template='warehouse/transfer_import_fields.html',
+            list_url=reverse('warehouse_pages:transfer-list'),
+            create_api_url=reverse('warehouse:transfer-import'),
+            warehouse_fields=(('source_warehouse', 'Source warehouse'),
+                              ('destination_warehouse', 'Destination warehouse')),
+            warehouses=list(WareHouse.objects.filter(is_active=True).order_by('name', 'pk')),
+            max_csv_rows=f'{MAX_TRANSFER_CSV_ROWS:,}',
+            **kwargs,
+        )
 
 
 class TransferEditPageView(TransferAddPageView):

@@ -10,6 +10,9 @@
         </div>
         <a href="{{ list_url }}" class="secondary-button">Back to stock counts</a>
     </div>
+    {% if differences %}
+        {% include 'warehouse/stock_count_adjustment_review.html' %}
+    {% else %}
     {% include 'warehouse/stock_count_errors.html' %}
     <form method="post" enctype="multipart/form-data" data-stock-count-finalize novalidate>
         {% csrf_token %}
@@ -56,18 +59,12 @@
                 </table>
             </div>
         </fieldset>
-        {% if can_post %}
-        <section class="user-form-card mb-6">
-            <label class="inline-flex items-center gap-2"><input type="checkbox" name="post_adjustment"{% if post_adjustment %} checked{% endif %}>
-                <span class="text-sm font-medium">Post stock adjustments for differences</span></label>
-            <p class="section-description">Stock movements since the snapshot can prevent posting. You can still finalize the report.</p>
-        </section>
-        {% endif %}
         <div class="user-form-actions">
             <a href="{{ list_url }}" class="secondary-button">Cancel</a>
             <button type="submit" class="primary-button compact-primary">Finalize</button>
         </div>
     </form>
+    {% endif %}
 </div>
 {% endblock %}
 {% block workspace_js %}<script type="module" src="{% static 'warehouse/js/stock_counts.js' %}"></script>{% endblock %}

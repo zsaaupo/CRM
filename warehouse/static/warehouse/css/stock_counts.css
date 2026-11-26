@@ -43,6 +43,20 @@
     min-width: 7rem;
 }
 
+.role-dialog.stock-count-review {
+    width: min(64rem, calc(100vw - 2rem));
+}
+
+.stock-count-review-lines {
+    max-height: 50vh;
+    overflow: auto;
+}
+
+.stock-count-review-lines thead {
+    position: sticky;
+    top: 0;
+}
+
 @media print {
     #workspace-sidebar, .workspace-topbar, .skip-link, .stock-count-controls,
     [data-stock-count-list] .page-heading > a, [data-stock-count-list] [data-count-column="actions"] {

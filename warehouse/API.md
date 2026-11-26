@@ -271,6 +271,7 @@ deleted, including through the dedicated update endpoint.
 | `/warehouse/api/transfers/<id>/` | GET, PUT, PATCH, DELETE | Read, edit or delete a draft |
 | `/warehouse/api/transfers/<id>/update/` | PUT, PATCH | Update a draft |
 | `/warehouse/api/transfers/options/` | GET | Creation choices; requires add permission |
+| `/warehouse/api/transfers/import/` | GET, POST | Download the CSV template or import a draft |
 | `/warehouse/api/transfers/edit-options/` | GET | Editing choices; requires view/change permissions |
 | `/warehouse/api/transfers/complete/` | POST | Move stock once and lock the transfer |
 
@@ -285,6 +286,16 @@ Create example:
 The transfer date defaults to today. Transfer numbers and audit values are
 server-controlled; sending `is_completed` through draft CRUD cannot complete it.
 Create returns a `warehouse_transfer` object; updates return the saved object.
+
+To import a draft, send `multipart/form-data` to `/warehouse/api/transfers/import/`
+with `source_warehouse`, `destination_warehouse`, optional `transfer_date` and
+`notes`, and a UTF-8 CSV upload in `file`. Use `sku` and `quantity` as the column
+headers. Each row becomes one product line in file order. SKUs must match existing
+products exactly, and quantities use each product's unit. The upload supports
+up to 1,000 product rows and 5 MB. Invalid rows return 400 with their CSV row
+numbers under `file`. A successful import returns 201 with the usual
+`warehouse_transfer` object. Both the template and import require add permission
+and all-warehouse access.
 
 Complete example:
 
@@ -359,12 +370,16 @@ Product Code, IMEI or Serial Numbers, Expected, and Counted. Save as UTF-8.
 
 Reading requires `warehouse.view_stockcount`. Creating and finalizing also
 require `warehouse.add_stockcount` and `warehouse.change_stockcount`, respectively.
-Every route uses the current user's warehouse scope. To post the variance,
-submit `post_adjustment: true` with stock adjustment add and change permissions.
-Posting and finalization commit together, and posting returns a conflict if
-stock moved after the snapshot for a SKU with a variance. The count can still
-be finalized for reporting. A retry of a successful submission returns
-`finalized_now: false`.
+Every route uses the current user's warehouse scope. Pass `create_adjustment: true`
+with stock adjustment add permission to save a linked draft for the differences
+in the same transaction as finalization. Completing the adjustment applies the
+stock changes. `post_adjustment: true` returns a validation error. A retry of
+a successful submission returns `finalized_now: false`.
+
+In the stock count page, Finalize opens an adjustment review when any SKU differs
+from the snapshot. **Create adjustment** saves the count and a draft, then opens
+the final report. **Cancel** saves the count and returns to the list. Blind counts
+save the submitted quantities before revealing differences.
 
 The Final Report page offers **Create Draft Adjustment** for a finalized count
 with SKU differences. Stock count view and stock adjustment add permissions

@@ -72,9 +72,12 @@ class InlineCountSerializer(serializers.Serializer):
 class StockCountFinalizeSerializer(serializers.Serializer):
     file = serializers.FileField(required=False)
     items = InlineCountSerializer(many=True, required=False, allow_empty=False)
-    post_adjustment = serializers.BooleanField(default=False)
+    create_adjustment = serializers.BooleanField(default=False)
+    post_adjustment = serializers.BooleanField(required=False, write_only=True)
 
     def validate(self, attrs):
+        if attrs.pop('post_adjustment', False):
+            raise serializers.ValidationError({'post_adjustment': 'Use create_adjustment to create a draft adjustment.'})
         if ('file' in attrs) == ('items' in attrs):
             raise serializers.ValidationError('Upload a CSV or submit inline counts. Choose one input method.')
         if 'file' in attrs:
@@ -184,7 +187,7 @@ class StockCountFinalizeAPIView(StockCountAPIView):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
         count, finalized_now = finalize_stock_count(request.user, count.pk, data['entries'],
-                                                    post_adjustment=data['post_adjustment'])
+                                                    create_adjustment=data['create_adjustment'])
         return Response({
             'message': 'Stock count finalized.' if finalized_now else 'This stock count is already finalized.',
             'finalized_now': finalized_now, 'stock_count': self.header(count),

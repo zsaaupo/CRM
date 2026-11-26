@@ -2,13 +2,14 @@ import json
 
 from django.conf import settings
 from django.contrib import messages
+from django.core import signing
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse_lazy
 from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import never_cache
-from rest_framework.exceptions import APIException
+from rest_framework.exceptions import APIException, ValidationError
 
 from account.page_views import ProtectedAccountPageView
 from account.permissions import has_role_permissions
@@ -16,10 +17,10 @@ from report.rendering import ReportUnavailable, render_pdf
 from .models import StockCount
 from .scope import WarehouseScopePageMixin, scoped_queryset, warehouse_scope
 from .stock_count_api import StockCountCreateSerializer, StockCountFinalizeSerializer, count_page
-from .stock_count_files import csv_response, csv_text, xlsx_response
+from .stock_count_files import csv_response, csv_text, decimal_text, xlsx_response
 from .stock_counts import (
-    ADD_COUNT, COUNT_ORDERING, DRAFT_COUNT_ADJUSTMENT, FINALIZE_COUNT, POST_ADJUSTMENT, VIEW_COUNT, count_options,
-    create_finalized_count_adjustment, create_stock_count, finalize_stock_count, summarize_count,
+    ADD_COUNT, COUNT_ORDERING, DRAFT_COUNT_ADJUSTMENT, FINALIZE_COUNT, VIEW_COUNT, count_options,
+    create_finalized_count_adjustment, create_stock_count, finalize_stock_count, match_counts, summarize_count,
 )
 
 
@@ -139,14 +140,20 @@ class StockCountFinalizePageView(StockCountPageView):
     template_name = 'warehouse/stock_count_finalize.html'
     permission_required = FINALIZE_COUNT
 
-    def form_context(self, count, *, method='inline', entries=(), errors=(), post_adjustment=False):
+    def form_context(self, count, *, method='inline', entries=(), errors=()):
         by_sku = {row['sku']: row.get('counted_qty', '') for row in entries
                   if isinstance(row, dict) and isinstance(row.get('sku'), str)}
         return self.get_context_data(
             count=count, rows=[(item, by_sku.get(item.sku, '')) for item in count.items.all()],
-            method=method, errors=errors, post_adjustment=post_adjustment,
-            can_post=has_role_permissions(self.request.user, POST_ADJUSTMENT),
+            method=method, errors=errors,
         )
+
+    def review_response(self, count, differences, *, token=None, errors=(), status=200):
+        context = self.get_context_data(
+            count=count, differences=differences, review_token=token, errors=errors,
+            can_create_adjustment=has_role_permissions(self.request.user, DRAFT_COUNT_ADJUSTMENT),
+        )
+        return self.render_to_response(context, status=status)
 
     def get(self, request, pk):
         count = self.get_count(pk)
@@ -156,32 +163,70 @@ class StockCountFinalizePageView(StockCountPageView):
 
     def post(self, request, pk):
         count = self.get_count(pk)
+        action = request.POST.get('adjustment_action')
+        if action == 'cancel' and count.status == StockCount.Status.FINALIZED:
+            return redirect(self.list_url)
         if count.status == StockCount.Status.FINALIZED:
             return redirect('warehouse_pages:stock-count-report', pk=pk)
+
         method = request.POST.get('input_method', 'inline')
-        post_adjustment = request.POST.get('post_adjustment') == 'on'
+        token = request.POST.get('adjustment_review')
+        salt = f'warehouse.stock-count-adjustment.{request.user.pk}.{count.pk}'
+        items = list(count.items.all())
         entries = []
-        if method == 'csv':
-            payload = {'file': request.FILES.get('file')}
-        else:
-            encoded = request.POST.get('inline_counts')
-            if encoded:
-                try:
-                    entries = json.loads(encoded)
-                except (ValueError, RecursionError):
-                    entries = None
-            else:
-                entries = [{'sku': item.sku, 'counted_qty': request.POST.get(f'count_{item.pk}', '')}
-                           for item in count.items.all()]
-            payload = {'items': entries}
-        serializer = StockCountFinalizeSerializer(data={**payload, 'post_adjustment': post_adjustment})
+        differences = []
         try:
+            if action is not None or token is not None:
+                try:
+                    if action not in ('create', 'cancel') or not token:
+                        raise signing.BadSignature
+                    quantities = signing.loads(token, salt=salt)
+                    if len(quantities) != len(items):
+                        raise signing.BadSignature
+                except signing.BadSignature as exc:
+                    raise ValidationError('Submit the counts again to review the adjustment.') from exc
+                entries = [{'sku': item.sku, 'counted_qty': quantity} for item, quantity in zip(items, quantities)]
+                payload = {'items': entries}
+            elif method == 'csv':
+                payload = {'file': request.FILES.get('file')}
+            else:
+                encoded = request.POST.get('inline_counts')
+                if encoded:
+                    try:
+                        entries = json.loads(encoded)
+                    except (ValueError, RecursionError):
+                        entries = None
+                else:
+                    entries = [{'sku': item.sku, 'counted_qty': request.POST.get(f'count_{item.pk}', '')}
+                               for item in items]
+                payload = {'items': entries}
+
+            serializer = StockCountFinalizeSerializer(data=payload)
             serializer.is_valid(raise_exception=True)
-            finalize_stock_count(request.user, pk, serializer.validated_data['entries'], post_adjustment=post_adjustment)
+            validated = serializer.validated_data['entries']
+            match_counts(items, validated)
+            differences = [item for item in items if item.variance_qty]
+            if differences and not action and not count.blind_count:
+                review = [decimal_text(item.counted_qty) for item in items]
+                token = signing.dumps(review, salt=salt, compress=True)
+                return self.review_response(count, differences, token=token)
+
+            count, finalized_now = finalize_stock_count(request.user, pk, validated, create_adjustment=action == 'create')
         except APIException as exc:
+            errors = form_errors(exc.detail)
+            if differences and token:
+                return self.review_response(count, differences, token=token, errors=errors, status=exc.status_code)
             context = self.form_context(count, method=method, entries=entries if isinstance(entries, list) else (),
-                                        errors=form_errors(exc.detail), post_adjustment=post_adjustment)
+                                        errors=errors)
             return self.render_to_response(context, status=exc.status_code)
+
+        if action == 'cancel':
+            return redirect(self.list_url)
+        if finalized_now and action == 'create' and count.adjustment_id:
+            messages.success(request, 'Draft stock adjustment created.')
+        # A blind count reveals variances only after the submitted quantities are locked.
+        if finalized_now and count.blind_count and differences and not action:
+            return self.review_response(count, differences)
         return redirect('warehouse_pages:stock-count-report', pk=pk)
 
 

@@ -11,6 +11,7 @@ from django.db.models import Count, DecimalField, ExpressionWrapper, F, Prefetch
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import never_cache
 from rest_framework.generics import GenericAPIView, RetrieveAPIView
+from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework import serializers
@@ -27,9 +28,10 @@ from .scope import (
 from .serializers import (
     StockFilterSerializer, StockReadSerializer, RoleWarehouseAccessFilterSerializer,
     RoleWarehouseAccessSerializer, WareHouseSerializer,
-    WarehouseTransferSerializer, TransferCompleteSerializer,
+    WarehouseTransferSerializer, WarehouseTransferImportSerializer, TransferCompleteSerializer,
 )
 from .services import TransferBusy, complete_transfer, lock_transfer, transfer_queryset
+from .transfer_files import transfer_csv_template
 
 
 class WarehouseRecordScopeMixin(WarehouseScopeAPIMixin):
@@ -189,6 +191,20 @@ class WarehouseTransferAPIMixin:
 
 class WarehouseTransferListCreateAPIView(WarehouseTransferAPIMixin, BaseListCreateAPIView):
     pass
+
+
+class WarehouseTransferImportAPIView(WarehouseTransferListCreateAPIView):
+    serializer_class = WarehouseTransferImportSerializer
+    parser_classes = [MultiPartParser]
+    required_permissions = ('warehouse.add_warehousetransfer',)
+
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
+        if request.method.lower() in self.http_method_names and not all_warehouse_access(request.warehouse_scope):
+            raise PermissionDenied('Importing a transfer requires access to both warehouses.')
+
+    def get(self, request):
+        return transfer_csv_template()
 
 
 class WarehouseTransferListAPIView(WarehouseTransferAPIMixin, BaseListAPIView):

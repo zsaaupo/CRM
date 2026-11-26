@@ -1,0 +1,141 @@
+{
+  "info": {
+    "name": "eManager - Stock Count CSV Upload",
+    "description": "Set base_url, login_email, login_password, and count_id. Use an existing pending stock count in a warehouse the test account can access. Send the requests individually. Keep the cookie jar enabled and use the same server origin for every request. Fill the Counted column in the downloaded CSV, then attach it to Upload counted CSV.",
+    "schema": "https://schema.postman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": { "type": "noauth" },
+  "variable": [
+    { "key": "base_url", "value": "http://127.0.0.1:8000" },
+    { "key": "login_email", "value": "" },
+    { "key": "login_password", "value": "" },
+    { "key": "count_id", "value": "" },
+    { "key": "csrf_token", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "1. Get CSRF token",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Accept", "value": "application/json" }],
+        "url": "{{base_url}}/account/api/login/"
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "type": "text/javascript",
+          "exec": [
+            "pm.test('CSRF token returned', function () {",
+            "    pm.response.to.have.status(200);",
+            "    const token = pm.response.json().csrfToken;",
+            "    pm.expect(token).to.be.a('string').and.not.empty;",
+            "    pm.collectionVariables.set('csrf_token', token);",
+            "});"
+          ]
+        }
+      }]
+    },
+    {
+      "name": "2. Log in",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Accept", "value": "application/json" },
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Origin", "value": "{{base_url}}" },
+          { "key": "X-CSRFToken", "value": "{{csrf_token}}" }
+        ],
+        "url": "{{base_url}}/account/api/login/",
+        "body": {
+          "mode": "raw",
+          "raw": "{{login_body}}",
+          "options": { "raw": { "language": "json" } }
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const email = pm.variables.get('login_email');",
+              "const password = pm.variables.get('login_password');",
+              "if (!email || !password) throw new Error('Set login_email and login_password before logging in.');",
+              "pm.variables.set('login_body', JSON.stringify({email, password}));"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Login succeeds and returns the new CSRF token', function () {",
+              "    pm.response.to.have.status(200);",
+              "    const token = pm.response.json().csrfToken;",
+              "    pm.expect(token).to.be.a('string').and.not.empty;",
+              "    pm.collectionVariables.set('csrf_token', token);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Download initial stock count CSV",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/warehouse/api/stock-counts/{{count_id}}/initial-file/",
+        "description": "Save the response as a CSV. Fill the Counted column for each SKU and keep the remaining columns as downloaded."
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "type": "text/javascript",
+          "exec": [
+            "pm.test('Initial count sheet is CSV', function () {",
+            "    pm.response.to.have.status(200);",
+            "    pm.expect(pm.response.headers.get('Content-Type')).to.include('text/csv');",
+            "    pm.expect(pm.response.text()).to.include('Product Name,Product Code,IMEI or Serial Numbers,Expected,Counted');",
+            "});"
+          ]
+        }
+      }]
+    },
+    {
+      "name": "4. Upload counted CSV and finalize stock count",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Accept", "value": "application/json" },
+          { "key": "Origin", "value": "{{base_url}}" },
+          { "key": "X-CSRFToken", "value": "{{csrf_token}}" }
+        ],
+        "url": "{{base_url}}/warehouse/api/stock-counts/{{count_id}}/finalize/",
+        "description": "Attach the completed CSV to file. Set create_adjustment to true to save a draft for any variances. Stock adjustment add permission is required for that choice. Completing the draft applies the stock changes.",
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            { "key": "file", "type": "file", "src": [] },
+            { "key": "create_adjustment", "type": "text", "value": "false" }
+          ]
+        }
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "type": "text/javascript",
+          "exec": [
+            "pm.test('The pending stock count was finalized', function () {",
+            "    pm.response.to.have.status(200);",
+            "    const result = pm.response.json();",
+            "    pm.expect(result.finalized_now).to.equal(true);",
+            "    pm.expect(result.stock_count.status).to.equal('finalized');",
+            "    pm.expect(String(result.stock_count.id)).to.equal(String(pm.variables.get('count_id')));",
+            "});"
+          ]
+        }
+      }]
+    }
+  ]
+}
