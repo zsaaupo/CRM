@@ -17,7 +17,7 @@ from warehouse.scope import lock_warehouse_scope, scoped_queryset
 
 from .models import (
     MAX_AMOUNT, ZERO, AccountTransaction, AccountTransfer, FinancialAccount, PurchasePayment,
-    Income, SalesPayment, TransferType, base_currency,
+    ChalanPayment, Income, SalesPayment, TransferType, base_currency,
 )
 
 
@@ -27,6 +27,7 @@ STATEMENT_VIEW = (ACCOUNT_VIEW, 'accounting.view_accounttransaction')
 TRANSFER_VIEW = (ACCOUNT_VIEW, 'accounting.view_accounttransfer')
 PAYMENT_VIEW = (EXPENSE_VIEW, ACCOUNT_VIEW, 'accounting.view_expensepayment')
 SALES_PAYMENT_VIEW = ('sale.view_salesorder', ACCOUNT_VIEW, 'accounting.view_salespayment')
+CHALAN_PAYMENT_VIEW = ('sale.view_chalan', ACCOUNT_VIEW, 'accounting.view_chalanpayment')
 PURCHASE_PAYMENT_VIEW = ('purchase.view_purchaseorder', ACCOUNT_VIEW, 'accounting.view_purchasepayment')
 INCOME_PAYMENT_VIEW = ('accounting.view_income', ACCOUNT_VIEW, 'accounting.view_incomepayment')
 EXPENSE_COMPLETE = ('accounting.change_expense',)
@@ -68,10 +69,16 @@ def paid_amount(record):
     return sum((amount if direction == paid_direction else -amount for direction, amount in postings), ZERO)
 
 
+def sale_total_in_base_currency(record):
+    with localcontext() as context:
+        context.prec = 50
+        return (record.grand_total * record.exchange_rate).quantize(MONEY_PRECISION, rounding=ROUND_HALF_UP)
+
+
 def sales_payment_totals(sales_order):
     with localcontext() as context:
         context.prec = 50
-        total = (sales_order.grand_total * sales_order.exchange_rate).quantize(MONEY_PRECISION, rounding=ROUND_HALF_UP)
+        total = sale_total_in_base_currency(sales_order)
         postings = AccountTransaction.objects.filter(sales_payment__sales_order=sales_order)
         paid = refunded = ZERO
         for direction, amount in postings.order_by().values_list('direction', 'amount').iterator():
@@ -167,7 +174,7 @@ def audit_fields(actor):
 
 
 def post_transaction(account, direction, actor, *, date, amount, transfer=None, expense_payment=None, income_payment=None,
-                     sales_payment=None, purchase_payment=None):
+                     sales_payment=None, purchase_payment=None, chalan_payment=None):
     if sales_payment:
         expected_direction = (AccountTransaction.Direction.OUTFLOW if sales_payment.sales_return_id
                               else AccountTransaction.Direction.INFLOW)
@@ -188,7 +195,7 @@ def post_transaction(account, direction, actor, *, date, amount, transfer=None, 
     return AccountTransaction.objects.create(
         account=account, direction=direction, date=date, amount=amount, balance_after=balance,
         transfer=transfer, expense_payment=expense_payment, income_payment=income_payment, sales_payment=sales_payment,
-        purchase_payment=purchase_payment, **audit_fields(actor),
+        purchase_payment=purchase_payment, chalan_payment=chalan_payment, **audit_fields(actor),
     )
 
 
@@ -260,6 +267,19 @@ def post_completed_sale_payment(sales_order, scope, actor, *, date):
     )
     post_transaction(account, AccountTransaction.Direction.INFLOW, actor, date=date, amount=due,
                      sales_payment=payment)
+
+
+def post_chalan_payment(chalan, scope, actor, account_id, *, date):
+    amount = sale_total_in_base_currency(chalan)
+    if amount <= ZERO:
+        return
+    if amount > MAX_AMOUNT:
+        raise ValidationError({'amount': 'The Chalan payment exceeds the ledger limit.'})
+    account = lock_payment_account(scope, account_id, chalan.warehouse_id)
+    payment = ChalanPayment.objects.create(chalan=chalan, account=account, amount=amount, date=date,
+                                           reference=chalan.chalan_number, **audit_fields(actor))
+    post_transaction(account, AccountTransaction.Direction.INFLOW, actor, date=date, amount=amount,
+                     chalan_payment=payment)
 
 
 def post_sales_return_refund(record, scope, actor, *, date, amount):

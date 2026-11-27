@@ -2,7 +2,8 @@
 from dataclasses import dataclass
 
 from purchase.models import PurchaseOrder
-from sale.models import SalesOrder, SalesQuotation
+from sale.models import PackingSlip, SalesOrder, SalesQuotation
+from sale.permissions import PACKING_SLIP_PRINT
 from warehouse.models import WarehouseTransfer
 
 
@@ -31,4 +32,6 @@ REPORTS = {
         'issued_at', 'Issued', 'Draft', 'customer', 'expected_delivery_date'),
     'transfer': ReportSpec('transfer', 'Warehouse transfer', WarehouseTransfer,
         ('warehouse.view_warehousetransfer',), 'is_completed', 'Completed', 'Pending'),
+    'packing-slip': ReportSpec('packing-slip', 'Packing slip', PackingSlip,
+        PACKING_SLIP_PRINT, 'created_at', 'Generated', ''),
 }

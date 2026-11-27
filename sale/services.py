@@ -3,6 +3,7 @@ from decimal import Decimal, InvalidOperation
 
 from django.db import IntegrityError, OperationalError, transaction
 from django.db.models import F
+from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework.exceptions import APIException, NotFound, PermissionDenied, ValidationError
 
@@ -11,16 +12,29 @@ from audit_log.service import bulk_create_with_audit, record_activity
 from inventory.models import Product
 from people.models import Party
 from report.services import document_context
-from warehouse.models import Stock, WareHouse
+from warehouse.models import WareHouse
 from warehouse.scope import lock_warehouse_scope, scoped_queryset
+from warehouse.services import deduct_stock
 from account.permissions import has_role_permissions
-from .models import SalesOrder, SalesOrderItem, SalesQuotation, SalesQuotationItem, quotation_valid_until
+from .models import Chalan, PackingSlip, SalesOrder, SalesOrderItem, SalesQuotation, SalesQuotationItem, quotation_valid_until
 
 
 class SaleCompleted(APIException):
     status_code = 409
     default_detail = 'Completed sales and their items are read-only and cannot be changed or deleted.'
     default_code = 'sale_completed'
+
+
+class ChalanDelivered(APIException):
+    status_code = 409
+    default_detail = 'Delivered Chalans are read-only.'
+    default_code = 'chalan_delivered'
+
+
+class ChalanStockInTransit(APIException):
+    status_code = 409
+    default_detail = 'Record the return before deleting a Chalan with stock still with the courier.'
+    default_code = 'chalan_stock_in_transit'
 
 
 class SaleBusy(APIException):
@@ -41,6 +55,39 @@ def lock_order(pk, actor):
     if order.is_completed:
         raise SaleCompleted()
     return order
+
+
+def lock_chalan(scope, **lookup):
+    """Lock the Chalan before changing its items or linked workflow records."""
+    records = scoped_queryset(Chalan.objects.all(), scope).filter(**lookup)
+    records.update(updated_at=F('updated_at'))
+    return get_object_or_404(records.select_for_update())
+
+
+def require_editable_chalan(chalan):
+    if chalan.is_delivered:
+        raise ChalanDelivered()
+
+
+@transaction.atomic
+def delete_chalan(pk, actor):
+    scope = lock_warehouse_scope(actor)
+    if not has_role_permissions(actor, ('sale.delete_chalan',)):
+        raise PermissionDenied('Your role does not have permission to delete Chalans.')
+    chalan = lock_chalan(scope, pk=pk)
+    require_editable_chalan(chalan)
+    if chalan.stock_in_transit:
+        raise ChalanStockInTransit()
+    if chalan.items.exists() and not has_role_permissions(actor, ('sale.delete_chalanitem',)):
+        raise PermissionDenied('Your role does not have permission to delete Chalan items.')
+
+    delivery = getattr(chalan, 'delivery', None)
+    if delivery:
+        delivery.status_updates.all().delete()
+        delivery.delete()
+    PackingSlip.objects.filter(chalan=chalan).delete()
+    chalan.items.all().delete()
+    chalan.delete()
 
 
 def require_item_permission(request, action):
@@ -96,19 +143,7 @@ def complete_sale(actor, sale_id, *, settle=None):
                 if item.quantity <= 0:
                     raise ValidationError({'items': 'Sale quantities must be positive.'})
                 quantities[item.product_id] += item.quantity
-            for product_id, quantity in sorted(quantities.items()):
-                stock = Stock.objects.select_for_update().filter(warehouse=warehouse, product_id=product_id).first()
-                if stock is None or stock.quantity < quantity:
-                    raise ValidationError({'quantity': f'Insufficient stock for {products[product_id].sku} in {warehouse.name}.'})
-                expected_quantity = stock.quantity - quantity
-                updated = Stock.objects.filter(pk=stock.pk, quantity__gte=quantity).update(
-                    quantity=F('quantity') - quantity, updated_at=now, modified_by=actor.get_username())
-                if not updated:
-                    raise ValidationError({'quantity': f'Insufficient stock for {products[product_id].sku}.'})
-                stock.refresh_from_db(fields=['quantity'])
-                if stock.quantity != expected_quantity:
-                    raise ValidationError({'quantity': 'The database cannot store this resulting stock quantity accurately.'})
-                record_activity(stock, 'stock_changed', actor=actor)
+            deduct_stock(warehouse, quantities, products, actor, now)
             if settle is None:
                 post_completed_sale_payment(order, scope, actor, date=timezone.localdate(now))
             else:

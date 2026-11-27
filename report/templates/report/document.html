@@ -1,25 +1,45 @@
 <!doctype html>
 <html lang="en">
 <head><meta charset="utf-8"><title>{{ report.title }} {{ report.number }}</title></head>
-<body>
+<body{% if report.kind == 'packing-slip' %} class="packing-slip"{% endif %}>
     <div class="running-footer"><span>Generated {{ report.generated_at }}</span><span>{{ report.company.name }}</span></div>
     <header class="document-header">
         <div class="brand">{% if report.company.logo_path %}<img class="logo" src="report-asset:///logo" alt="{{ report.company.name }}">{% else %}<span class="brand-mark">e.</span>{% endif %}<div><strong>{{ report.company.name }}</strong><span class="brand-caption">BUSINESS DOCUMENT</span></div></div>
         <div class="company-contact">{% if report.company.address %}<p>{{ report.company.address }}</p>{% endif %}{% if report.company.phone %}<p>{{ report.company.phone }}</p>{% endif %}{% if report.company.email %}<p>{{ report.company.email }}</p>{% endif %}</div>
     </header>
-    <section class="document-title"><p class="eyebrow">{{ report.kind|upper }} / {{ report.date }}</p><h1>{{ report.title }}</h1><div class="reference"><span>{{ report.number }}</span><span class="badge{% if report.completed %} badge-complete{% endif %}">{{ report.state }}</span></div></section>
+    <section class="document-title">
+        <p class="eyebrow">{% if report.kind != 'packing-slip' %}{{ report.kind|upper }} / {% endif %}{{ report.date }}</p>
+        <h1>{{ report.title }}</h1>
+        <div class="reference"><span>{{ report.number }}</span>{% if report.state %}<span class="badge{% if report.completed %} badge-complete{% endif %}">{{ report.state }}</span>{% endif %}</div>
+    </section>
     {% if report.metadata %}<section class="metadata">{% for label, value in report.metadata %}<div><span>{{ label }}</span><strong>{{ value }}</strong></div>{% endfor %}</section>{% endif %}
     <table class="parties"><tbody><tr>{% for card in report.cards %}<td><p class="eyebrow">{{ card.label }}</p><h2>{{ card.name }}</h2>{% if card.code %}<p class="party-code">{{ card.code }}</p>{% endif %}{% for line in card.lines %}<p class="address">{{ line }}</p>{% endfor %}</td>{% endfor %}</tr></tbody></table>
     {% if report.addresses %}<div class="addresses">{% for label, value in report.addresses %}{% if value %}<section><p class="eyebrow">{{ label }}</p><p>{{ value }}</p></section>{% endif %}{% endfor %}</div>{% endif %}
     <div class="section-heading"><h2>Product lines</h2><span>{{ report.line_count }} line{{ report.line_count|pluralize }}{% if report.financial %} / Amounts in {{ report.currency }}{% endif %}</span></div>
     <table class="products{% if not report.financial %} transfer-products{% endif %}">
-        <colgroup>{% if report.financial %}<col style="width:5%"><col style="width:29%"><col style="width:11%"><col style="width:13%"><col style="width:12%"><col style="width:13%"><col style="width:17%">{% else %}<col style="width:7%"><col style="width:60%"><col style="width:20%"><col style="width:13%">{% endif %}</colgroup>
+        <colgroup>
+            {% if report.financial %}<col style="width:5%"><col style="width:29%"><col style="width:11%"><col style="width:13%"><col style="width:12%"><col style="width:13%"><col style="width:17%">
+            {% else %}<col style="width:7%"><col style="width:60%"><col style="width:20%"><col style="width:13%">{% endif %}
+        </colgroup>
         <thead><tr><th>#</th><th>Product / SKU</th><th class="numeric">Quantity</th>{% if report.financial %}<th class="numeric">Unit price</th><th class="numeric">Discount</th><th class="numeric">Tax</th><th class="numeric">Line total</th>{% else %}<th>Unit</th>{% endif %}</tr></thead>
-        <tbody>{% for row in report.rows %}<tr><td class="line-number">{{ row.number }}</td><td><strong>{{ row.name }}</strong><span class="sku">{{ row.sku }}</span></td><td class="numeric">{{ row.quantity }}{% if report.financial %}<span class="unit">{{ row.unit }}</span>{% endif %}</td>{% if report.financial %}<td class="numeric">{{ row.price }}</td><td class="numeric">{{ row.discount }}</td><td class="numeric">{{ row.tax }}<span class="unit">{{ row.tax_rate }}%</span></td><td class="numeric line-total">{{ row.total }}</td>{% else %}<td>{{ row.unit }}</td>{% endif %}</tr>{% for part in row.description_parts %}<tr class="description-row"><td></td><td colspan="6">{{ part }}</td></tr>{% endfor %}{% empty %}<tr><td colspan="7" class="empty">No product lines recorded.</td></tr>{% endfor %}</tbody>
+        <tbody>{% for row in report.rows %}
+            {% if forloop.last and report.kind == 'packing-slip' %}</tbody><tbody class="packing-slip-end">{% endif %}
+            <tr><td class="line-number">{{ row.number }}</td><td><strong>{{ row.name }}</strong><span class="sku">{{ row.sku }}</span></td><td class="numeric">{{ row.quantity }}{% if report.financial %}<span class="unit">{{ row.unit }}</span>{% endif %}</td>{% if report.financial %}<td class="numeric">{{ row.price }}</td><td class="numeric">{{ row.discount }}</td><td class="numeric">{{ row.tax }}<span class="unit">{{ row.tax_rate }}%</span></td><td class="numeric line-total">{{ row.total }}</td>{% else %}<td>{{ row.unit }}</td>{% endif %}</tr>
+            {% for part in row.description_parts %}<tr class="description-row"><td></td><td colspan="{% if report.financial %}6{% else %}3{% endif %}">{{ part }}</td></tr>{% endfor %}
+        {% empty %}<tr><td colspan="{% if report.financial %}7{% else %}4{% endif %}" class="empty">No product lines recorded.</td></tr>{% endfor %}
+        {% if report.kind == 'packing-slip' %}
+            <tr class="packing-slip-summary"><td colspan="7">
+                {% include 'report/includes/totals.html' %}
+                <section class="signatures">
+                    <div><p class="signature-name">&nbsp;</p><p class="signature-label">Packed by</p></div>
+                    <div><p class="signature-name">&nbsp;</p><p class="signature-label">Checked by</p></div>
+                </section>
+            </td></tr>
+        {% endif %}</tbody>
     </table>
     {% if report.notes_compact %}<div class="closing">{% endif %}
-    {% if report.financial %}<div class="financial-summary"><div>{% if report.notes and report.notes_compact %}<section class="notes"><p class="eyebrow">{{ report.notes_label|default:'Notes' }}</p><p>{{ report.notes }}</p></section>{% endif %}</div><table class="totals"><tbody>{% for label, value in report.totals %}<tr{% if forloop.last %} class="grand-total"{% endif %}><th>{{ label }}</th><td>{{ report.currency }} {{ value }}</td></tr>{% endfor %}</tbody></table></div>{% endif %}
+    {% if report.financial and report.kind != 'packing-slip' %}<div class="financial-summary"><div>{% if report.notes and report.notes_compact %}<section class="notes"><p class="eyebrow">{{ report.notes_label|default:'Notes' }}</p><p>{{ report.notes }}</p></section>{% endif %}</div>{% include 'report/includes/totals.html' %}</div>{% endif %}
     {% if report.notes %}{% if not report.financial or not report.notes_compact %}<section class="notes"><p class="eyebrow">{{ report.notes_label|default:'Notes' }}</p><p>{{ report.notes }}</p></section>{% endif %}{% endif %}
-    {% if report.kind != 'quotation' %}<section class="signatures"><div><p class="signature-name">{{ report.prepared_by }}</p><p class="signature-label">Prepared by</p></div><div><p class="signature-name">&nbsp;</p><p class="signature-label">Authorized signature</p></div></section>{% endif %}
+    {% if report.kind != 'quotation' and report.kind != 'packing-slip' %}<section class="signatures"><div><p class="signature-name">{{ report.prepared_by }}</p><p class="signature-label">Prepared by</p></div><div><p class="signature-name">&nbsp;</p><p class="signature-label">Authorized signature</p></div></section>{% endif %}
     {% if report.notes_compact %}</div>{% endif %}
 </body></html>

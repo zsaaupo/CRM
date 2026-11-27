@@ -57,3 +57,7 @@ class QuotationPDFAPIView(DocumentPDFAPIView):
 
 class TransferPDFAPIView(DocumentPDFAPIView):
     kind = 'transfer'
+
+
+class PackingSlipPDFAPIView(DocumentPDFAPIView):
+    kind = 'packing-slip'

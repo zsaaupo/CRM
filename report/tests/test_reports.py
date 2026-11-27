@@ -15,7 +15,7 @@ from rest_framework.test import APIClient
 from inventory.models import Product, UnitOfMeasure
 from people.models import Party
 from purchase.models import PurchaseOrder, PurchaseOrderItem
-from sale.models import SalesOrder, SalesOrderItem, SalesQuotation, SalesQuotationItem
+from sale.models import Chalan, ChalanItem, PackingSlip, SalesOrder, SalesOrderItem, SalesQuotation, SalesQuotationItem
 from warehouse.models import Stock, WareHouse, WarehouseTransfer, WarehouseTransferItem
 from warehouse.tests.helpers import assign_warehouse_role
 from report.catalog import REPORTS
@@ -42,6 +42,11 @@ class ReportTests(TestCase):
             customer=self.party, warehouse=self.source, currency_id='BDT', exchange_rate=1,
             status=SalesQuotation.Status.ISSUED, issued_at=timezone.now(), shipping_cost=2)
         self.transfer = WarehouseTransfer.objects.create(source_warehouse=self.source, destination_warehouse=self.destination)
+        self.chalan = Chalan.objects.create(customer=self.party, warehouse=self.source,
+            shipping_address='Saved Chalan shipping address', notes='Internal Chalan notes', shipping_cost=2)
+        ChalanItem.objects.create(chalan=self.chalan, line_number=1, product=self.product, unit=unit,
+            quantity='1.500001', unit_price=10, discount_amount='0.5000', tax_rate=15, description='Packing instruction')
+        self.packing_slip = PackingSlip.objects.create(chalan=self.chalan)
         for model, parent in [(PurchaseOrderItem, {'purchase_order': self.purchase}), (SalesOrderItem, {'sales_order': self.sale}),
                               (SalesQuotationItem, {'quotation': self.quotation})]:
             model.objects.create(**parent, line_number=1, product=self.product, unit=unit, quantity='1.5', unit_price=10,
@@ -54,7 +59,8 @@ class ReportTests(TestCase):
         self.client = APIClient(enforce_csrf_checks=True); self.client.force_login(self.user)
         token = self.client.get(reverse('account:login')).data['csrfToken']
         self.client.credentials(HTTP_X_CSRFTOKEN=token)
-        self.records = {'purchase': self.purchase, 'sale': self.sale, 'transfer': self.transfer, 'quotation': self.quotation}
+        self.records = {'purchase': self.purchase, 'sale': self.sale, 'transfer': self.transfer,
+                        'quotation': self.quotation, 'packing-slip': self.packing_slip}
 
     def grant(self, *names):
         self.access.role.permissions.set([Permission.objects.get(content_type__app_label=name.split('.')[0], codename=name.split('.')[1]) for name in set(names)])
@@ -82,14 +88,33 @@ class ReportTests(TestCase):
                 text = '\n'.join(page.extract_text() for page in reader.pages)
                 self.assertIn('REPORT-ITEM', text)
                 self.assertIn(REPORTS[kind].title, text)
-                self.assertIn('1.500001' if kind == 'transfer' else '1.5', text)
+                self.assertIn('1.500001' if kind in ('transfer', 'packing-slip') else '1.5', text)
                 if kind != 'transfer':
-                    self.assertIn(money(self.records[kind].grand_total), text)
+                    priced = self.chalan if kind == 'packing-slip' else self.records[kind]
+                    self.assertIn(money(priced.grand_total), text)
                     self.assertIn('10.0000', text); self.assertNotIn('9,999.0000', text)
                 self.records[kind].refresh_from_db()
                 record = self.records[kind]
                 self.assertEqual(before[kind], (getattr(record, REPORTS[kind].completed_field), record.updated_at))
         self.assertEqual(stock_before, list(Stock.objects.values()))
+
+    @override_settings(REPORT_COMPANY={'name': 'Example company'})
+    def test_packing_slip_reprints_use_current_chalan_and_respect_warehouse_scope(self):
+        ChalanItem.objects.filter(chalan=self.chalan).update(quantity='7.510001')
+        self.chalan.shipping_address = 'Updated delivery address'
+        self.chalan.save(update_fields=['shipping_address'])
+        _, reader, _ = self.pdf('packing-slip')
+        text = '\n'.join(page.extract_text() for page in reader.pages)
+        for value in (self.packing_slip.slip_number, self.chalan.chalan_number, 'Updated delivery address',
+                      '7.510001', 'Packing instruction', 'Packed by', 'Checked by', 'Unit price', '15%',
+                      '10.0000', '0.5000', '11.1900', '85.7900', 'BDT 74.6000', 'BDT 2.0000', 'BDT 87.7900'):
+            self.assertIn(value, ' '.join(text.split()))
+        for value in ('Internal Chalan notes', '9,999.0000'):
+            self.assertNotIn(value, text)
+        self.access.all_warehouses = False
+        self.access.warehouse = self.destination
+        self.access.save()
+        self.assertEqual(self.client.get(self.url('packing-slip')).status_code, 404)
 
     def test_missing_role_permissions_and_direct_user_grants_cannot_download(self):
         for kind, spec in REPORTS.items():
@@ -196,6 +221,15 @@ class ReportTests(TestCase):
 
 
 class ReportLayoutTests(TestCase):
+    def test_long_packing_slip_keeps_signatures_with_the_last_product(self):
+        reader = PdfReader(BytesIO(render_pdf(demo_document('packing-slip', line_count=42))))
+        self.assertGreater(len(reader.pages), 1)
+        last_page = reader.pages[-1].extract_text()
+        self.assertIn('Product / SKU', last_page)
+        self.assertIn('ITEM-042', last_page)
+        self.assertIn('Grand total', last_page)
+        self.assertIn('Packed by', last_page)
+
     def test_long_reports_repeated_headings_and_unicode_fonts(self):
         document = demo_document('sale', line_count=42)
         reader = PdfReader(BytesIO(render_pdf(document)))

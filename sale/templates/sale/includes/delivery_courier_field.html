@@ -1,0 +1,8 @@
+<div>
+    <label for="id_courier" class="form-label">Courier</label>
+    <select id="id_courier" name="courier" class="form-input" aria-describedby="id_courier_error" required>
+        <option value="">Select a courier</option>
+        {% for courier in couriers %}<option value="{{ courier.pk }}"{% if courier.pk == selected_courier_id %} selected{% endif %}>{{ courier.name }}{% if not courier.is_active %} (inactive){% endif %}</option>{% endfor %}
+    </select>
+    <p class="form-error" id="id_courier_error" data-error-for="courier" hidden></p>
+</div>

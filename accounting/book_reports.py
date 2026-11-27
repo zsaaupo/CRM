@@ -22,13 +22,15 @@ SOURCES = {
     'fund_transfer': ('Fund transfer', Q(transfer__transfer_type='fund_transfer')),
     'money_transfer': ('Money transfer', Q(transfer__transfer_type='money_transfer')),
     'sale': ('Sales payment', Q(sales_payment__isnull=False, sales_payment__sales_return__isnull=True)),
+    'chalan': ('Chalan payment', Q(chalan_payment__isnull=False)),
     'sales_refund': ('Sales refund', Q(sales_payment__sales_return__isnull=False)),
     'purchase': ('Purchase payment', Q(purchase_payment__isnull=False, purchase_payment__purchase_return__isnull=True)),
     'purchase_refund': ('Purchase refund', Q(purchase_payment__purchase_return__isnull=False)),
     'expense': ('Expense payment', Q(expense_payment__isnull=False)),
     'income': ('Income payment', Q(income_payment__isnull=False)),
 }
-VOUCHERS = {'transfer': 'TR', 'expense_payment': 'EP', 'income_payment': 'IP', 'sales_payment': 'SP', 'purchase_payment': 'PP'}
+VOUCHERS = {'transfer': 'TR', 'expense_payment': 'EP', 'income_payment': 'IP', 'sales_payment': 'SP',
+            'purchase_payment': 'PP', 'chalan_payment': 'CP'}
 
 
 class DaybookFilters(forms.Form):

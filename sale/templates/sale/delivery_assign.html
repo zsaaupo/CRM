@@ -1,0 +1,30 @@
+{% extends 'layouts/dashboard.html' %}
+{% load static %}
+{% block title %}Assign courier | eManager{% endblock %}
+{% block content %}
+<div class="workspace-content">
+    <div class="page-heading">
+        <div><p class="page-eyebrow">Sales</p><h1 class="page-title">Assign courier<span class="text-emerald-600">.</span></h1></div>
+        <a href="{% url 'sale_pages:chalan-detail' chalan.pk %}" class="secondary-button">Back to Chalan</a>
+    </div>
+    <section class="user-form-card max-w-2xl" aria-labelledby="delivery-assignment">
+        <h2 class="section-title mb-5" id="delivery-assignment">Chalan {{ chalan.chalan_number }}</h2>
+        <dl class="profile-grid mb-6"><div><dt>Customer</dt><dd>{{ chalan.customer.name }}</dd></div><div><dt>Warehouse</dt><dd>{{ chalan.warehouse.name }}</dd></div></dl>
+        {% if couriers %}
+        <form method="post" action="{{ assignment_url }}" data-delivery-form data-success-url-template="{{ delivery_url_template }}">
+            {% csrf_token %}
+            <p class="form-status mb-5" data-delivery-feedback role="status" tabindex="-1" hidden></p>
+            <div class="user-form-grid">
+                {% include 'sale/includes/delivery_courier_field.html' with couriers=couriers only %}
+                {% include 'inventory/includes/field.html' with name='tracking_number' label='Tracking number' maxlength='100' only %}
+            </div>
+            <div class="user-form-actions"><button type="submit" class="primary-button compact-primary">Assign courier</button></div>
+        </form>
+        {% else %}
+        <p class="users-list-status">An active courier is needed to assign this Chalan.</p>
+        {% endif %}
+        {% if create_courier_url %}<a href="{{ create_courier_url }}" class="text-button mt-5">Create courier</a>{% endif %}
+    </section>
+</div>
+{% endblock %}
+{% block workspace_js %}<script type="module" src="{% static 'sale/js/delivery.js' %}"></script>{% endblock %}

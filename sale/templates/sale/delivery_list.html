@@ -1,0 +1,11 @@
+{% extends 'inventory/list.html' %}
+
+{% block catalog_filters %}
+<form class="px-5 pb-4" data-catalog-filters data-catalog-auto-filter>
+    <label class="form-label" for="delivery-status-filter">Delivery status</label>
+    <select class="form-input max-w-xs" id="delivery-status-filter" name="status">
+        <option value="">All statuses</option>
+        {% for value, label in delivery_statuses %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+    </select>
+</form>
+{% endblock %}

@@ -1,0 +1,77 @@
+{% extends 'layouts/dashboard.html' %}
+{% load static %}
+{% block title %}Chalan details | eManager{% endblock %}
+{% block content %}
+<div class="workspace-content" data-chalan-detail data-api-url="{{ detail_api_url }}" data-title-field="chalan_number"
+     data-login-url="{% url 'account_pages:login' %}">
+    <div class="page-heading">
+        <div class="min-w-0">
+            <p class="page-eyebrow">Chalan</p><h1 class="page-title break-all" data-record-title>Chalan details</h1>
+            {% if is_delivered %}<p class="page-description">Delivered Chalans are read-only.</p>{% endif %}
+        </div>
+        <div class="flex flex-wrap gap-3">
+            <a href="{{ list_url }}" class="secondary-button">Back to Chalans</a>
+            {% if edit_url %}<a href="{{ edit_url }}" class="secondary-button">Edit Chalan</a>{% endif %}
+            {% if delivery_url %}<a href="{{ delivery_url }}" class="secondary-button">Track delivery</a>
+            {% elif assign_courier_url %}<a href="{{ assign_courier_url }}" class="secondary-button">Assign courier</a>{% endif %}
+            {% if packing_slip_generate_url %}
+            <form method="post" action="{{ packing_slip_generate_url }}" data-packing-slip-generate>
+                {% csrf_token %}
+                <button type="submit" class="primary-button compact-primary">Generate packing slip</button>
+            </form>
+            {% elif packing_slip_report %}
+            {% include 'report/includes/download_button.html' with report_links=packing_slip_report only %}
+            {% endif %}
+        </div>
+    </div>
+    {% if packing_slip_generate_url %}<p class="form-status mb-5" data-packing-slip-feedback role="status" tabindex="-1" hidden></p>{% endif %}
+    {% include 'includes/detail_status.html' %}
+    <div data-record-content hidden>
+        <section class="user-form-card mb-6" aria-labelledby="chalan-info">
+            <h2 id="chalan-info" class="section-title mb-5">Chalan details</h2>
+            <dl class="profile-grid">
+                {% include 'includes/detail_field.html' with name='customer_name' label='Customer' only %}
+                {% include 'includes/detail_field.html' with name='customer_reference' label='Customer reference' only %}
+                {% include 'includes/detail_field.html' with name='warehouse_name' label='Warehouse' only %}
+                {% include 'includes/detail_field.html' with name='chalan_date' label='Chalan date' only %}
+                {% include 'includes/detail_field.html' with name='expected_delivery_date' label='Expected delivery date' only %}
+                {% if packing_slip_number %}<div><dt>Packing slip</dt><dd>{{ packing_slip_number }}</dd></div>{% endif %}
+                {% if delivery_status %}<div><dt>Delivery status</dt><dd>{{ delivery_status }}</dd></div>{% endif %}
+                {% include 'includes/detail_field.html' with name='recipient_name' label='Recipient name' only %}
+                {% include 'includes/detail_field.html' with name='recipient_phone' label='Recipient phone' only %}
+                {% include 'includes/detail_field.html' with name='currency' label='Currency' only %}
+                {% include 'includes/detail_field.html' with name='exchange_rate' label='Exchange rate' only %}
+                {% include 'includes/detail_field.html' with name='shipping_address' label='Shipping address' full=True only %}
+                {% include 'includes/detail_field.html' with name='notes' label='Notes' full=True only %}
+            </dl>
+        </section>
+        {% if can_view_items %}
+        <section class="users-panel mb-6" aria-labelledby="chalan-items">
+            <div class="users-toolbar"><h2 id="chalan-items" class="section-title">Products</h2></div>
+            <div class="users-table-scroll"><table class="users-table">
+                <caption class="sr-only">Chalan products</caption>
+                <thead><tr>
+                    <th scope="col">Line</th><th scope="col">Product</th><th scope="col">SKU</th>
+                    <th scope="col">Unit</th><th scope="col">Quantity</th><th scope="col">Unit price</th>
+                    <th scope="col">Discount</th><th scope="col">Net amount</th><th scope="col">Tax (%)</th>
+                    <th scope="col">Tax amount</th><th scope="col">Line total</th><th scope="col">Description</th>
+                </tr></thead>
+                <tbody data-chalan-items></tbody>
+            </table></div>
+        </section>
+        {% endif %}
+        <section class="user-form-card mb-6" aria-labelledby="chalan-totals">
+            <h2 id="chalan-totals" class="section-title mb-5">Chalan totals</h2>
+            <dl class="profile-grid">
+                {% include 'includes/detail_field.html' with name='subtotal' label='Subtotal after discounts' kind='money' only %}
+                {% include 'includes/detail_field.html' with name='tax_total' label='Tax total' kind='money' only %}
+                {% include 'includes/detail_field.html' with name='shipping_cost' label='Shipping cost' kind='money' only %}
+                {% include 'includes/detail_field.html' with name='grand_total' label='Grand total' kind='money' only %}
+            </dl>
+        </section>
+        {% include 'includes/detail_audit.html' %}
+    </div>
+    <noscript><p class="form-error">Enable JavaScript to load Chalan details.</p></noscript>
+</div>
+{% endblock %}
+{% block workspace_js %}<script type="module" src="{% static 'sale/js/chalan_detail.js' %}"></script>{% endblock %}

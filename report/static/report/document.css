@@ -33,8 +33,11 @@ h1 { font-size: 28pt; line-height: 1.15; letter-spacing: -1pt; font-weight: 600;
 .metadata { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 2mm 6mm; margin-bottom: 4mm; font-size: 8pt; }
 .metadata span { display: block; color: #6a7a70; font-size: 7pt; }
 .metadata strong { display: block; font-weight: 500; overflow-wrap: anywhere; }
+.packing-slip .metadata { grid-template-columns: 1fr 1fr; }
 .parties { table-layout: fixed; border-collapse: separate; border-spacing: 3mm 0; width: calc(100% + 6mm); margin: 0 -3mm 6mm; }
 .parties td { width: 50%; padding: 3mm; background: #f3f6f2; border-top: 1pt solid #d7e4da; vertical-align: top; overflow-wrap: anywhere; }
+.packing-slip .parties { width: 100%; margin: 0 0 6mm; border-spacing: 0; }
+.packing-slip .parties td + td { border-left: 3mm solid #fff; }
 .parties h2 { font-size: 11pt; font-weight: 600; line-height: 1.35; margin-bottom: 1mm; }
 .party-code { font-size: 7.5pt; color: #748277; margin-bottom: 2mm; }
 .address { font-size: 7.5pt; line-height: 1.35; color: #52685a; white-space: pre-line; }
@@ -46,7 +49,7 @@ h1 { font-size: 28pt; line-height: 1.15; letter-spacing: -1pt; font-weight: 600;
 .section-heading > span { display: table-cell; text-align: right; color: #738277; font-size: 7.5pt; }
 .products { table-layout: fixed; width: 100%; border-collapse: collapse; font-size: 7.5pt; }
 .products thead { display: table-header-group; }
-.products th { background: #174c3a; color: #fff; font-weight: 600; font-size: 7pt; padding: 3mm 1.8mm; text-align: left; }
+.products > thead > tr > th { background: #174c3a; color: #fff; font-weight: 600; font-size: 7pt; padding: 3mm 1.8mm; text-align: left; }
 .products td { padding: 2.3mm 1.8mm; vertical-align: top; border-bottom: .5pt solid #dfe7df; overflow-wrap: anywhere; }
 .products tr { break-inside: avoid; }
 .products td strong { display: block; max-width: 100%; overflow-wrap: break-word; font-weight: 600; }
@@ -72,3 +75,10 @@ h1 { font-size: 28pt; line-height: 1.15; letter-spacing: -1pt; font-weight: 600;
 .signatures > div { display: table-cell; width: 50%; padding-right: 10mm; vertical-align: bottom; }
 .signature-name { min-height: 5mm; font-size: 8pt; overflow-wrap: anywhere; border-bottom: .6pt solid #becdbf; padding-bottom: 2mm; }
 .signature-label { font-size: 7pt; color: #829084; margin-top: 2mm; }
+.packing-slip .products > tbody > tr:not(.description-row) > td { padding-block: 2mm; }
+.packing-slip-end { break-inside: avoid; }
+.packing-slip .products > tbody > tr.packing-slip-summary > td { border: 0; padding: 0; }
+.packing-slip .packing-slip-summary .totals { margin-block: 3mm 1mm; }
+.packing-slip .packing-slip-summary .totals :is(th, td) { padding-block: 1mm; }
+.packing-slip .packing-slip-summary .totals .grand-total :is(th, td) { padding-block: 2mm; }
+.packing-slip .packing-slip-summary .signatures { margin-top: 4mm; }

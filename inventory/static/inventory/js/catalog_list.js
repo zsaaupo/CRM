@@ -11,11 +11,15 @@ function actionIcon(pathData) {
     return svg;
 }
 
+function recordLabel(record) {
+    return record.name || record.full_name || record.order_number || record.transfer_number
+        || record.return_number || record.adjustment_number || record.chalan_number || record.code || record.id;
+}
+
 export function catalogRow(record, columns, editUrlTemplate = "", onDelete = null, viewUrlTemplate = "", editDisabledField = "", onReceive = null, onComplete = null, deleteDisabledField = "", completeLabel = "sale") {
     const row = document.createElement("tr");
     row.dataset.recordId = String(record.id);
-    const recordLabel = record.name || record.full_name || record.order_number || record.transfer_number
-        || record.return_number || record.adjustment_number || record.code || record.id;
+    const label = recordLabel(record);
     for (const column of columns) {
         const cell = document.createElement("td");
         const value = record[column.key];
@@ -24,9 +28,10 @@ export function catalogRow(record, columns, editUrlTemplate = "", onDelete = nul
             actions.className = "flex items-center gap-1";
             if (viewUrlTemplate) {
                 const view = document.createElement("a");
-                view.href = viewUrlTemplate.replace("/0/", `/${encodeURIComponent(record.id)}/`);
+                const viewId = column.view_id_field ? record[column.view_id_field] : record.id;
+                view.href = viewUrlTemplate.replace("/0/", `/${encodeURIComponent(viewId)}/`);
                 view.className = column.view_label ? "text-button" : "icon-button";
-                view.title = `View ${recordLabel}`;
+                view.title = `View ${label}`;
                 view.setAttribute("aria-label", view.title);
                 if (column.view_label) {
                     view.textContent = column.view_label;
@@ -45,7 +50,7 @@ export function catalogRow(record, columns, editUrlTemplate = "", onDelete = nul
                 } else link.href = editUrlTemplate.replace("/0/", `/${encodeURIComponent(record.id)}/`);
                 link.dataset.catalogEditAction = "";
                 link.className = "icon-button";
-                link.title = `Edit ${recordLabel}`;
+                link.title = `Edit ${label}`;
                 link.setAttribute("aria-label", link.title);
                 link.append(actionIcon("m16 3 5 5-12 12-6 1 1-6L16 3ZM13 6l5 5"));
                 actions.append(link);
@@ -84,7 +89,7 @@ export function catalogRow(record, columns, editUrlTemplate = "", onDelete = nul
                 remove.className = "icon-button inventory-delete-button";
                 remove.dataset.catalogDeleteAction = "";
                 remove.disabled = Boolean(deleteDisabledField && record[deleteDisabledField] === true);
-                remove.title = `Delete ${recordLabel}`;
+                remove.title = `Delete ${label}`;
                 remove.setAttribute("aria-label", remove.title);
                 remove.append(actionIcon("M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"));
                 remove.addEventListener("click", () => {
@@ -264,7 +269,7 @@ if (panel) {
 
     function openDelete(record, trigger) {
         pendingDelete = {record, trigger};
-        find("delete-name").textContent = record.name || record.full_name || record.order_number || record.transfer_number || record.return_number || record.code || record.id;
+        find("delete-name").textContent = recordLabel(record);
         find("delete-error").hidden = true;
         deleteDialog.showModal();
         find("delete-cancel").focus();
@@ -379,7 +384,7 @@ if (panel) {
                 await deleteJSON(url, csrf);
                 deleteDialog.close();
                 find("feedback").dataset.tone = "success";
-                find("feedback").textContent = `${record.name || record.full_name || record.order_number || record.transfer_number || record.return_number || record.code || record.id} deleted.`;
+                find("feedback").textContent = `${recordLabel(record)} deleted.`;
                 find("feedback").hidden = false;
                 await load(nextPage);
                 find("feedback").focus();

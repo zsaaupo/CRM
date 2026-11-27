@@ -17,6 +17,40 @@ from .scope import all_warehouse_access, check_warehouse, lock_warehouse_scope
 MAX_STOCK_QUANTITY = Decimal('999999999999.999999')
 
 
+def deduct_stock(warehouse, quantities, products, actor, now):
+    for product_id, quantity in sorted(quantities.items()):
+        stock = Stock.objects.select_for_update().filter(warehouse=warehouse, product_id=product_id).first()
+        if stock is None or stock.quantity < quantity:
+            raise ValidationError({'quantity': f'Insufficient stock for {products[product_id].sku} in {warehouse.name}.'})
+        expected = stock.quantity - quantity
+        updated = Stock.objects.filter(pk=stock.pk, quantity__gte=quantity).update(
+            quantity=F('quantity') - quantity, updated_at=now, modified_by=actor.get_username())
+        if not updated:
+            raise ValidationError({'quantity': f'Insufficient stock for {products[product_id].sku}.'})
+        stock.refresh_from_db(fields=['quantity'])
+        if stock.quantity != expected:
+            raise ValidationError({'quantity': 'The database cannot store this resulting stock quantity accurately.'})
+        record_activity(stock, 'stock_changed', actor=actor)
+
+
+def restock(warehouse, quantities, user, now):
+    username = user.get_username()
+    for product_id, quantity in sorted(quantities.items()):
+        if quantity > MAX_STOCK_QUANTITY:
+            raise ValidationError({'quantity': 'The combined returned quantity exceeds the stock limit.'})
+        stock, _ = Stock.objects.select_for_update().get_or_create(warehouse=warehouse, product_id=product_id,
+            defaults={'quantity': Decimal('0'), 'create_by': username, 'modified_by': username})
+        expected = stock.quantity + quantity
+        updated = Stock.objects.filter(pk=stock.pk, quantity__lte=MAX_STOCK_QUANTITY - quantity).update(
+            quantity=F('quantity') + quantity, updated_at=now, modified_by=username)
+        if not updated:
+            raise ValidationError({'quantity': 'Completing this return would exceed the warehouse stock limit.'})
+        stock.refresh_from_db(fields=['quantity'])
+        if stock.quantity != expected:
+            raise ValidationError({'quantity': 'The database cannot store the resulting stock quantity accurately.'})
+        record_activity(stock, 'stock_changed', actor=user)
+
+
 class TransferCompleted(APIException):
     status_code = 409
     default_detail = 'Completed transfers are read-only and cannot be changed or deleted.'

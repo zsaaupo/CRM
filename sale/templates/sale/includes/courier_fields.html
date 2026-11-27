@@ -1,0 +1,5 @@
+{% include 'inventory/includes/field.html' with name='name' label='Courier name' required=True maxlength='150' only %}
+{% include 'inventory/includes/field.html' with name='contact_person' label='Contact person' maxlength='150' only %}
+{% include 'inventory/includes/field.html' with name='phone' label='Phone' field_type='tel' maxlength='32' only %}
+{% include 'inventory/includes/field.html' with name='email' label='Email' field_type='email' maxlength='254' only %}
+{% include 'inventory/includes/field.html' with name='is_active' label='Active' field_type='checkbox' checked=True only %}

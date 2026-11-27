@@ -1,0 +1,5 @@
+<table class="totals"><tbody>
+    {% for label, value in report.totals %}
+    <tr{% if forloop.last %} class="grand-total"{% endif %}><th>{{ label }}</th><td>{{ report.currency }} {{ value }}</td></tr>
+    {% endfor %}
+</tbody></table>

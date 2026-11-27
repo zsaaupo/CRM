@@ -298,6 +298,29 @@ class PurchasePayment(TimeStampedModel):
         return self.number
 
 
+class ChalanPayment(TimeStampedModel):
+    chalan = models.OneToOneField('sale.Chalan', on_delete=models.PROTECT, related_name='delivery_payment')
+    account = models.ForeignKey(FinancialAccount, on_delete=models.PROTECT, related_name='chalan_payments')
+    date = models.DateField(default=timezone.localdate)
+    amount = models.DecimalField(max_digits=15, decimal_places=4, validators=[MinValueValidator(MIN_AMOUNT)])
+    reference = models.CharField(max_length=150)
+
+    class Meta:
+        default_permissions = ('view',)
+        constraints = [models.CheckConstraint(condition=models.Q(amount__gt=0), name='accounting_chalan_payment_positive')]
+
+    @property
+    def number(self):
+        return f'CP-{self.pk}'
+
+    @property
+    def type_label(self):
+        return 'Chalan payment'
+
+    def __str__(self):
+        return self.number
+
+
 class AccountTransaction(TimeStampedModel):
     class Direction(models.TextChoices):
         INFLOW = 'inflow', 'Inflow'
@@ -314,6 +337,8 @@ class AccountTransaction(TimeStampedModel):
                                          blank=True, null=True)
     purchase_payment = models.OneToOneField(PurchasePayment, on_delete=models.PROTECT, related_name='transaction',
                                             blank=True, null=True)
+    chalan_payment = models.OneToOneField(ChalanPayment, on_delete=models.PROTECT, related_name='transaction',
+                                          blank=True, null=True)
     date = models.DateField()
     direction = models.CharField(max_length=7, choices=Direction.choices)
     amount = models.DecimalField(max_digits=15, decimal_places=4, validators=[MinValueValidator(MIN_AMOUNT)])
@@ -327,16 +352,21 @@ class AccountTransaction(TimeStampedModel):
             models.CheckConstraint(condition=models.Q(balance_after__gte=0), name='accounting_tx_balance_nonnegative'),
             models.CheckConstraint(
                 condition=(
-                    models.Q(transfer__isnull=False, expense_payment__isnull=True,
-                             sales_payment__isnull=True, purchase_payment__isnull=True, income_payment__isnull=True) |
-                    models.Q(transfer__isnull=True, expense_payment__isnull=False,
-                             sales_payment__isnull=True, purchase_payment__isnull=True, income_payment__isnull=True) |
-                    models.Q(transfer__isnull=True, expense_payment__isnull=True,
-                             sales_payment__isnull=False, purchase_payment__isnull=True, income_payment__isnull=True) |
-                    models.Q(transfer__isnull=True, expense_payment__isnull=True,
-                             sales_payment__isnull=True, purchase_payment__isnull=False, income_payment__isnull=True) |
-                    models.Q(transfer__isnull=True, expense_payment__isnull=True, income_payment__isnull=False,
-                             sales_payment__isnull=True, purchase_payment__isnull=True)
+                    (models.Q(chalan_payment__isnull=True) & (
+                        models.Q(transfer__isnull=False, expense_payment__isnull=True,
+                                 sales_payment__isnull=True, purchase_payment__isnull=True, income_payment__isnull=True) |
+                        models.Q(transfer__isnull=True, expense_payment__isnull=False,
+                                 sales_payment__isnull=True, purchase_payment__isnull=True, income_payment__isnull=True) |
+                        models.Q(transfer__isnull=True, expense_payment__isnull=True,
+                                 sales_payment__isnull=False, purchase_payment__isnull=True, income_payment__isnull=True) |
+                        models.Q(transfer__isnull=True, expense_payment__isnull=True,
+                                 sales_payment__isnull=True, purchase_payment__isnull=False, income_payment__isnull=True) |
+                        models.Q(transfer__isnull=True, expense_payment__isnull=True, income_payment__isnull=False,
+                                 sales_payment__isnull=True, purchase_payment__isnull=True)
+                    )) |
+                    models.Q(chalan_payment__isnull=False, transfer__isnull=True, expense_payment__isnull=True,
+                             income_payment__isnull=True, sales_payment__isnull=True, purchase_payment__isnull=True,
+                             direction='inflow')
                 ),
                 name='accounting_tx_one_source',
             ),

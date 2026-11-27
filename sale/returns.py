@@ -12,9 +12,9 @@ from account.permissions import has_role_permissions
 from accounting.services import post_sales_return_refund, return_refund_amount
 from audit_log.service import record_activity
 from inventory.models import Product
-from warehouse.models import Stock, WareHouse
+from warehouse.models import WareHouse
 from warehouse.scope import lock_warehouse_scope, scoped_queryset
-from warehouse.services import MAX_STOCK_QUANTITY
+from warehouse.services import restock
 
 from .models import SalesOrder, SalesReturn, SalesReturnItem
 
@@ -93,24 +93,6 @@ def validate_items(order, quantities, products=None, *, previous=None):
         if not quantity.is_finite() or quantity <= 0 or quantity > remaining:
             raise ValidationError({'items': f'Line {line.line_number}: enter a positive quantity up to {max(remaining, 0)}.'})
     return sold
-
-
-def restock(warehouse, quantities, user, now):
-    username = user.get_username()
-    for product_id, quantity in sorted(quantities.items()):
-        if quantity > MAX_STOCK_QUANTITY:
-            raise ValidationError({'quantity': 'The combined returned quantity exceeds the stock limit.'})
-        stock, _ = Stock.objects.select_for_update().get_or_create(warehouse=warehouse, product_id=product_id,
-            defaults={'quantity': Decimal('0'), 'create_by': username, 'modified_by': username})
-        expected = stock.quantity + quantity
-        updated = Stock.objects.filter(pk=stock.pk, quantity__lte=MAX_STOCK_QUANTITY - quantity).update(
-            quantity=F('quantity') + quantity, updated_at=now, modified_by=username)
-        if not updated:
-            raise ValidationError({'quantity': 'Completing this return would exceed the warehouse stock limit.'})
-        stock.refresh_from_db(fields=['quantity'])
-        if stock.quantity != expected:
-            raise ValidationError({'quantity': 'The database cannot store the resulting stock quantity accurately.'})
-        record_activity(stock, 'stock_changed', actor=user)
 
 
 def complete_return(user, pk):

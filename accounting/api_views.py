@@ -326,10 +326,13 @@ class AccountTransactionSerializer(serializers.ModelSerializer):
     class Meta:
         model = AccountTransaction
         fields = [*AUDIT_FIELDS, 'date', 'account', 'direction', 'direction_label', 'amount', 'balance_after',
-                  'currency', 'source', 'reference', 'transfer', 'expense_payment', 'income_payment', 'sales_payment', 'purchase_payment']
+                  'currency', 'source', 'reference', 'transfer', 'expense_payment', 'income_payment',
+                  'sales_payment', 'purchase_payment', 'chalan_payment']
         read_only_fields = fields
 
     def get_source(self, row):
+        if row.chalan_payment_id:
+            return f'{row.chalan_payment.type_label} {row.chalan_payment.number}'
         if row.income_payment_id:
             return f'Income payment {row.income_payment.number}'
         if row.purchase_payment_id:
@@ -339,19 +342,20 @@ class AccountTransactionSerializer(serializers.ModelSerializer):
         return f'Transfer {row.transfer.number}' if row.transfer_id else f'Expense payment {row.expense_payment.number}'
 
     def get_reference(self, row):
-        return (row.transfer or row.expense_payment or row.income_payment or row.sales_payment or row.purchase_payment).reference
+        return (row.transfer or row.expense_payment or row.income_payment or row.sales_payment
+                or row.purchase_payment or row.chalan_payment).reference
 
 
 class AccountTransactionListAPIView(WarehouseScopeAPIMixin, BaseListAPIView):
     queryset = AccountTransaction.objects.select_related(
-        'account', 'transfer', 'expense_payment', 'income_payment', 'sales_payment', 'purchase_payment',
+        'account', 'transfer', 'expense_payment', 'income_payment', 'sales_payment', 'purchase_payment', 'chalan_payment',
     )
     serializer_class = AccountTransactionSerializer
     required_permissions = STATEMENT_VIEW
     warehouse_lookup = 'account__warehouse_id'
     ordering = ['-pk']
     search_fields = ['transfer__reference', 'expense_payment__reference', 'income_payment__reference', 'sales_payment__reference',
-                     'purchase_payment__reference']
+                     'purchase_payment__reference', 'chalan_payment__reference']
 
 
 class AccountStatementAPIView(AccountTransactionListAPIView):
@@ -414,7 +418,8 @@ class LedgerAPIView(WarehouseScopeAPIMixin, BaseAPIMixin, GenericAPIView):
             opening += amount if direction == inflow else -amount
 
         rows = list(entries.filter(date__range=(params['start_date'], params['end_date']))
-                    .select_related('transfer', 'expense_payment', 'income_payment', 'sales_payment', 'purchase_payment')
+                    .select_related('transfer', 'expense_payment', 'income_payment', 'sales_payment', 'purchase_payment',
+                                    'chalan_payment')
                     .order_by('date', 'pk'))
         total_in = total_out = Decimal('0.0000')
         for row in rows:

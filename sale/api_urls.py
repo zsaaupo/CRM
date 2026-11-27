@@ -9,6 +9,12 @@ from .api_views import (
     SalesEditOptionsAPIView, SalesImportOptionsAPIView, SalesOptionsAPIView, SalesOrderListCreateAPIView,
     SalesOrderUpdateAPIView, SaleCompleteAPIView,
 )
+from .chalan_api import (ChalanDetailAPIView, ChalanListAPIView, ChalanListCreateAPIView,
+                         ChalanOptionsAPIView, ChalanUpdateAPIView)
+from .delivery_api import (CourierDetailAPIView, CourierListCreateAPIView, DeliveryAssignmentAPIView,
+                           DeliveryDetailAPIView, DeliveryListAPIView, DeliveryTransitionAPIView)
+from .packing_slip_api import PackingSlipGenerateAPIView, PackingSlipListAPIView
+from .permissions import CHALAN_EDIT
 from .return_api import (SalesReturnCompleteAPIView, SalesReturnDetailAPIView, SalesReturnListAPIView,
                          SalesReturnListCreateAPIView, SalesReturnOptionsAPIView, SalesReturnUpdateAPIView)
 
@@ -44,6 +50,20 @@ urlpatterns = [
     path('sales-order-items/list/', SalesOrderItemListAPIView.as_view(), name='sales-order-item-list-view'),
     path('sales-order-items/<int:pk>/', SalesOrderItemDetailAPIView.as_view(), name='sales-order-item-detail'),
     path('sales-order-items/<int:pk>/update/', SalesOrderItemUpdateAPIView.as_view(), name='sales-order-item-update'),
+    path('chalans/', ChalanListCreateAPIView.as_view(), name='chalan-list'),
+    path('chalans/list/', ChalanListAPIView.as_view(), name='chalan-list-view'),
+    path('chalans/options/', ChalanOptionsAPIView.as_view(), name='chalan-options'),
+    path('chalans/edit-options/', ChalanOptionsAPIView.as_view(required_permissions=CHALAN_EDIT), name='chalan-edit-options'),
+    path('chalans/<int:pk>/', ChalanDetailAPIView.as_view(), name='chalan-detail'),
+    path('chalans/<int:pk>/update/', ChalanUpdateAPIView.as_view(), name='chalan-update'),
+    path('chalans/<int:pk>/packing-slip/', PackingSlipGenerateAPIView.as_view(), name='packing-slip-generate'),
+    path('packing-slips/', PackingSlipListAPIView.as_view(), name='packing-slip-list'),
+    path('couriers/', CourierListCreateAPIView.as_view(), name='courier-list'),
+    path('couriers/<int:pk>/', CourierDetailAPIView.as_view(), name='courier-detail'),
+    path('chalans/<int:pk>/delivery/', DeliveryAssignmentAPIView.as_view(), name='delivery-assign'),
+    path('deliveries/', DeliveryListAPIView.as_view(), name='delivery-list'),
+    path('deliveries/<int:pk>/', DeliveryDetailAPIView.as_view(), name='delivery-detail'),
+    path('deliveries/<int:pk>/status/', DeliveryTransitionAPIView.as_view(), name='delivery-status'),
     path('sales-returns/', SalesReturnListCreateAPIView.as_view(), name='sales-return-list'),
     path('sales-returns/list/', SalesReturnListAPIView.as_view(), name='sales-return-list-view'),
     path('sales-returns/options/', SalesReturnOptionsAPIView.as_view(), name='sales-return-options'),

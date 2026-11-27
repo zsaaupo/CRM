@@ -13,11 +13,13 @@ from rest_framework.exceptions import PermissionDenied
 
 from account.permissions import ACCESS_RULES
 from accounting.services import (
-    INCOME_PAYMENT_VIEW, PAYMENT_VIEW, PURCHASE_PAYMENT_VIEW, SALES_PAYMENT_VIEW, STATEMENT_VIEW, TRANSFER_VIEW,
+    CHALAN_PAYMENT_VIEW, INCOME_PAYMENT_VIEW, PAYMENT_VIEW, PURCHASE_PAYMENT_VIEW, SALES_PAYMENT_VIEW,
+    STATEMENT_VIEW, TRANSFER_VIEW,
 )
 from hrm.models import Employee
 from hrm.permissions import PAYROLL_DETAIL, PAYROLL_PAYMENT_VIEW, REVIEW_LEAVE_PERMISSION
 from inventory.models import RAW_MATERIAL_TYPE
+from sale.permissions import DELIVERY_VIEW, PACKING_SLIP_VIEW
 from warehouse.models import WareHouse
 from warehouse.scope import all_warehouse_access, warehouse_scope
 from .models import AuditLog
@@ -36,7 +38,7 @@ class Visibility:
 POLICIES = dict.fromkeys('''
     auth.user auth.group common.productstatus common.tradestatus
     inventory.product inventory.productcategory inventory.brand inventory.unitofmeasure inventory.producttype inventory.currency
-    people.party people.lead accounting.expensecategory accounting.incomecategory
+    people.party people.lead accounting.expensecategory accounting.incomecategory sale.courier
     hrm.department hrm.designation hrm.employmenttype hrm.employeestatus hrm.employee
     hrm.workschedule hrm.employeescheduleassignment hrm.holiday hrm.employeeattendancestatus hrm.attendance
     hrm.leavetype hrm.leaverequest hrm.salarycomponent hrm.salarystructure hrm.salarystructureline
@@ -45,7 +47,7 @@ POLICIES = dict.fromkeys('''
 '''.split(), Visibility())
 POLICIES.update(dict.fromkeys('''
     warehouse.stock warehouse.stockadjustment warehouse.stockcount purchase.purchaseorder sale.salesorder sale.salesquotation
-    raw_material.rawmaterial
+    raw_material.rawmaterial sale.chalan
     accounting.expense accounting.income accounting.financialaccount
 '''.split(), Visibility(('warehouse_id',))))
 POLICIES.update({
@@ -67,6 +69,9 @@ POLICIES.update({
     'purchase.purchasereturnitem': Visibility(('purchase_return.purchase_order.warehouse_id',),
                                                ('purchase.view_purchasereturn', 'purchase.view_purchasereturnitem')),
     'sale.salesorderitem': Visibility(('sales_order.warehouse_id',)),
+    'sale.chalanitem': Visibility(('chalan.warehouse_id',), ('sale.view_chalan', 'sale.view_chalanitem')),
+    'sale.packingslip': Visibility(('chalan.warehouse_id',), PACKING_SLIP_VIEW),
+    'sale.delivery': Visibility(('chalan.warehouse_id',), DELIVERY_VIEW),
     'sale.salesreturn': Visibility(('sales_order.warehouse_id',)),
     'sale.salesreturnitem': Visibility(('sales_return.sales_order.warehouse_id',),
                                        ('sale.view_salesreturn', 'sale.view_salesreturnitem')),
@@ -76,6 +81,7 @@ POLICIES.update({
     'accounting.expensepayment': Visibility(('account.warehouse_id', 'expense.warehouse_id'), PAYMENT_VIEW, True),
     'accounting.incomepayment': Visibility(('account.warehouse_id', 'income.warehouse_id'), INCOME_PAYMENT_VIEW, True),
     'accounting.salespayment': Visibility(('account.warehouse_id', 'sales_order.warehouse_id'), SALES_PAYMENT_VIEW, True),
+    'accounting.chalanpayment': Visibility(('account.warehouse_id', 'chalan.warehouse_id'), CHALAN_PAYMENT_VIEW, True),
     'accounting.purchasepayment': Visibility(('account.warehouse_id', 'purchase_order.warehouse_id'), PURCHASE_PAYMENT_VIEW, True),
 })
 
@@ -178,7 +184,7 @@ class AuditLogSerializer(serializers.ModelSerializer):
 
 active_request = ContextVar('audit_log_request', default=None)
 REFERENCE_FIELDS = ('order_number', 'return_number', 'quotation_number', 'adjustment_number',
-                    'transfer_number', 'sku', 'employee_code', 'code', 'number', 'reference_no')
+                    'transfer_number', 'slip_number', 'chalan_number', 'sku', 'employee_code', 'code', 'number', 'reference_no')
 
 
 def audit_request(get_response):
@@ -226,6 +232,8 @@ def audit_entry(instance, action, actor, resource=None):
         all_warehouses = instance.all_warehouses
     elif resource == 'hrm.payrollevent':
         reference = f'Payroll run #{instance.run_id}'
+    elif resource == 'sale.courier':
+        reference = instance.name
 
     recorded_actor = actor_name(actor)
     if not recorded_actor and action in {'created', 'posted'}:
@@ -282,11 +290,12 @@ def saved(sender, instance, created, raw, using, update_fields, **kwargs):
     if resource == 'hrm.payrollevent':
         actor, action = instance.actor, instance.action
     elif created and resource in {'accounting.accounttransfer', 'accounting.accounttransaction', 'accounting.expensepayment',
-                                  'accounting.incomepayment', 'accounting.salespayment', 'accounting.purchasepayment'}:
+                                  'accounting.incomepayment', 'accounting.salespayment', 'accounting.purchasepayment',
+                                  'accounting.chalanpayment'}:
         action = 'posted'
     elif 'is_completed' in fields and instance.is_completed:
         action = 'completed'
-    elif 'status' in fields and resource in {'sale.salesquotation', 'hrm.leaverequest'}:
+    elif 'status' in fields and resource in {'sale.salesquotation', 'sale.delivery', 'hrm.leaverequest'}:
         action = instance.status
     record_activity(instance, action, actor=actor, using=using)
 

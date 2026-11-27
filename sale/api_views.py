@@ -15,7 +15,7 @@ from accounting.services import available_payment_accounts, payment_account_opti
 from common.models import TradeStatus
 from common.serializers import AUDIT_FIELDS, CatalogSerializer
 from common.view import BaseAPIMixin, BaseDetailAPIView, BaseListAPIView, BaseListCreateAPIView, BaseUpdateAPIView, RecordInUse
-from inventory.models import Currency, Product
+from inventory.models import Currency
 from people.models import Party
 from warehouse.models import WareHouse
 from warehouse.scope import (
@@ -24,6 +24,7 @@ from warehouse.scope import (
 )
 from account.permissions import has_role_permissions
 
+from .catalog_options import sales_currency_options, sales_product_options
 from .imports import SalesOrderCSVImportSerializer, sale_csv_template
 from .models import SalesOrder, SalesOrderItem, SalesQuotation, SalesQuotationItem, quotation_valid_until
 from .services import (
@@ -184,25 +185,14 @@ class SalesOptionsAPIView(SalesConcurrencyMixin, WarehouseScopeAPIMixin, BaseAPI
                 {'value': row.pk, 'label': row.name}
                 for row in scoped_queryset(WareHouse.objects.filter(is_active=True), warehouse_scope(request.user), 'pk').order_by('name', 'pk')
             ],
-            'currency': [
-                {'value': row.code, 'label': f'{row.name} ({row.code})',
-                 'exchange_rate': str(row.exchange_rate) if row.exchange_rate is not None else None}
-                for row in Currency.objects.order_by('name', 'pk')
-            ],
+            'currency': sales_currency_options(),
             'status': [
                 {'value': row.code, 'label': row.name}
                 for row in TradeStatus.objects.order_by('name', 'pk')
             ],
         }
         if self.include_products:
-            options['product'] = [
-                {'value': row.pk, 'label': f'{row.sku} — {row.name}', 'unit': row.unit_id,
-                 'unit_label': f'{row.unit.name} ({row.unit.code})', 'currency': row.currency_id,
-                 'sale_price': str(row.sale_price),
-                 'minimum_sale_price': str(row.minimum_sale_price) if row.minimum_sale_price is not None else None,
-                 'tax_rate': str(row.product_tax)}
-                for row in Product.objects.regular_products().select_related('unit').order_by('name', 'pk')
-            ]
+            options['product'] = sales_product_options()
         if self.include_payment_accounts:
             options['payment_account'] = payment_account_options(available_payment_accounts(request.warehouse_scope))
         return Response(options)

@@ -10,6 +10,7 @@ PAGES = {
     ('purchase_pages', 'purchase-detail'): ('purchase', 'detail'),
     ('sale_pages', 'sale-list'): ('sale', 'list'),
     ('sale_pages', 'sale-detail'): ('sale', 'detail'),
+    ('sale_pages', 'packing-slip-list'): ('packing-slip', 'list'),
     ('warehouse_pages', 'transfer-list'): ('transfer', 'list'),
     ('warehouse_pages', 'transfer-detail'): ('transfer', 'detail'),
 }

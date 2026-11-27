@@ -1,18 +1,27 @@
+from decimal import Decimal, localcontext
+
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 from rest_framework import serializers
-from rest_framework.exceptions import NotFound
+from rest_framework.exceptions import NotFound, PermissionDenied
 
+from account.permissions import has_role_permissions
+from accounting.models import base_currency
 from accounting.serializers import PaymentAccountField
 from common.models import TradeStatus
 from audit_log.service import record_activity
 from common.serializers import AUDIT_FIELDS, CatalogSerializer
 from inventory.models import Currency
 from people.models import Party
-from warehouse.scope import WarehouseScopedSerializerMixin
-from .models import SalesOrder, SalesOrderItem
-from .services import lock_order, require_item_permission
+from warehouse.models import WareHouse
+from warehouse.scope import WarehouseScopedSerializerMixin, warehouse_scope
+
+from .models import (Chalan, ChalanItem, Courier, Delivery, DeliveryStatus, DeliveryStatusUpdate,
+                     PackingSlip, SalesOrder, SalesOrderItem)
+from .permissions import CHALAN_ITEM_VIEW, PACKING_SLIP_VIEW
+from .services import lock_chalan, lock_order, require_editable_chalan, require_item_permission
 
 
 class SalesOrderSerializer(WarehouseScopedSerializerMixin, CatalogSerializer):
@@ -234,3 +243,254 @@ def replace_sales_lines(document, items, actor, require_permission):
         elif item['id'] in changed:
             document.items.filter(pk=item['id']).update(**values, modified_by=actor, updated_at=now)
             record_activity(existing[item['id']], 'updated', actor=actor)
+
+
+class ChalanSerializer(WarehouseScopedSerializerMixin, CatalogSerializer):
+    customer = serializers.PrimaryKeyRelatedField(queryset=Party.objects.filter(is_customer=True))
+    customer_name = serializers.CharField(source='customer.name', read_only=True)
+    customer_code = serializers.CharField(source='customer.code', read_only=True)
+    warehouse = serializers.PrimaryKeyRelatedField(queryset=WareHouse.objects.all(), required=False)
+    warehouse_name = serializers.CharField(source='warehouse.name', read_only=True)
+    currency = serializers.SlugRelatedField(slug_field='code', queryset=Currency.objects.all(), required=False)
+    is_delivered = serializers.BooleanField(read_only=True)
+    stock_in_transit = serializers.BooleanField(read_only=True)
+    is_delete_locked = serializers.BooleanField(read_only=True)
+    subtotal = serializers.DecimalField(max_digits=40, decimal_places=4, read_only=True)
+    tax_total = serializers.DecimalField(max_digits=40, decimal_places=4, read_only=True)
+    grand_total = serializers.DecimalField(max_digits=40, decimal_places=4, read_only=True)
+
+    class Meta:
+        model = Chalan
+        fields = [
+            'id', 'chalan_number', 'customer', 'customer_name', 'customer_code', 'warehouse', 'warehouse_name',
+            'chalan_date', 'expected_delivery_date', 'customer_reference', 'recipient_name', 'recipient_phone',
+            'shipping_address', 'notes', 'currency', 'exchange_rate', 'shipping_cost',
+            'subtotal', 'tax_total', 'grand_total', 'is_delivered', 'stock_in_transit', 'is_delete_locked', *AUDIT_FIELDS[1:],
+        ]
+        read_only_fields = [*AUDIT_FIELDS, 'chalan_number']
+
+    def get_fields(self):
+        fields = super().get_fields()
+        if isinstance(self.instance, Chalan):
+            fields['customer'].queryset = Party.all_objects.filter(
+                Q(is_customer=True, is_deleted=False) | Q(pk=self.instance.customer_id),
+            )
+        return fields
+
+    def validate(self, attrs):
+        currency = attrs.get('currency')
+        if currency and (self.instance is None or currency.code != self.instance.currency_id):
+            if 'exchange_rate' not in attrs:
+                if currency.code != base_currency():
+                    raise serializers.ValidationError({'exchange_rate': 'Enter an exchange rate for this currency.'})
+                attrs['exchange_rate'] = Decimal('1')
+        return super().validate(attrs)
+
+
+CHALAN_PRICE_FIELDS = ('unit_price', 'discount_amount', 'tax_rate')
+
+
+class ChalanItemSerializer(serializers.ModelSerializer):
+    id = serializers.IntegerField(required=False, min_value=1, max_value=2**63 - 1)
+    product_name = serializers.CharField(source='product.name', read_only=True)
+    product_sku = serializers.CharField(source='product.sku', read_only=True)
+    unit_code = serializers.CharField(source='unit.code', read_only=True)
+    net_amount = serializers.DecimalField(max_digits=40, decimal_places=4, read_only=True)
+    tax_amount = serializers.DecimalField(max_digits=40, decimal_places=4, read_only=True)
+    line_total = serializers.DecimalField(max_digits=40, decimal_places=4, read_only=True)
+
+    class Meta:
+        model = ChalanItem
+        fields = ['id', 'line_number', 'product', 'unit', 'quantity', 'description', *CHALAN_PRICE_FIELDS,
+                  'net_amount', 'tax_amount', 'line_total',
+                  'product_name', 'product_sku', 'unit_code', *AUDIT_FIELDS[1:]]
+        read_only_fields = AUDIT_FIELDS[1:]
+
+    def validate(self, attrs):
+        attrs.setdefault('description', '')
+        candidate = ChalanItem(**{name: value for name, value in attrs.items() if name != 'id'})
+        excluded = ['chalan', *AUDIT_FIELDS]
+        if 'id' in attrs:
+            excluded.extend(field for field in CHALAN_PRICE_FIELDS if field not in attrs)
+        try:
+            candidate.full_clean(exclude=excluded)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(exc.message_dict) from exc
+        return attrs
+
+
+class ChalanDetailSerializer(ChalanSerializer):
+    items = ChalanItemSerializer(many=True, read_only=True)
+
+    class Meta(ChalanSerializer.Meta):
+        fields = [*ChalanSerializer.Meta.fields, 'items']
+
+    def get_fields(self):
+        fields = super().get_fields()
+        if not has_role_permissions(self.context['request'].user, CHALAN_ITEM_VIEW):
+            fields.pop('items')
+        return fields
+
+
+class ChalanWriteSerializer(ChalanSerializer):
+    items = ChalanItemSerializer(many=True, allow_empty=False, write_only=True)
+
+    class Meta(ChalanSerializer.Meta):
+        fields = [*ChalanSerializer.Meta.fields, 'items']
+
+    def validate_items(self, items):
+        if self.instance is None and any('id' in item for item in items):
+            raise serializers.ValidationError('New Chalan items must not include existing IDs.')
+        numbers = {item['line_number'] for item in items}
+        if len(numbers) != len(items):
+            raise serializers.ValidationError('Line numbers must be unique within this Chalan.')
+        return items
+
+    def validate(self, attrs):
+        if self.instance is not None:
+            require_editable_chalan(self.instance)
+        items = attrs.pop('items', None)
+        attrs = super().validate(attrs)
+        if items is not None:
+            attrs['items'] = items
+        return attrs
+
+    def save_items(self, chalan, items, actor):
+        user = self.context['request'].user
+
+        def require_permission(action):
+            if not has_role_permissions(user, (f'sale.{action}_chalanitem',)):
+                raise PermissionDenied(f'You do not have permission to {action} Chalan items.')
+
+        previous = {
+            pk: amounts for pk, *amounts in chalan.items.values_list('pk', *CHALAN_PRICE_FIELDS)
+        }
+        expected = {}
+        errors = []
+        for item in items:
+            stored = previous.get(item.get('id'), (Decimal('0'),) * len(CHALAN_PRICE_FIELDS))
+            price, discount, rate = (item.get(field, value) for field, value in zip(CHALAN_PRICE_FIELDS, stored))
+            quantity = item['quantity']
+            expected[item['line_number']] = (quantity, price, discount, rate)
+            with localcontext() as context:
+                context.prec = 50
+                errors.append({'discount_amount': ['Discount cannot exceed quantity times unit price.']}
+                              if discount > quantity * price else {})
+        if any(errors):
+            raise serializers.ValidationError({'items': errors})
+
+        replace_sales_lines(chalan, items, actor, require_permission)
+        actual = {
+            number: (quantity, price, discount, rate)
+            for number, quantity, price, discount, rate in chalan.items.values_list(
+                'line_number', 'quantity', *CHALAN_PRICE_FIELDS,
+            )
+        }
+        if actual != expected:
+            raise serializers.ValidationError({'items': 'The database could not store the quantities or amounts exactly.'})
+
+    @transaction.atomic
+    def create(self, validated_data):
+        items = validated_data.pop('items')
+        chalan = super().create(validated_data)
+        self.save_items(chalan, items, chalan.create_by)
+        return chalan
+
+    @transaction.atomic
+    def update(self, instance, validated_data):
+        self.instance = current = lock_chalan(warehouse_scope(self.context['request'].user), pk=instance.pk)
+        values = self.validate(validated_data)
+        items = values.pop('items', None)
+        if current.stock_in_transit:
+            self.validate_dispatched_stock(current, values, items)
+        chalan = super().update(current, values)
+        if items is not None:
+            self.save_items(chalan, items, chalan.modified_by)
+        return chalan
+
+    @staticmethod
+    def validate_dispatched_stock(chalan, values, items):
+        if 'warehouse' in values and values['warehouse'].pk != chalan.warehouse_id:
+            raise serializers.ValidationError({'warehouse': 'The warehouse is locked while stock is with the courier.'})
+        if items is not None:
+            dispatched = {pk: (product, unit, quantity) for pk, product, unit, quantity in chalan.items.values_list(
+                'pk', 'product_id', 'unit_id', 'quantity',
+            )}
+            submitted = {item.get('id'): (item['product'].pk, item['unit'].pk, item['quantity']) for item in items}
+            if dispatched != submitted:
+                raise serializers.ValidationError({'items': 'Products and quantities are locked while stock is with the courier.'})
+
+
+class PackingSlipSerializer(serializers.ModelSerializer):
+    chalan_number = serializers.CharField(source='chalan.chalan_number', read_only=True)
+    customer_name = serializers.CharField(source='chalan.customer.name', read_only=True)
+    warehouse_name = serializers.CharField(source='chalan.warehouse.name', read_only=True)
+
+    class Meta:
+        model = PackingSlip
+        fields = ('id', 'slip_number', 'chalan', 'chalan_number', 'customer_name', 'warehouse_name', 'created_at')
+        read_only_fields = fields
+
+
+class CourierSerializer(CatalogSerializer):
+    class Meta:
+        model = Courier
+        fields = ['id', 'name', 'contact_person', 'phone', 'email', 'is_active', *AUDIT_FIELDS[1:]]
+        read_only_fields = AUDIT_FIELDS
+
+
+class DeliverySerializer(serializers.ModelSerializer):
+    chalan_number = serializers.CharField(source='chalan.chalan_number', read_only=True)
+    customer_name = serializers.CharField(source='chalan.customer.name', read_only=True)
+    warehouse_name = serializers.CharField(source='chalan.warehouse.name', read_only=True)
+    courier_name = serializers.CharField(source='courier.name', read_only=True)
+    status_label = serializers.CharField(source='get_status_display', read_only=True)
+
+    class Meta:
+        model = Delivery
+        fields = ['id', 'chalan', 'chalan_number', 'customer_name', 'warehouse_name', 'courier', 'courier_name',
+                  'tracking_number', 'status', 'status_label', 'stock_deducted_at', *AUDIT_FIELDS[1:]]
+        read_only_fields = fields
+
+
+class DeliveryStatusUpdateSerializer(serializers.ModelSerializer):
+    status_label = serializers.CharField(source='get_status_display', read_only=True)
+
+    class Meta:
+        model = DeliveryStatusUpdate
+        fields = ('id', 'status', 'status_label', 'note', 'created_at', 'create_by')
+        read_only_fields = fields
+
+
+class DeliveryDetailSerializer(DeliverySerializer):
+    status_updates = DeliveryStatusUpdateSerializer(many=True, read_only=True)
+    packing_slip = serializers.IntegerField(source='chalan.packing_slip.pk', read_only=True, default=None)
+    packing_slip_number = serializers.CharField(source='chalan.packing_slip.slip_number', read_only=True, default=None)
+    payment_account_name = serializers.CharField(source='chalan.delivery_payment.account.name', read_only=True, default=None)
+    payment_amount = serializers.DecimalField(source='chalan.delivery_payment.amount', max_digits=15, decimal_places=4,
+                                              read_only=True, default=None)
+    payment_currency = serializers.CharField(source='chalan.delivery_payment.account.currency', read_only=True, default=None)
+
+    class Meta(DeliverySerializer.Meta):
+        fields = [*DeliverySerializer.Meta.fields, 'status_updates', 'packing_slip', 'packing_slip_number',
+                  'payment_account_name', 'payment_amount', 'payment_currency']
+        read_only_fields = fields
+
+    def get_fields(self):
+        fields = super().get_fields()
+        if not has_role_permissions(self.context['request'].user, PACKING_SLIP_VIEW):
+            fields.pop('packing_slip')
+            fields.pop('packing_slip_number')
+        return fields
+
+
+class DeliveryAssignmentSerializer(serializers.Serializer):
+    courier = serializers.PrimaryKeyRelatedField(queryset=Courier.objects.all())
+    tracking_number = serializers.CharField(max_length=100, required=False, allow_blank=True, default='')
+
+
+class DeliveryTransitionSerializer(serializers.Serializer):
+    status = serializers.ChoiceField(choices=DeliveryStatus.choices)
+    expected_status = serializers.ChoiceField(choices=DeliveryStatus.choices, required=False)
+    payment_account = serializers.IntegerField(min_value=1, max_value=2**63 - 1, required=False)
+    note = serializers.CharField(max_length=500, required=False, allow_blank=True, default='')

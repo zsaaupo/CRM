@@ -1,0 +1,103 @@
+{% extends 'layouts/dashboard.html' %}
+{% load static %}
+{% block title %}Delivery details | eManager{% endblock %}
+{% block content %}
+<div class="workspace-content">
+    <div class="page-heading">
+        <div><p class="page-eyebrow">Sales</p><h1 class="page-title">Delivery details<span class="text-emerald-600">.</span></h1></div>
+        <div class="flex flex-wrap gap-3">
+            <a href="{{ list_url }}" class="secondary-button">Back to deliveries</a>
+            <a href="{% url 'sale_pages:chalan-detail' delivery.chalan_id %}" class="secondary-button">View Chalan</a>
+            {% include 'report/includes/download_button.html' with report_links=packing_slip_report only %}
+        </div>
+    </div>
+    <section class="user-form-card mb-6" aria-labelledby="delivery-details">
+        <h2 class="section-title mb-5" id="delivery-details">Courier and destination</h2>
+        <dl class="profile-grid">
+            <div><dt>Delivery status</dt><dd>{{ delivery.get_status_display }}</dd></div>
+            <div><dt>Chalan</dt><dd class="break-all">{{ delivery.chalan.chalan_number }}</dd></div>
+            <div><dt>Courier</dt><dd>{{ delivery.courier.name }}</dd></div>
+            <div><dt>Tracking number</dt><dd class="break-all">{{ delivery.tracking_number|default:'Pending' }}</dd></div>
+            <div><dt>Customer</dt><dd>{{ delivery.chalan.customer.name }}</dd></div>
+            <div><dt>Warehouse</dt><dd>{{ delivery.chalan.warehouse.name }}</dd></div>
+            {% if delivery.chalan.recipient_name %}<div><dt>Recipient</dt><dd>{{ delivery.chalan.recipient_name }}</dd></div>{% endif %}
+            {% if delivery.chalan.recipient_phone %}<div><dt>Recipient phone</dt><dd>{{ delivery.chalan.recipient_phone }}</dd></div>{% endif %}
+            {% if packing_slip_number %}<div><dt>Packing slip</dt><dd class="break-all">{{ packing_slip_number }}</dd></div>{% endif %}
+            {% if delivery.stock_deducted_at %}<div><dt>Stock deducted at</dt><dd>{{ delivery.stock_deducted_at|date:'j M Y, H:i' }}</dd></div>{% endif %}
+            {% if payment %}<div><dt>Payment received</dt><dd>{{ payment.account.currency }} {{ payment.amount|floatformat:'4u' }}</dd></div>
+            <div><dt>Receiving account</dt><dd>{{ payment.account.name }}</dd></div>{% endif %}
+            <div class="user-form-full"><dt>Shipping address</dt><dd class="whitespace-pre-wrap">{{ delivery.chalan.shipping_address }}</dd></div>
+        </dl>
+    </section>
+    {% if update_url or status_url %}
+    <div class="grid gap-6 mb-6{% if update_url and status_url %} lg:grid-cols-2{% endif %}">
+        {% if update_url %}
+        <section class="user-form-card" aria-labelledby="edit-delivery">
+            <h2 class="section-title mb-5" id="edit-delivery">Edit delivery</h2>
+            <form method="post" action="{{ update_url }}" data-delivery-form data-method="PATCH">
+                {% csrf_token %}
+                <p class="form-status mb-5" data-delivery-feedback role="status" tabindex="-1" hidden></p>
+                <div class="user-form-grid">
+                    {% if couriers %}{% include 'sale/includes/delivery_courier_field.html' with couriers=couriers selected_courier_id=delivery.courier_id only %}{% endif %}
+                    {% include 'inventory/includes/field.html' with name='tracking_number' label='Tracking number' maxlength='100' value=delivery.tracking_number only %}
+                </div>
+                <div class="user-form-actions"><button type="submit" class="secondary-button">Save delivery</button></div>
+            </form>
+        </section>
+        {% endif %}
+        {% if status_url %}
+        <section class="user-form-card" aria-labelledby="update-status">
+            <h2 class="section-title mb-5" id="update-status">Update status</h2>
+            {% if needs_packing_slip %}<p class="section-description">Generate a packing slip from the Chalan before handing it over.</p>{% endif %}
+            {% if needs_active_courier %}<p class="section-description">Choose an active courier before handing over the Chalan.</p>{% endif %}
+            <form method="post" action="{{ status_url }}" data-delivery-form>
+                {% csrf_token %}
+                <input type="hidden" name="expected_status" value="{{ delivery.status }}">
+                <p class="form-status mb-5" data-delivery-feedback role="status" tabindex="-1" hidden></p>
+                <div class="user-form-grid">
+                    <div>
+                        <label class="form-label" for="id_delivery_status">New status</label>
+                        <select class="form-input" name="status" id="id_delivery_status" aria-describedby="id_delivery_status_error" required>
+                            <option value="">Select a status</option>
+                            {% for option in status_options %}<option value="{{ option.value }}">{{ option.label }}</option>{% endfor %}
+                        </select>
+                        <p class="form-error" id="id_delivery_status_error" data-error-for="status" hidden></p>
+                    </div>
+                    {% if delivery_payment_due %}
+                    <div data-delivery-payment-field hidden>
+                        <label class="form-label" for="id_delivery_payment_account">Receive payment into</label>
+                        <select class="form-input" name="payment_account" id="id_delivery_payment_account"
+                                aria-describedby="delivery-payment-amount delivery-payment-error" disabled>
+                            <option value="">Select an account</option>
+                            {% for account in receiving_accounts %}<option value="{{ account.pk }}">{{ account.name }}</option>{% endfor %}
+                        </select>
+                        <p id="delivery-payment-amount" class="mt-2 text-xs text-stone-500">
+                            {{ payment_currency }} {{ delivery_payment_due|floatformat:'4u' }}
+                            {% if not receiving_accounts %} · An active account in the base currency is needed to record payment.{% endif %}
+                        </p>
+                        <p class="form-error" id="delivery-payment-error" data-error-for="payment_account" hidden></p>
+                    </div>
+                    {% endif %}
+                    {% include 'inventory/includes/field.html' with name='note' label='Note' field_type='textarea' maxlength='500' only %}
+                </div>
+                <div class="user-form-actions"><button type="submit" class="primary-button compact-primary">Record status</button></div>
+            </form>
+        </section>
+        {% endif %}
+    </div>
+    {% endif %}
+    <section class="users-panel" aria-labelledby="delivery-history">
+        <div class="users-toolbar"><h2 class="section-title" id="delivery-history">Status history</h2></div>
+        <div class="users-table-scroll"><table class="users-table">
+            <caption class="sr-only">Delivery status history</caption>
+            <thead><tr><th scope="col">Status</th><th scope="col">Recorded at</th><th scope="col">Recorded by</th><th scope="col">Note</th></tr></thead>
+            <tbody>
+                {% for update in status_updates %}
+                <tr><td>{{ update.get_status_display }}</td><td>{{ update.created_at|date:'j M Y, H:i' }}</td><td>{{ update.create_by }}</td><td class="whitespace-pre-wrap">{{ update.note|default:'—' }}</td></tr>
+                {% empty %}<tr><td colspan="4">No status updates yet.</td></tr>{% endfor %}
+            </tbody>
+        </table></div>
+    </section>
+</div>
+{% endblock %}
+{% block workspace_js %}<script type="module" src="{% static 'sale/js/delivery.js' %}"></script>{% endblock %}

@@ -1,5 +1,86 @@
 # Sales APIs and pages
 
+## Chalans
+
+Open **Sales → Chalan** at `/sale/chalans/` to create, view, or edit a standalone
+delivery record. Creating or editing a Chalan saves its details and product quantities.
+
+| Route under `/sale/api/chalans/` | Required role permissions |
+| --- | --- |
+| `GET /`, `GET list/`, `GET <id>/` | `sale.view_chalan`. Detail includes `items` with `sale.view_chalanitem`. |
+| `POST /` | `sale.add_chalan`, `sale.add_chalanitem` |
+| `PUT` or `PATCH` on `<id>/` or `<id>/update/` | `sale.change_chalan`, plus the item add, change, or delete permission for each action applied to the lines. |
+| `DELETE <id>/` | `sale.delete_chalan`, plus `sale.delete_chalanitem` if the Chalan has items. |
+| `GET options/` | `sale.add_chalan`, `sale.add_chalanitem` |
+| `GET edit-options/` | Chalan view and change, and item view, add, change, and delete permissions. |
+
+Create with a `customer`, `shipping_address`, `warehouse`, and at least one `items` entry.
+A user assigned to one warehouse can omit `warehouse` on create. Each line contains
+`line_number`, `product`, `unit`, `quantity`, and an optional `description`. On edit,
+omit `items` to keep existing lines, or send the full replacement list with `id` for
+each existing line to retain. The list supports `q` and `page`. All endpoints enforce
+the user's warehouse access.
+
+Once the linked delivery reaches `delivered`, the Chalan is read-only. The API
+returns `is_delivered` and rejects edits and deletions with HTTP 409. Deleting an
+eligible Chalan removes its items, packing slip, and delivery history in one transaction.
+
+Chalans use the regular Sales calculation. Send `currency`, `exchange_rate` and
+`shipping_cost` on the header, and `unit_price`, `discount_amount`, and `tax_rate`
+on each priced item. A foreign currency requires a positive rate. Amounts are in
+the Chalan currency. The API calculates `subtotal`, `tax_total`, and `grand_total`
+and returns `net_amount`, `tax_amount`, and `line_total` on item detail. Existing
+quantity-only records start with zero prices, discounts, tax rates and shipping.
+
+## Packing slips
+
+Use **Generate packing slip** on a Chalan with items and open **Sales → Packing slip list**
+at `/sale/packing-slips/`. Reprints use the Chalan's current items, prices, totals,
+and shipping details.
+
+| Route | Required role permissions |
+| --- | --- |
+| `GET /sale/api/packing-slips/` | `sale.view_chalan`, `sale.view_packingslip` |
+| `POST /sale/api/chalans/<chalan_id>/packing-slip/` | the PDF permissions below, plus `sale.add_packingslip` |
+| `GET /report/api/packing-slips/<slip_id>/pdf/` | `sale.view_chalan`, `sale.view_chalanitem`, `sale.view_packingslip` |
+
+Generation returns HTTP 201 for a new slip and 200 with the existing slip on retry.
+The list supports `q` and `page`. Each endpoint applies the Chalan warehouse scope.
+
+## Couriers and deliveries
+
+Create a courier at **Sales → Couriers → Create courier**. From a Chalan, choose
+**Assign courier** and enter the tracking number when available. Open **Track delivery**
+on the Chalan or select the record under **Sales → Deliveries** to record status updates.
+The delivery links to the Chalan's packing slip. Generate the slip before recording handover.
+The status history records the time, user, and optional note for each update.
+
+| Route | Required role permissions |
+| --- | --- |
+| `GET /sale/api/couriers/` or `/sale/api/couriers/<id>/` | `sale.view_courier` |
+| `POST /sale/api/couriers/` | `sale.add_courier` |
+| `PATCH /sale/api/couriers/<id>/` | `sale.change_courier` |
+| `GET /sale/api/deliveries/` or `/sale/api/deliveries/<id>/` | `sale.view_chalan`, `sale.view_delivery` |
+| `POST /sale/api/chalans/<id>/delivery/` | Delivery view permissions plus `sale.add_delivery` |
+| `PATCH /sale/api/deliveries/<id>/` or `POST /sale/api/deliveries/<id>/status/` | Delivery view permissions plus `sale.change_delivery` |
+
+Assignment accepts `courier` and optional `tracking_number`. Each Chalan has one
+delivery, and repeating the same assignment returns the existing record. Change
+the courier before handover and update the tracking number as needed. Status
+updates accept `status`, optional `note`, and optional `expected_status` to detect
+changes made since the page was loaded. Valid updates include handover, transit,
+delivery, failed delivery, retry, and return. Couriers are shared across warehouses.
+Delivery records follow the Chalan warehouse scope. The delivery list accepts `q`, `page`, and `status`.
+
+Handover deducts the Chalan quantities from its warehouse. While that stock is
+with the courier, the warehouse, products, units, and quantities are locked.
+Returning a delivery restores the stock deducted by its recorded handover.
+When marking a delivery `delivered`, send `payment_account` for a positive payment.
+The Chalan total is converted at its saved rate and posted to the account in the
+base currency. A zero-value Chalan can be delivered without a ledger entry.
+Each posting and its status update commit together. Earlier status records remain
+historical, and returns only restore stock deducted by this workflow.
+
 ## Point of sale
 
 Open **Sales → Point of sale** at `/sale/pos/`. Cashiers need warehouse access and the
