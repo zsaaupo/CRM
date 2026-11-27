@@ -29,6 +29,8 @@ def with_settlement_history(orders):
     returns = (SalesReturnItem.objects.filter(sales_return__is_completed=True) if sale
                else PurchaseReturnItem.objects.filter(purchase_return__is_completed=True))
     payments = SalesPayment if sale else PurchasePayment
+    if not sale:
+        orders = orders.prefetch_related('receipts')
     return orders.prefetch_related(
         Prefetch('items__return_items', queryset=returns, to_attr='posted_returns'),
         Prefetch('payments', queryset=payments.objects.filter(transaction__isnull=False).select_related('transaction'),
@@ -41,7 +43,8 @@ def balance(order):
     is_sale = model is SalesPayment
     if not hasattr(order, 'applied_payments'):
         order = with_settlement_history(type(order).objects.filter(pk=order.pk)).get()
-    posted = order.is_completed if is_sale else order.is_received
+    posted = order.is_completed if is_sale else order.locked
+    staged = not is_sale and order.receipts_started
     paid = refunded = ZERO
     for payment in order.applied_payments:
         if payment.transaction.direction == paid_direction:
@@ -51,15 +54,30 @@ def balance(order):
     with localcontext() as context:
         context.prec = 50
         total = (order.grand_total * order.exchange_rate).quantize(MONEY_PRECISION, rounding=ROUND_HALF_UP) if posted else ZERO
-        returned_value = ZERO
+        billed_returns = returned_value = accrued = ZERO
+        if staged:
+            receipts = list(order.receipts.all())
+            total = sum((row.amount_base for row in receipts if row.invoiced_at), ZERO)
+            accrued = sum((row.amount_base for row in receipts if not row.invoiced_at), ZERO)
         for line in order.items.all():
             quantity = sum(row.quantity for row in line.posted_returns)
             if quantity:
                 returned_value += line.line_total * quantity / line.quantity
+                if staged:
+                    billed_returns += line.line_total * min(quantity, line.invoiced_quantity) / line.quantity
         returned = (returned_value * order.exchange_rate).quantize(MONEY_PRECISION, rounding=ROUND_HALF_UP)
+        if staged:
+            credit = min(total, (billed_returns * order.exchange_rate).quantize(MONEY_PRECISION, rounding=ROUND_HALF_UP))
+            accrued = max(ZERO, accrued - (returned - credit))
+            returned = credit
         due = total - returned - paid + refunded
     status = 'pending' if not posted else 'paid' if due <= ZERO else 'partial' if paid > refunded else 'due'
-    return dict(total=total, paid=paid, refunded=refunded, returned=returned, due=due, payment_status=status)
+    result = dict(total=total, paid=paid, refunded=refunded, returned=returned, due=due, payment_status=status)
+    if staged:
+        result['uninvoiced_accrual'] = accrued
+        if not total and accrued:
+            result['payment_status'] = 'awaiting_invoice'
+    return result
 
 
 @transaction.atomic
@@ -69,7 +87,7 @@ def settle_order(actor, order_model, pk, *, request_key, date, reference, tender
     permission = 'accounting.add_salespayment' if is_sale else 'accounting.add_purchasepayment'
     scope = lock_financial_scope(actor, *permissions, permission)
     order = get_object_or_404(lock_rows(scoped_queryset(order_model.objects.filter(pk=pk), scope)))
-    if not (order.is_completed if is_sale else order.is_received):
+    if not (order.is_completed if is_sale else order.locked):
         raise ValidationError('Post the order before recording payment.')
     model, order_field, _, direction = payment_sources(order)
     details = dict(order_type=order_field, order=pk, date=date.isoformat(), reference=reference,
@@ -93,7 +111,7 @@ def settle_order(actor, order_model, pk, *, request_key, date, reference, tender
 def refund_credit(record, order, scope, actor, *, date, amount):
     # Completion already claimed this return under the order lock. Its credit is included in due.
     remaining = amount
-    if order.settlement_mode == SettlementMode.DEFERRED:
+    if order.settlement_mode == SettlementMode.DEFERRED or getattr(order, 'receipts_started', False):
         remaining = min(amount, -balance(order)['due'])
     if remaining <= ZERO:
         return

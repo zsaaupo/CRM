@@ -105,8 +105,17 @@ class WarehouseTransferAPIMixin:
         return [*super().get_permissions(), HasWarehouseAccess()]
 
     def get_queryset(self):
-        return transfer_queryset(super().get_queryset(), self.request.warehouse_scope,
+        records = transfer_queryset(super().get_queryset(), self.request.warehouse_scope,
             write=self.request.method in ('PUT', 'PATCH', 'DELETE')).distinct()
+        stage = self.request.query_params.get('stage') if self.request.method == 'GET' and 'pk' not in self.kwargs else None
+        if not stage:
+            return records
+        filters = {'pending': {'is_completed': False, 'dispatched_at__isnull': True},
+                   'in_transit': {'is_completed': False, 'dispatched_at__isnull': False},
+                   'received': {'is_completed': True}}
+        if stage not in filters:
+            raise serializers.ValidationError({'stage': 'Choose pending, in_transit or received.'})
+        return records.filter(**filters[stage])
 
     def handle_exception(self, exc):
         if isinstance(exc, OperationalError) and ('locked' in str(exc).lower() or 'deadlock' in str(exc).lower()):
@@ -150,6 +159,18 @@ class TransferCompleteAPIView(WarehouseTransferAPIMixin, BaseAPIMixin, GenericAP
             'completed_now': completed_now,
             'warehouse_transfer': WarehouseTransferSerializer(record, context=self.get_serializer_context()).data,
         })
+
+
+@method_decorator(never_cache, name='dispatch')
+class TransferStageAPIView(WarehouseTransferAPIMixin, BaseAPIMixin, GenericAPIView):
+    action = None
+    required_permissions = ('warehouse.change_warehousetransfer',)
+    http_method_names = ['post', 'options']
+
+    def post(self, request, pk):
+        record, changed = complete_transfer(request.user, pk, action=self.action)
+        return Response({'changed': changed, 'warehouse_transfer': WarehouseTransferSerializer(
+            record, context=self.get_serializer_context()).data})
 
 
 @method_decorator(never_cache, name='dispatch')

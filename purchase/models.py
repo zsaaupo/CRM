@@ -33,6 +33,11 @@ class PurchaseOrder(TimeStampedModel):
     payment_account = models.ForeignKey('accounting.FinancialAccount', on_delete=models.PROTECT, null=True,
                                         blank=True, related_name='purchases_to_pay')
     is_received = models.BooleanField(default=False, editable=False)
+    receipts_started = models.BooleanField(default=False, editable=False)
+
+    @property
+    def locked(self):
+        return self.is_received or self.receipts_started
     currency = models.ForeignKey('inventory.Currency', to_field='code', on_delete=models.PROTECT,
                                  related_name='purchase_orders')
     exchange_rate = models.DecimalField(max_digits=20, decimal_places=8,
@@ -113,6 +118,8 @@ class PurchaseOrder(TimeStampedModel):
 
 
 class PurchaseOrderItem(TimeStampedModel):
+    received_quantity = models.DecimalField(max_digits=18, decimal_places=6, default=0, editable=False)
+    invoiced_quantity = models.DecimalField(max_digits=18, decimal_places=6, default=0, editable=False)
     purchase_order = models.ForeignKey(PurchaseOrder, on_delete=models.PROTECT, related_name='items')
     line_number = models.PositiveIntegerField(validators=[MinValueValidator(1)])
     product = models.ForeignKey('inventory.Product', on_delete=models.PROTECT, related_name='purchase_order_items')
@@ -170,6 +177,31 @@ class PurchaseOrderItem(TimeStampedModel):
 
     def __str__(self):
         return f'{self.purchase_order.order_number} / {self.line_number}'
+
+
+class PurchaseReceipt(TimeStampedModel):
+    order = models.ForeignKey(PurchaseOrder, on_delete=models.PROTECT, related_name='receipts')
+    request_key = models.UUIDField(unique=True)
+    final_delivery = models.BooleanField(default=False)
+    invoice_reference = models.CharField(max_length=100, blank=True)
+    invoiced_at = models.DateTimeField(null=True)
+    invoiced_by = models.CharField(max_length=255, blank=True)
+    amount_base = models.DecimalField(max_digits=30, decimal_places=4)
+
+    class Meta:
+        ordering = ['id']
+        default_permissions = ('view',)
+        permissions = [('match_purchaseinvoice', 'Can match supplier invoices to receipts')]
+
+
+class PurchaseReceiptLine(models.Model):
+    receipt = models.ForeignKey(PurchaseReceipt, on_delete=models.PROTECT, related_name='lines')
+    order_item = models.ForeignKey(PurchaseOrderItem, on_delete=models.PROTECT)
+    quantity = models.DecimalField(max_digits=18, decimal_places=6)
+
+    class Meta:
+        default_permissions = ('view',)
+        constraints = [models.UniqueConstraint(fields=['receipt', 'order_item'], name='purchase_receipt_one_line')]
 
 
 class PurchaseReturn(TimeStampedModel):

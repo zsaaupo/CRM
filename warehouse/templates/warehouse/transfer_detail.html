@@ -9,6 +9,11 @@
     </div>
     {% include 'includes/detail_status.html' %}
     <div data-record-content hidden>
+        {% if can_post %}<form class="mb-5" data-transfer-post hidden>{% csrf_token %}
+            <button type="button" class="primary-button" data-stage="pending" data-url="{% url 'warehouse:transfer-dispatch' view.kwargs.pk %}" hidden>Dispatch transfer</button>
+            <button type="button" class="primary-button" data-stage="in_transit" data-url="{% url 'warehouse:transfer-receive' view.kwargs.pk %}" hidden>Receive transfer</button>
+            <p class="form-error" role="alert" hidden></p>
+        </form>{% endif %}
         <section class="user-form-card mb-6" aria-labelledby="transfer-information-heading">
             <h2 id="transfer-information-heading" class="section-title mb-6">Transfer information</h2>
             <dl class="profile-grid">
@@ -16,7 +21,7 @@
                 {% include 'includes/detail_field.html' with name='transfer_date' label='Date' only %}
                 {% include 'includes/detail_field.html' with name='source_warehouse_name' label='Source warehouse' only %}
                 {% include 'includes/detail_field.html' with name='destination_warehouse_name' label='Destination warehouse' only %}
-                {% include 'includes/detail_field.html' with name='is_completed' label='Completed' kind='boolean' only %}
+                {% include 'includes/detail_field.html' with name='stage_label' label='Stage' only %}
                 {% include 'includes/detail_field.html' with name='notes' label='Notes' only %}
             </dl>
         </section>

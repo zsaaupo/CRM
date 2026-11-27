@@ -1,0 +1,23 @@
+{% extends "layouts/dashboard.html" %}
+{% block title %}Stock adjustments | eManager{% endblock %}
+{% block content %}
+<div class="workspace-content">
+    <h1 class="page-title">Stock adjustments</h1>
+    {% if errors %}<div role="alert" class="form-error">{{ errors }}</div>{% endif %}
+    {% if can_add %}<form method="post" class="user-form-card mb-6">{% csrf_token %}
+        <input type="hidden" name="request_key" value="{{ request_key }}">
+        <div class="user-form-grid">
+            <label>Warehouse<select class="form-input" name="warehouse" required>{% for wh in warehouses %}<option value="{{ wh.pk }}">{{ wh }}</option>{% endfor %}</select></label>
+            <label>Product<select class="form-input" name="product" required>{% for item in products %}<option value="{{ item.pk }}">{{ item.sku }} · {{ item.name }} ({{ item.unit.code }})</option>{% endfor %}</select></label>
+            <label>Action<select class="form-input" name="action"><option value="add">Add stock</option><option value="subtract">Subtract stock</option></select></label>
+            <label>Quantity<input class="form-input" type="number" min="0.000001" step="0.000001" name="quantity" required></label>
+            <label>Unit cost for added stock ({{ currency }}, optional)<input class="form-input" type="number" min="0" step="0.00000001" name="declared_unit_cost"></label>
+            <label>Document reference<input class="form-input" name="reference" maxlength="100"></label>
+            <label>Reason<input class="form-input" name="reason" maxlength="250" required></label>
+        </div><button class="primary-button mt-5">Post adjustment</button>
+    </form>{% endif %}
+    <table class="w-full"><thead><tr><th>Date</th><th>Warehouse</th><th>SKU</th><th>Quantity</th><th>Unit</th><th>Reference</th><th>Reason</th><th>Posted by</th></tr></thead>
+        <tbody>{% for row in records %}<tr><td>{{ row.created_at|date }}</td><td>{{ row.warehouse }}</td><td>{{ row.product.sku }}</td><td>{{ row.quantity }}</td><td>{{ row.unit.code }}</td><td>{{ row.reference }}</td><td>{{ row.reason }}</td><td>{{ row.create_by }}</td></tr>{% empty %}<tr><td colspan="8">No posted adjustments.</td></tr>{% endfor %}</tbody></table>
+    {% if records.has_previous %}<a href="?page={{ records.previous_page_number }}">Previous</a>{% endif %} {% if records.has_next %}<a href="?page={{ records.next_page_number }}">Next</a>{% endif %}
+</div>
+{% endblock %}

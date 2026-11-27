@@ -28,6 +28,7 @@ class Stock(TimeStampedModel):
     product = models.ForeignKey('inventory.Product', on_delete=models.PROTECT, related_name='stocks')
     quantity = models.DecimalField(max_digits=18, decimal_places=6, default=Decimal('0'),
                                    validators=[MinValueValidator(Decimal('0'))])
+    average_cost_base = models.DecimalField(max_digits=30, decimal_places=8, null=True, editable=False)
 
     class Meta:
         constraints = [
@@ -49,6 +50,7 @@ class StockMovement(models.Model):
         TRANSFER_OUT = 'transfer_out', 'Transfer out'
         TRANSFER_IN = 'transfer_in', 'Transfer in'
         COUNT = 'count', 'Physical count adjustment'
+        ADJUSTMENT = 'adjustment', 'Stock adjustment'
 
     warehouse = models.ForeignKey(WareHouse, on_delete=models.PROTECT)
     product = models.ForeignKey('inventory.Product', on_delete=models.PROTECT)
@@ -67,6 +69,22 @@ class StockMovement(models.Model):
         ordering = ['-pk']
         indexes = [models.Index(fields=['warehouse', 'product', 'business_date'])]
         constraints = [models.CheckConstraint(condition=~models.Q(quantity=0), name='warehouse_movement_nonzero')]
+
+
+class StockAdjustment(TimeStampedModel):
+    request_key = models.UUIDField(unique=True)
+    warehouse = models.ForeignKey(WareHouse, on_delete=models.PROTECT)
+    product = models.ForeignKey('inventory.Product', on_delete=models.PROTECT)
+    unit = models.ForeignKey('inventory.UnitOfMeasure', on_delete=models.PROTECT)
+    quantity = models.DecimalField(max_digits=18, decimal_places=6)
+    declared_unit_cost = models.DecimalField(max_digits=18, decimal_places=8, null=True)
+    reference = models.CharField(max_length=100, blank=True)
+    reason = models.CharField(max_length=250)
+
+    class Meta:
+        ordering = ['-pk']
+        default_permissions = ('add', 'view')
+        constraints = [models.CheckConstraint(condition=~models.Q(quantity=0), name='warehouse_adjustment_nonzero')]
 
 
 class StockCount(TimeStampedModel):
@@ -94,7 +112,23 @@ class StockCountLine(models.Model):
 
 
 class WarehouseTransfer(TimeStampedModel):
-    """A draft containing product lines; stock moves only on completion."""
+    """Move stock between warehouses by dispatch and receipt, together or separately."""
+    dispatched_at = models.DateTimeField(null=True, editable=False)
+    received_at = models.DateTimeField(null=True, editable=False)
+
+    @property
+    def stage(self):
+        if self.is_completed:
+            return 'received'
+        return 'in_transit' if self.dispatched_at else 'pending'
+
+    @property
+    def locked(self):
+        return self.is_completed or self.dispatched_at is not None
+
+    @property
+    def stage_label(self):
+        return self.stage.replace('_', ' ').capitalize()
 
     transfer_number = models.CharField(max_length=50, unique=True, default=generate_transfer_number, editable=False)
     source_warehouse = models.ForeignKey(WareHouse, on_delete=models.PROTECT, related_name='outgoing_transfers')

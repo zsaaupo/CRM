@@ -64,8 +64,8 @@ class StatementResource:
         return get_object_or_404(Party.objects.filter(**{f'is_{self.party_role}': True}), pk=self.kwargs['pk'])
 
     def orders(self, party, scope):
-        posted = 'is_completed' if self.party_role == 'customer' else 'is_received'
-        return scoped_queryset(self.order_model.objects.filter(**{self.party_role: party, posted: True}), scope)
+        posted = Q(is_completed=True) if self.party_role == 'customer' else Q(is_received=True) | Q(receipts_started=True)
+        return scoped_queryset(self.order_model.objects.filter(posted, **{self.party_role: party}), scope)
 
     def statement(self):
         party = self.party()

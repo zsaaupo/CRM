@@ -56,6 +56,7 @@
             {% if warehouse_access.stock %}<a href="{% url 'warehouse_pages:stock-list' %}" data-nav-item class="sidebar-sub-link {% if page_mode == 'stock-list' or page_mode == 'stock-detail' %}is-current{% endif %}" {% if page_mode == 'stock-list' or page_mode == 'stock-detail' %}aria-current="page"{% endif %}>Stock list</a>{% endif %}
             {% if warehouse_access.movements %}<a href="{% url 'warehouse_pages:movement-list' %}" data-nav-item class="sidebar-sub-link">Stock movements</a>{% endif %}
             {% if warehouse_access.counts %}<a href="{% url 'warehouse_pages:count-list' %}" data-nav-item class="sidebar-sub-link">Physical counts</a>{% endif %}
+            {% if warehouse_access.adjustments %}<a href="{% url 'warehouse_pages:adjustments' %}" data-nav-item class="sidebar-sub-link">Stock adjustments</a>{% endif %}
             {% if warehouse_access.transfers %}<a href="{% url 'warehouse_pages:transfer-list' %}" data-nav-item class="sidebar-sub-link {% if page_mode == 'transfer-list' or page_mode == 'transfer-edit' or page_mode == 'transfer-detail' %}is-current{% endif %}">Transfer list</a>{% endif %}
             {% if warehouse_access.add_transfer %}<a href="{% url 'warehouse_pages:add-transfer' %}" data-nav-item class="sidebar-sub-link {% if page_mode == 'transfer-add' %}is-current{% endif %}">Add transfer</a>{% endif %}
         </div>

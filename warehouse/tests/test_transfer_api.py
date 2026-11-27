@@ -10,7 +10,7 @@ from django.urls import reverse
 from rest_framework.test import APIClient
 
 from inventory.models import Product, UnitOfMeasure
-from warehouse.models import Stock, WareHouse, WarehouseTransfer, WarehouseTransferItem
+from warehouse.models import Stock, StockMovement, WareHouse, WarehouseTransfer, WarehouseTransferItem
 from .helpers import assign_warehouse_role
 
 
@@ -52,6 +52,44 @@ class WarehouseTransferAPITests(TestCase):
 
     def balances(self):
         return dict(Stock.objects.filter(product=self.product).values_list('warehouse_id', 'quantity'))
+
+    def stage(self, action):
+        return self.client.post(reverse(f'warehouse:transfer-{action}', args=[self.record.pk]), {}, format='json')
+
+    def test_dispatch_and_receipt_are_independent_and_replay_safe(self):
+        self.assertEqual(self.stage('receive').status_code, 400)
+        sent = self.stage('dispatch')
+        self.assertEqual(sent.status_code, 200, sent.data)
+        self.assertEqual(sent.data['warehouse_transfer']['stage'], 'in_transit')
+        self.assertTrue(sent.data['warehouse_transfer']['locked'])
+        self.assertFalse(self.stage('dispatch').data['changed'])
+        self.assertEqual(self.balances(), {self.source.pk: Decimal('7.5')})
+        self.assertEqual(StockMovement.objects.get().quantity, Decimal('-2.5'))
+        for url in (self.list_url, reverse('warehouse:transfer-list-view')):
+            self.assertEqual(self.client.get(url, {'stage': 'in_transit'}).data['count'], 1)
+            self.assertEqual(self.client.get(url, {'stage': 'pending'}).data['count'], 0)
+        self.assertEqual(self.client.patch(self.update_url, {'notes': 'changed'}, format='json').status_code, 409)
+        self.assertEqual(self.client.delete(self.detail_url).status_code, 409)
+        Stock.objects.filter(pk=self.source_stock.pk).update(quantity=0)
+        received = self.stage('receive')
+        self.assertEqual(received.data['warehouse_transfer']['stage'], 'received')
+        self.assertFalse(self.stage('receive').data['changed'])
+        self.assertFalse(self.complete().data['completed_now'])
+        self.assertEqual(self.balances(), {self.source.pk: Decimal('0'), self.destination.pk: Decimal('2.5')})
+        self.assertEqual(StockMovement.objects.count(), 2)
+
+    def test_failed_receipt_can_be_retried_through_direct_completion(self):
+        self.assertTrue(self.stage('dispatch').data['changed'])
+        destination = Stock.objects.create(warehouse=self.destination, product=self.product, quantity='999999999999')
+        self.assertEqual(self.stage('receive').status_code, 400)
+        self.record.refresh_from_db()
+        self.assertEqual(self.record.stage, 'in_transit')
+        self.assertIsNone(self.record.received_at)
+        self.assertEqual(StockMovement.objects.count(), 1)
+        Stock.objects.filter(pk=destination.pk).update(quantity=1)
+        self.assertTrue(self.complete().data['completed_now'])
+        self.assertEqual(self.balances(), {self.source.pk: Decimal('7.5'), self.destination.pk: Decimal('3.5')})
+        self.assertFalse(self.stage('dispatch').data['changed'])
 
     def test_draft_crud_uses_audit_and_never_changes_stock(self):
         response = self.client.post(self.list_url, self.payload(is_completed=True), format='json')
@@ -174,6 +212,8 @@ class WarehouseTransferAPITests(TestCase):
         self.assertEqual(self.client.delete(self.detail_url).status_code, 404)
         self.assertEqual(self.client.post(self.list_url, self.payload(), format='json').status_code, 403)
         self.assertEqual(self.complete().status_code, 404)
+        for action in ('dispatch', 'receive'):
+            self.assertEqual(self.stage(action).status_code, 404)
         access.warehouse = self.source; access.save(update_fields=['warehouse'])
         self.assertEqual(self.client.get(self.list_url).data['count'], 2)
         self.assertEqual(self.client.get(self.list_url, {'q': self.record.transfer_number}).data['count'], 1)
@@ -218,8 +258,10 @@ class WarehouseTransferAPITests(TestCase):
         listing = self.client.get(reverse('warehouse_pages:transfer-list'))
         self.assertContains(listing, 'data-complete-id-field="transfer_id"')
         self.assertContains(listing, 'data-complete-result-key="warehouse_transfer"')
-        self.assertContains(listing, 'data-edit-disabled-field="is_completed"')
-        self.assertContains(listing, 'data-delete-disabled-field="is_completed"')
+        self.assertContains(listing, 'data-edit-disabled-field="locked"')
+        self.assertContains(listing, 'data-delete-disabled-field="locked"')
+        transit = self.client.get(reverse('warehouse_pages:transfer-list'), {'stage': 'in_transit'})
+        self.assertContains(transit, reverse('warehouse:transfer-list-view') + '?stage=in_transit')
         edit = self.client.get(reverse('warehouse_pages:edit-transfer', args=[self.record.pk]))
         self.assertContains(edit, 'data-transfer-form')
         self.assertContains(edit, 'data-transfer-add-line')

@@ -19,7 +19,7 @@ MAX_STOCK_QUANTITY = Decimal('999999999999.999999')
 
 class TransferCompleted(APIException):
     status_code = 409
-    default_detail = 'Completed transfers are read-only and cannot be changed or deleted.'
+    default_detail = 'Dispatched and completed transfers are read-only.'
     default_code = 'transfer_completed'
 
 
@@ -57,12 +57,14 @@ def lock_transfer(pk, actor, action='change'):
         record = records.select_for_update().get(pk=pk)
     except WarehouseTransfer.DoesNotExist as exc:
         raise NotFound('Warehouse transfer not found.') from exc
-    if record.is_completed:
+    if record.locked:
         raise TransferCompleted()
     return record
 
 
-def complete_transfer(actor, transfer_id):
+def complete_transfer(actor, transfer_id, *, action='complete'):
+    if action not in ('dispatch', 'receive', 'complete'):
+        raise ValueError('Unknown transfer action.')
     require_transfer_permission(actor, 'change')
     try:
         with transaction.atomic(), localcontext() as context:
@@ -71,14 +73,18 @@ def complete_transfer(actor, transfer_id):
             require_transfer_permission(actor, 'change')
             records = transfer_queryset(WarehouseTransfer.objects.prefetch_related('items__product', 'items__unit'), scope, write=True)
             now = timezone.now()
-            claimed = records.filter(pk=transfer_id, is_completed=False).update(
-                is_completed=True, modified_by=actor.get_username(), updated_at=now)
+            # Acquire a write lock before reading the stage, including on SQLite.
+            records.filter(pk=transfer_id, is_completed=False).update(is_completed=False)
             try:
                 record = records.select_for_update().get(pk=transfer_id)
             except WarehouseTransfer.DoesNotExist as exc:
                 raise NotFound('Warehouse transfer not found.') from exc
-            if not claimed:
+            if record.is_completed or (action == 'dispatch' and record.dispatched_at):
                 return record, False
+            if action == 'receive' and not record.dispatched_at:
+                raise ValidationError({'stage': 'Dispatch the transfer before receiving it.'})
+            send = record.dispatched_at is None
+            receive = action != 'dispatch'
             if record.source_warehouse_id == record.destination_warehouse_id:
                 raise ValidationError({'destination_warehouse': 'Choose a different destination warehouse.'})
             warehouses = list(WareHouse.objects.select_for_update().filter(
@@ -105,30 +111,28 @@ def complete_transfer(actor, transfer_id):
                 balances = {stock.warehouse_id: stock for stock in Stock.objects.select_for_update().filter(
                     warehouse_id__in=[record.source_warehouse_id, record.destination_warehouse_id],
                     product_id=product_id).order_by('warehouse_id', 'pk')}
-                source = balances.get(record.source_warehouse_id)
-                if source is None or source.quantity < quantity:
-                    raise ValidationError({'quantity': f'Insufficient stock for {products[product_id].sku} in the source warehouse.'})
-                destination = balances.get(record.destination_warehouse_id)
-                if destination is None:
-                    destination = Stock.objects.create(warehouse_id=record.destination_warehouse_id,
-                        product_id=product_id, quantity=Decimal('0'), create_by=actor.get_username(),
-                        modified_by=actor.get_username())
-                expected_source = source.quantity - quantity
-                expected_destination = destination.quantity + quantity
-                moved_out = Stock.objects.filter(pk=source.pk, quantity__gte=quantity).update(
-                    quantity=F('quantity') - quantity, updated_at=now, modified_by=actor.get_username())
-                moved_in = Stock.objects.filter(pk=destination.pk, quantity__lte=MAX_STOCK_QUANTITY - quantity).update(
-                    quantity=F('quantity') + quantity, updated_at=now, modified_by=actor.get_username())
-                if not moved_out:
-                    raise ValidationError({'quantity': 'Insufficient stock in the source warehouse.'})
-                if not moved_in:
-                    raise ValidationError({'quantity': 'The destination stock would exceed the supported quantity limit.'})
-                source.refresh_from_db(fields=['quantity'])
-                destination.refresh_from_db(fields=['quantity'])
-                if source.quantity != expected_source or destination.quantity != expected_destination:
-                    raise ValidationError({'quantity': 'The database cannot store the resulting stock quantities accurately.'})
-            record_lines(record.source_warehouse_id, record, items, 'transfer_out', record.transfer_date, actor)
-            record_lines(record.destination_warehouse_id, record, items, 'transfer_in', record.transfer_date, actor)
+                if send:
+                    source = balances.get(record.source_warehouse_id)
+                    if source is None or source.quantity < quantity:
+                        raise ValidationError({'quantity': f'Insufficient stock for {products[product_id].sku} in the source warehouse.'})
+                    apply_transfer_quantity(source, -quantity, actor, now)
+                if receive:
+                    destination = balances.get(record.destination_warehouse_id)
+                    if destination is None:
+                        destination = Stock.objects.create(warehouse_id=record.destination_warehouse_id,
+                            product_id=product_id, quantity=Decimal('0'), create_by=actor.get_username(),
+                            modified_by=actor.get_username())
+                    apply_transfer_quantity(destination, quantity, actor, now)
+            if send:
+                record_lines(record.source_warehouse_id, record, items, 'transfer_out', record.transfer_date, actor)
+                record.dispatched_at = now
+            if receive:
+                receipt_date = record.transfer_date if send else timezone.localdate(now)
+                record_lines(record.destination_warehouse_id, record, items, 'transfer_in', receipt_date, actor)
+                record.is_completed = True
+                record.received_at = now
+            record.modified_by = actor.get_username()
+            record.save(update_fields=['dispatched_at', 'received_at', 'is_completed', 'modified_by', 'updated_at'])
             return record, True
     except OperationalError as exc:
         if 'locked' in str(exc).lower() or 'deadlock' in str(exc).lower():
@@ -138,3 +142,16 @@ def complete_transfer(actor, transfer_id):
         raise TransferBusy('The transfer could not be completed. Check its stock references and retry.') from exc
     except InvalidOperation as exc:
         raise ValidationError({'quantity': 'The resulting quantity exceeds database precision. Stock was not transferred.'}) from exc
+
+
+def apply_transfer_quantity(balance, delta, actor, now):
+    expected = balance.quantity + delta
+    if expected > MAX_STOCK_QUANTITY:
+        raise ValidationError({'quantity': 'The destination stock would exceed the supported quantity limit.'})
+    changed = Stock.objects.filter(pk=balance.pk, quantity=balance.quantity).update(
+        quantity=F('quantity') + delta, updated_at=now, modified_by=actor.get_username())
+    if not changed:
+        raise TransferBusy()
+    balance.refresh_from_db(fields=['quantity'])
+    if balance.quantity != expected:
+        raise ValidationError({'quantity': 'The database cannot store the resulting stock quantities accurately.'})

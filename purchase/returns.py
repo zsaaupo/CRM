@@ -4,7 +4,7 @@ from collections import defaultdict
 from decimal import Decimal, InvalidOperation, localcontext
 
 from django.db import IntegrityError, OperationalError, transaction
-from django.db.models import F
+from django.db.models import F, Q
 from django.utils import timezone
 from rest_framework.exceptions import APIException, NotFound, PermissionDenied, ValidationError
 
@@ -44,7 +44,7 @@ def require_permissions(user, *permissions):
 
 
 def received_orders(scope):
-    return scoped_queryset(PurchaseOrder.objects.filter(is_received=True, warehouse__isnull=False), scope)
+    return scoped_queryset(PurchaseOrder.objects.filter(Q(is_received=True) | Q(receipts_started=True), warehouse__isnull=False), scope)
 
 
 def scoped_returns(queryset, scope):
@@ -88,7 +88,7 @@ def validate_items(order, quantities, products=None, *, previous=None):
             raise ValidationError({'items': f'Line {line.line_number}: {product.name} is marked as non-returnable.'})
         if product.unit_id != line.unit_id:
             raise ValidationError({'items': f'Line {line.line_number}: the original purchase unit must match the product unit.'})
-        remaining = line.quantity - returned[pk]
+        remaining = (line.received_quantity if order.receipts_started else line.quantity) - returned[pk]
         if not quantity.is_finite() or quantity <= 0 or quantity > remaining:
             raise ValidationError({'items': f'Line {line.line_number}: enter a positive quantity up to {max(remaining, 0)}.'})
     return received

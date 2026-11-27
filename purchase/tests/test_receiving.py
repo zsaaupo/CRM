@@ -307,4 +307,4 @@ class PurchaseReceivingTests(TestCase):
         response = self.client.get(url)
         self.assertContains(response, 'data-catalog-delete-form')
         self.assertContains(response, 'data-delete-url-template="/purchase/api/purchase-orders/0/"')
-        self.assertContains(response, 'data-delete-disabled-field="is_received"')
+        self.assertContains(response, 'data-delete-disabled-field="locked"')

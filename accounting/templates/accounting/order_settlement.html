@@ -6,14 +6,15 @@
     <h1 class="section-title">Payments for {{ order.order_number }}</h1>
     <p>{{ amounts.payment_status|capfirst }} · {{ currency }}</p>
     <dl class="user-form-grid">
-        <div><dt>Order total</dt><dd>{{ amounts.total }}</dd></div>
+        <div><dt>{% if order.receipts_started %}Matched invoice total{% else %}Order total{% endif %}</dt><dd>{{ amounts.total }}</dd></div>
+        {% if order.receipts_started %}<div><dt>Received, awaiting invoice</dt><dd>{{ amounts.uninvoiced_accrual }}</dd></div>{% endif %}
         <div><dt>Returned</dt><dd>{{ amounts.returned }}</dd></div>
         <div><dt>Paid</dt><dd>{{ amounts.paid }}</dd></div>
         <div><dt>Refunded</dt><dd>{{ amounts.refunded }}</dd></div>
         <div><dt>Due</dt><dd>{{ amounts.due }}</dd></div>
     </dl>
     {% if errors %}<div class="form-error" role="alert">{{ errors }}</div>{% endif %}
-    {% if can_post and amounts.payment_status != 'pending' and amounts.payment_status != 'paid' %}
+    {% if can_post and amounts.payment_status != 'pending' and amounts.payment_status != 'paid' and amounts.payment_status != 'awaiting_invoice' %}
     <form method="post" class="user-form-card" data-settlement-form>
         {% csrf_token %}<input type="hidden" name="request_key" value="{{ request_key }}">
         <div data-tender-list><div class="user-form-grid mb-3" data-tender>

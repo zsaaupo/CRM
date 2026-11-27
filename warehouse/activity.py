@@ -115,7 +115,7 @@ REPORTS = {
     'quotations': ('Quotations', QuotationReport, [('quotation_number', 'Quotation'), ('order_date', 'Date'),
                    ('customer_name', 'Customer'), ('grand_total', 'Total', 'price'), ('status_name', 'Status')]),
     'stock-transfers': ('Warehouse transfers', StockTransferReport, [('transfer_number', 'Transfer'), ('transfer_date', 'Date'),
-                         ('source_warehouse_name', 'From'), ('destination_warehouse_name', 'To'), ('is_completed', 'Completed', 'boolean')]),
+                         ('source_warehouse_name', 'From'), ('destination_warehouse_name', 'To'), ('stage_label', 'Stage')]),
     'fund-transfers': ('Fund transfers', FundTransferReport, transfer_columns),
     'money-transfers': ('Money transfers', MoneyTransferReport, transfer_columns),
 }

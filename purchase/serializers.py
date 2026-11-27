@@ -43,7 +43,7 @@ class PurchaseOrderSerializer(OrderSettlementMixin, WarehouseScopedSerializerMix
         fields = [
             'id', 'order_number', 'supplier', 'supplier_name', 'supplier_code', 'order_date', 'expected_date', 'currency',
             'exchange_rate', 'status', 'warehouse', 'warehouse_name', 'settlement_mode', 'payment_account', 'payment_account_name',
-            'is_received', 'supplier_reference', 'shipping_cost', 'notes',
+            'is_received', 'receipts_started', 'locked', 'supplier_reference', 'shipping_cost', 'notes',
             'subtotal', 'tax_total', 'grand_total', *AUDIT_FIELDS[1:],
         ]
         read_only_fields = [*AUDIT_FIELDS, 'order_number', 'is_received', 'subtotal', 'tax_total', 'grand_total']

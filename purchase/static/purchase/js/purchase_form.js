@@ -160,7 +160,7 @@ export function initializePurchaseForm(form) {
                 loadItems(),
             ]);
             if (isEdit && !record?.id) throw new Error("Could not load this purchase. Return to the purchase list.");
-            if (record?.is_received === true) {
+            if (record?.locked || record?.is_received === true) {
                 readOnly = true;
                 throw new Error("This purchase has been received and is read-only. Return to the purchase list.");
             }
@@ -278,7 +278,10 @@ export function initializePurchaseForm(form) {
             window.location.assign(form.dataset.successUrl);
         } catch (error) {
             if (isEdit && error.status === 409) {
-                try { readOnly = (await getJSON(form.dataset.detailUrl)).is_received === true; }
+                try {
+                    const current = await getJSON(form.dataset.detailUrl);
+                    readOnly = current.locked || current.is_received === true;
+                }
                 catch { /* Keep the original API error if the session has changed. */ }
                 if (readOnly) ready = false;
             }

@@ -79,6 +79,7 @@ def document_context(kind, record, *, items=None):
         'metadata': [], 'cards': [], 'totals': [],
     }
     if kind == 'transfer':
+        document['state'] = record.stage_label
         for label, warehouse in [('Source warehouse', record.source_warehouse), ('Destination warehouse', record.destination_warehouse)]:
             document['cards'].append({'label': label, 'name': warehouse.name,
                 'code': warehouse.code or '', 'lines': address_lines(warehouse)})

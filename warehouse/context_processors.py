@@ -18,6 +18,8 @@ def warehouse_navigation(request):
         'stock': can_view_stock,
         'movements': has_role_permissions(user, ('warehouse.view_stockmovement',)),
         'counts': can_view_stock and has_role_permissions(user, ('warehouse.view_stockcount',)),
+        'adjustments': can_view_stock and has_role_permissions(user, ('warehouse.view_stockadjustment',)),
+        'adjustments': can_view_stock and has_role_permissions(user, ('warehouse.view_stockadjustment',)),
         'transfers': has_role_permissions(user, ('warehouse.view_warehousetransfer',)),
         'add_transfer': all_warehouse_access(scope) and has_role_permissions(user, ('warehouse.view_warehousetransfer',
                         'warehouse.add_warehousetransfer')),

@@ -167,25 +167,31 @@ class TransferListPageView(WarehouseScopePageMixin, ProtectedAccountPageView):
             'view_url_template': reverse('warehouse_pages:transfer-detail', args=[0]),
             'can_add': can_write and has_role_permissions(user, ('warehouse.add_warehousetransfer',)),
             'can_delete': can_delete,
-            'list_description': 'Move products between warehouses. Completed transfers are read-only.',
+            'list_description': 'Move products between warehouses. Open a transfer to dispatch or receive it.',
             'columns': [{'key': key, 'label': label, 'type': kind} for key, label, kind in [
                 ('transfer_number', 'Transfer number', 'text'), ('transfer_date', 'Date', 'text'),
                 ('source_warehouse_name', 'From', 'text'), ('destination_warehouse_name', 'To', 'text'),
                 ('product_summary', 'Products', 'text'), ('item_count', 'Lines', 'text'),
-                ('is_completed', 'Completed', 'boolean'), ('actions', 'Actions', 'edit'),
+                ('stage_label', 'Stage', 'text'), ('actions', 'Actions', 'edit'),
             ]],
         })
+        in_transit = self.request.GET.get('stage') == 'in_transit'
+        context['secondary_label'] = 'All transfers' if in_transit else 'In transit'
+        context['secondary_url'] = context['list_url'] + ('' if in_transit else '?stage=in_transit')
+        if in_transit:
+            context['list_api_url'] += '?stage=in_transit'
+            context['page_label'] = 'Transfers in transit'
         if can_change:
             context.update({
                 'edit_url_template': reverse('warehouse_pages:edit-transfer', args=[0]),
-                'edit_disabled_field': 'is_completed',
+                'edit_disabled_field': 'locked',
                 'complete_api_url': reverse('warehouse:transfer-complete'),
                 'complete_id_field': 'transfer_id', 'complete_result_key': 'warehouse_transfer',
                 'complete_label': 'transfer',
             })
         if can_delete:
             context['delete_url_template'] = reverse('warehouse:transfer-detail', args=[0])
-            context['delete_disabled_field'] = 'is_completed'
+            context['delete_disabled_field'] = 'locked'
         return context
 
 
@@ -221,7 +227,7 @@ class TransferEditPageView(TransferAddPageView):
             'create_api_url': reverse('warehouse:transfer-update', args=[self.kwargs['pk']]),
             'detail_api_url': reverse('warehouse:transfer-detail', args=[self.kwargs['pk']]),
             'options_api_url': reverse('warehouse:transfer-edit-options'),
-            'readonly_field': 'is_completed', 'readonly_message': 'Completed transfers are read-only. Return to the transfer list.',
+            'readonly_field': 'locked', 'readonly_message': 'Dispatched transfers are read-only. Return to the transfer list.',
         })
         return context
 
@@ -234,6 +240,8 @@ class TransferDetailPageView(WarehouseScopePageMixin, ProtectedAccountPageView):
         context = super().get_context_data(**kwargs)
         context.update({
             'page_section': 'warehouses', 'page_mode': 'transfer-detail', 'page_label': 'Transfer details',
+            'can_post': all_warehouse_access(warehouse_scope(self.request.user)) and has_role_permissions(
+                self.request.user, ('warehouse.change_warehousetransfer',)),
             'list_url': reverse('warehouse_pages:transfer-list'),
             'detail_api_url': reverse('warehouse:transfer-detail', args=[self.kwargs['pk']]),
         })

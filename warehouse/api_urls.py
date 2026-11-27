@@ -1,9 +1,11 @@
 from django.urls import path
-from .count_views import StockCountAPI
+from .count_views import CountSheetAPI, StockCountAPI
+from .adjustments import AdjustmentAPI
+from .adjustments import AdjustmentAPI
 from .activity import REPORTS
 
 from .api_views import (
-    MovementListAPIView,
+    MovementListAPIView, TransferStageAPIView,
     StockDetailAPIView, StockListAPIView,
     RoleWarehouseAccessDetailAPIView, RoleWarehouseAccessListAPIView,
     RoleWarehouseAccessListCreateAPIView, RoleWarehouseAccessUpdateAPIView,
@@ -18,8 +20,13 @@ from .api_views import (
 app_name = 'warehouse'
 
 urlpatterns = [
+    path('adjustments/', AdjustmentAPI.as_view(), name='adjustments'),
+    path('adjustments/', AdjustmentAPI.as_view(), name='adjustments'),
+    path('transfers/<int:pk>/dispatch/', TransferStageAPIView.as_view(action='dispatch'), name='transfer-dispatch'),
+    path('transfers/<int:pk>/receive/', TransferStageAPIView.as_view(action='receive'), name='transfer-receive'),
     path('counts/', StockCountAPI.as_view(), name='count-list'),
     path('counts/<int:pk>/', StockCountAPI.as_view(), name='count-detail'),
+    path('counts/<int:pk>/sheet/', CountSheetAPI.as_view(), name='count-sheet'),
     path('counts/<int:pk>/finalize/', StockCountAPI.as_view(), name='count-finalize'),
     path('movements/', MovementListAPIView.as_view(), name='movement-list'),
     *[path(f'reports/<int:warehouse_id>/{key}/', view.as_view(), name=f'report-{key}')

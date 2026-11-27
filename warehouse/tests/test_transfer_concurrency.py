@@ -12,7 +12,7 @@ from rest_framework.test import APIRequestFactory, force_authenticate
 from common.models import ProductStatus
 from inventory.models import Currency, Product, ProductType, UnitOfMeasure
 from warehouse.api_views import WarehouseTransferUpdateAPIView
-from warehouse.models import Stock, WareHouse, WarehouseTransfer, WarehouseTransferItem
+from warehouse.models import Stock, StockMovement, WareHouse, WarehouseTransfer, WarehouseTransferItem
 from warehouse.services import TransferBusy, complete_transfer
 
 
@@ -77,6 +77,15 @@ class TransferConcurrencyTests(TransactionTestCase):
             return action
         self.assertEqual(sorted(self.race([complete(self.record.pk), complete(other.pk)])), ['completed', 'shortage'])
         self.assertEqual(WarehouseTransfer.objects.filter(is_completed=True).count(), 1)
+        self.assert_conserved()
+
+    def test_dispatch_racing_direct_completion_posts_each_leg_once(self):
+        self.race([lambda actor: complete_transfer(actor, self.record.pk, action='dispatch'),
+                   lambda actor: complete_transfer(actor, self.record.pk)])
+        self.record.refresh_from_db()
+        self.assertEqual(self.record.stage, 'received')
+        self.assertEqual(Stock.objects.get(warehouse=self.destination).quantity, Decimal('2'))
+        self.assertEqual(StockMovement.objects.count(), 2)
         self.assert_conserved()
 
     def test_edit_racing_completion_preserves_the_completed_quantity(self):

@@ -80,8 +80,8 @@ export function initializeTransferForm(form) {
             const [data, record] = await Promise.all([getJSON(form.dataset.optionsUrl),
                 isEdit ? getJSON(form.dataset.detailUrl) : null]);
             if (isEdit && (!record?.id || !Array.isArray(record.items))) throw new Error('Could not load all transfer products. Please try again.');
-            readOnly = record?.is_completed === true;
-            if (readOnly) throw new Error('Completed transfers are read-only. Return to the transfer list.');
+            readOnly = record?.locked === true || record?.is_completed === true;
+            if (readOnly) throw new Error('Dispatched and completed transfers are read-only. Return to the transfer list.');
             for (const name of ['source_warehouse', 'destination_warehouse', 'product']) {
                 if (!Array.isArray(data[name])) throw new Error('Could not load transfer choices. Please try again.');
             }
@@ -141,11 +141,11 @@ export function initializeTransferForm(form) {
             window.location.assign(form.dataset.successUrl);
         } catch (error) {
             if (isEdit && error.status === 409) {
-                try { readOnly = (await getJSON(form.dataset.detailUrl)).is_completed === true; }
+                try { const latest = await getJSON(form.dataset.detailUrl); readOnly = latest.locked || latest.is_completed; }
                 catch { /* Preserve the original error if access changed. */ }
             }
             showErrors(error.errors);
-            message(readOnly ? 'Completed transfers are read-only. Return to the transfer list.'
+            message(readOnly ? 'Dispatched and completed transfers are read-only. Return to the transfer list.'
                 : error.status === 403 ? 'Your session or permissions have changed. Refresh this page and try again.'
                 : error.errors ? `Please check the transfer details. ${errorText(error.errors)}`
                 : error.message || 'Could not save the transfer. Please try again.'); status.focus();

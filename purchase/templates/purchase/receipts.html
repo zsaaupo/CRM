@@ -1,0 +1,23 @@
+{% extends "layouts/dashboard.html" %}
+{% block title %}Purchase receipts | eManager{% endblock %}
+{% block content %}
+<div class="workspace-content">
+    <h1 class="page-title">Receipts for {{ order.order_number }}</h1>
+    <a class="secondary-button" href="{% url 'purchase_pages:purchase-detail' order.pk %}">Purchase details</a>
+    {% if errors %}<div role="alert" class="form-error">{{ errors }}</div>{% endif %}
+    <form class="user-form-card mb-6" method="post" action="{% url 'purchase_pages:receipts' order.pk %}">{% csrf_token %}
+        <input type="hidden" name="request_key" value="{{ request_key }}">
+        <table class="w-full"><thead><tr><th>SKU</th><th>Unit</th><th>Ordered</th><th>Received</th><th>Outstanding</th><th>This delivery</th></tr></thead>
+        <tbody>{% for line in items %}<tr><td>{{ line.product.sku }}</td><td>{{ line.unit.code }}</td><td>{{ line.quantity }}</td>
+            <td>{{ line.delivered }}</td><td>{{ line.outstanding }}</td><td>{% if can_receive and line.outstanding %}<input class="form-input" aria-label="Receive line {{ line.line_number }}" type="number" name="qty_{{ line.pk }}" min="0.000001" step="0.000001" max="{{ line.outstanding }}">{% endif %}</td></tr>{% endfor %}</tbody></table>
+        {% if can_receive and not order.is_received %}<button class="primary-button mt-5">Post delivery</button>{% endif %}
+    </form>
+    <h2 class="section-title">Receipt and invoice history</h2>
+    <table class="w-full"><thead><tr><th>Receipt</th><th>Received</th><th>Amount (base currency)</th><th>Supplier invoice</th></tr></thead><tbody>
+    {% for receipt in receipts %}<tr><td>#{{ receipt.pk }}</td><td>{{ receipt.created_at }} · {{ receipt.create_by }}</td><td>{{ receipt.amount_base }}</td>
+        <td>{% if receipt.invoiced_at %}{{ receipt.invoice_reference }} · {{ receipt.invoiced_at }}{% elif can_invoice %}
+            <form method="post" action="{% url 'purchase_pages:receipt-invoice' order.pk %}">{% csrf_token %}
+                <input type="hidden" name="receipt" value="{{ receipt.pk }}"><label>Invoice reference<input class="form-input" name="invoice_reference" required maxlength="100"></label>
+                <button class="secondary-button">Match invoice</button></form>{% else %}Awaiting invoice{% endif %}</td></tr>
+    {% empty %}<tr><td colspan="4">{% if order.is_received %}Received through full-order receiving.{% else %}No deliveries posted.{% endif %}</td></tr>{% endfor %}</tbody></table>
+</div>{% endblock %}

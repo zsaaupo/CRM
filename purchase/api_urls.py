@@ -1,4 +1,5 @@
 from django.urls import path
+from .receipt_views import ReceiptAPI
 from common.order_copy import DuplicateOrderView
 from purchase.models import PurchaseOrder
 
@@ -16,6 +17,8 @@ from .return_api import (
 app_name = 'purchase'
 
 urlpatterns = [
+    path('purchase-orders/<int:pk>/receipts/', ReceiptAPI.as_view(), name='receipts'),
+    path('purchase-orders/<int:pk>/receipt-invoices/', ReceiptAPI.as_view(invoice=True, http_method_names=['post', 'options']), name='receipt-invoice'),
     path('purchase-orders/<int:pk>/duplicate/', DuplicateOrderView.as_view(model=PurchaseOrder), name='duplicate-order'),
     path('purchase-orders/options/', PurchaseOptionsAPIView.as_view(), name='purchase-options'),
     path('purchase-orders/edit-options/', PurchaseEditOptionsAPIView.as_view(), name='purchase-edit-options'),

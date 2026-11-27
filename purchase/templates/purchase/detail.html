@@ -10,6 +10,7 @@
     {% include 'includes/detail_status.html' %}
     <div data-record-content hidden>
         {% if copy_url %}{% include 'includes/order_copy.html' %}{% endif %}
+        {% if can_view_items %}<a class="secondary-button mb-5" href="{% url 'purchase_pages:receipts' view.kwargs.pk %}">Receipts and invoices</a>{% endif %}
         <section class="user-form-card mb-6" aria-labelledby="purchase-information-heading">
             <h2 id="purchase-information-heading" class="section-title mb-6">Purchase information</h2>
             <dl class="profile-grid">

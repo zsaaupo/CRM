@@ -7,13 +7,29 @@
     <div class="page-heading"><h1 class="page-title">Stock count #{{ record.pk }}</h1><a class="secondary-button" href="{% url 'warehouse_pages:count-list' %}">All counts</a></div>
     <p>{{ record.warehouse }} · {{ record.created_at|date }} · {{ record.create_by }}</p>
     {% if record.note %}<p>{{ record.note }}</p>{% endif %}
+    <p><a class="secondary-button" href="{% url 'warehouse:count-sheet' record.pk %}">Download count sheet (CSV)</a></p>
+    {% if can_finalize and not record.finalized_at %}
+    <form method="post" enctype="multipart/form-data" class="user-form-card mb-6">{% csrf_token %}
+        <label>Completed count sheet<input class="form-input" type="file" name="file" accept=".csv,text/csv" required></label>
+        <p>Enter physical quantities in the counted column of the downloaded sheet.</p>
+        <button class="secondary-button" name="action" value="preview">Preview count sheet</button>
+    </form>{% endif %}
+    {% if confirmation %}
+    <form method="post" class="user-form-card">{% csrf_token %}
+        <h2>Review count sheet</h2>
+        <input type="hidden" name="confirmation" value="{{ confirmation }}">
+        <table class="w-full"><thead><tr><th>SKU</th><th>Unit</th><th>Expected</th><th>Counted</th><th>Variance</th></tr></thead>
+        <tbody>{% for row in preview %}<tr><td>{{ row.sku }}</td><td>{{ row.unit }}</td><td>{{ row.expected }}</td><td>{{ row.quantity }}</td><td>{{ row.variance }}</td></tr>{% endfor %}</tbody></table>
+        <button class="primary-button mt-5">Finalize reviewed count</button>
+    </form>
+    {% else %}
     <form method="post" class="user-form-card">{% csrf_token %}
         <table class="w-full"><thead><tr><th>SKU</th><th>Product</th><th>Unit</th><th>Expected</th><th>Counted</th></tr></thead>
         <tbody>{% for line in lines %}<tr><td>{{ line.product.sku }}</td><td>{{ line.product.name }}</td><td>{{ line.unit.code }}</td><td>{{ line.expected }}</td>
             <td>{% if record.finalized_at %}{{ line.counted }}{% elif can_finalize %}<input class="form-input" aria-label="Count for {{ line.product.sku }}" type="number" min="0" step="0.000001" name="qty_{{ line.product_id }}" required>{% endif %}</td></tr>
         {% empty %}<tr><td colspan="5">No products in this count.</td></tr>{% endfor %}</tbody></table>
         {% if record.finalized_at %}<p>Finalized {{ record.finalized_at }} by {{ record.modified_by }}</p>{% elif can_finalize %}<button class="primary-button mt-5">Finalize count</button>{% endif %}
-    </form>
+    </form>{% endif %}
 {% else %}
     <h1 class="page-title">Stock counts</h1>
     {% if can_add %}<form class="user-form-card mb-6" method="post">{% csrf_token %}

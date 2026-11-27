@@ -1,6 +1,6 @@
-from decimal import Decimal
 from uuid import uuid4
 
+from django.core import signing
 from django.core.paginator import Paginator
 from django.shortcuts import get_object_or_404, redirect
 from rest_framework import serializers
@@ -13,6 +13,7 @@ from account.permissions import has_role_permissions
 from common.view import BaseAPIMixin, BasePagination
 from inventory.models import Product
 from .counts import CountConflict, begin_count, finalize_count
+from .count_sheets import CountedLine, count_sheet, preview_sheet
 from .models import StockCount, StockCountLine, WareHouse
 from .scope import WarehouseScopeAPIMixin, has_warehouse_scope, scoped_queryset, warehouse_scope
 
@@ -28,11 +29,6 @@ class CountInput(serializers.Serializer):
         if attrs['full_count'] == bool(attrs['products']):
             raise ValidationError({'products': 'Select products only for a partial count.'})
         return attrs
-
-
-class CountedLine(serializers.Serializer):
-    product = serializers.IntegerField(min_value=1, max_value=2**63-1)
-    quantity = serializers.DecimalField(min_value=Decimal('0'), max_digits=18, decimal_places=6)
 
 
 class CountLineOutput(serializers.ModelSerializer):
@@ -110,14 +106,37 @@ class StockCountPage(CountResource, ProtectedAccountPageView):
         return context
 
     def post(self, request, **kwargs):
-        if 'pk' in kwargs:
-            data = {'lines': [{'product': key[4:], 'quantity': val} for key, val in request.POST.items()
-                              if key.startswith('qty_')]}
-        else:
-            data = request.POST.dict()
-            data['products'] = request.POST.getlist('products')
         try:
+            if 'pk' in kwargs:
+                salt = f'warehouse.count.{kwargs["pk"]}.{request.user.pk}'
+                if request.POST.get('action') == 'preview':
+                    context = self.get_context_data()
+                    reviewed = preview_sheet(context['record'], request.FILES.get('file'))
+                    values = [{'product': row['product'], 'quantity': row['quantity']} for row in reviewed]
+                    context.update(preview=reviewed, confirmation=signing.dumps(values, salt=salt, compress=True))
+                    return self.render_to_response(context)
+                if 'confirmation' in request.POST:
+                    try:
+                        rows = signing.loads(request.POST['confirmation'], salt=salt)
+                    except signing.BadSignature as exc:
+                        raise ValidationError({'file': 'Preview the count sheet again before finalizing.'}) from exc
+                else:
+                    rows = [{'product': key[4:], 'quantity': val} for key, val in request.POST.items()
+                            if key.startswith('qty_')]
+                data = {'lines': rows}
+            else:
+                data = request.POST.dict()
+                data['products'] = request.POST.getlist('products')
             record = self.save_count(data)
         except (ValidationError, CountConflict) as error:
             return self.render_to_response(self.get_context_data(errors=error.detail), status=error.status_code)
         return redirect('warehouse_pages:count-detail', pk=record.pk)
+
+
+class CountSheetAPI(CountResource, WarehouseScopeAPIMixin, BaseAPIMixin, APIView):
+    def get(self, request, pk):
+        return count_sheet(get_object_or_404(self.records(), pk=pk))
+
+    def post(self, request, pk):
+        count = get_object_or_404(self.records(), pk=pk)
+        return Response({'count': pk, 'lines': preview_sheet(count, request.FILES.get('file'))})

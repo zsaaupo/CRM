@@ -8,6 +8,7 @@ from account.permissions import has_role_permissions
 from accounting.services import lock_rows
 from inventory.models import Product
 from .models import Stock, StockCount, StockCountLine, StockMovement, WareHouse
+from .movements import post_valued_movements
 from .scope import lock_warehouse_scope, scoped_queryset
 
 
@@ -71,6 +72,7 @@ def finalize_count(user, pk, quantities):
     cutoffs = movement_cutoffs(branch, quantities)
     now = timezone.now()
     username = user.get_username()
+    movements = []
     for line in lines:
         stock = stocks.get(line.product_id)
         if ((stock.quantity if stock else 0) != line.expected or line.unit_id != line.product.unit_id
@@ -86,9 +88,10 @@ def finalize_count(user, pk, quantities):
             stock.refresh_from_db(fields=['quantity'])
             if stock.quantity != line.counted:
                 raise ValidationError({'lines': 'The resulting stock quantity exceeds database precision.'})
-            StockMovement.objects.create(warehouse=branch, product_id=line.product_id, unit_id=line.unit_id,
+            movements.append(StockMovement(warehouse=branch, product_id=line.product_id, unit_id=line.unit_id,
                 quantity=variance, kind=StockMovement.Kind.COUNT, source_id=pk, source_line_id=line.pk,
-                posting_key=f'count/{pk}/{line.pk}', posted_by=username, business_date=timezone.localdate(now))
+                posting_key=f'count/{pk}/{line.pk}', posted_by=username, business_date=timezone.localdate(now)))
+    post_valued_movements(branch.pk, movements)
     StockCountLine.objects.bulk_update(lines, ['counted'])
     count.finalized_at = now
     count.modified_by = username

@@ -47,10 +47,10 @@ class PurchaseListPageView(WarehouseScopePageMixin, ProtectedAccountPageView):
         })
         if has_role_permissions(self.request.user, PURCHASE_EDIT_PERMISSIONS):
             context['edit_url_template'] = reverse('purchase_pages:edit-purchase', args=[0])
-            context['edit_disabled_field'] = 'is_received'
+            context['edit_disabled_field'] = 'locked'
         if context['can_delete']:
             context['delete_url_template'] = reverse('purchase:purchase-order-detail', args=[0])
-            context['delete_disabled_field'] = 'is_received'
+            context['delete_disabled_field'] = 'locked'
         if has_role_permissions(self.request.user, ('purchase.change_purchaseorder',)):
             context['receive_api_url'] = reverse('purchase:purchase-order-receive')
         return context

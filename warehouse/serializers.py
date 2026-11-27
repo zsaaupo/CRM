@@ -32,7 +32,7 @@ class StockReadSerializer(serializers.ModelSerializer):
     class Meta:
         model = Stock
         fields = ['id', 'warehouse', 'warehouse_name', 'warehouse_code', 'product', 'product_name',
-                  'product_sku', 'quantity', 'unit_name', 'unit_code', *AUDIT_FIELDS[1:]]
+                  'product_sku', 'quantity', 'average_cost_base', 'unit_name', 'unit_code', *AUDIT_FIELDS[1:]]
         read_only_fields = fields
 
 
@@ -74,7 +74,8 @@ class WarehouseTransferSerializer(CatalogSerializer):
         model = WarehouseTransfer
         fields = ['id', 'transfer_number', 'source_warehouse', 'source_warehouse_name',
                   'destination_warehouse', 'destination_warehouse_name', 'transfer_date', 'notes',
-                  'is_completed', 'item_count', 'product_summary', 'items', *AUDIT_FIELDS[1:]]
+                  'is_completed', 'stage', 'stage_label', 'locked', 'dispatched_at', 'received_at',
+                  'item_count', 'product_summary', 'items', *AUDIT_FIELDS[1:]]
         read_only_fields = [*AUDIT_FIELDS, 'transfer_number', 'is_completed']
 
     def get_item_count(self, record):
@@ -97,7 +98,7 @@ class WarehouseTransferSerializer(CatalogSerializer):
         return items
 
     def validate_header(self, attrs):
-        if self.instance and self.instance.is_completed:
+        if self.instance and self.instance.locked:
             raise TransferCompleted()
         scope = warehouse_scope(self.context['request'].user)
         warehouses = {}

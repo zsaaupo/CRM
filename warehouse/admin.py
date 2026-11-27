@@ -18,6 +18,12 @@ class WarehouseScopedAdmin(AuditedAdmin):
     all_warehouses_to_write = False
     posted_lookup = None
     unposted_value = False
+    posted_filters = None
+
+    def editable_filters(self):
+        if self.posted_filters is not None:
+            return self.posted_filters
+        return {self.posted_lookup: self.unposted_value} if self.posted_lookup else {}
 
     def get_queryset(self, request):
         queryset = super().get_queryset(request)
@@ -52,22 +58,25 @@ class WarehouseScopedAdmin(AuditedAdmin):
             request, require_all=self.all_warehouses_to_write) and self.is_unposted(obj)
 
     def is_unposted(self, obj):
-        if obj is None or self.posted_lookup is None:
+        if obj is None:
             return True
-        value = obj
-        for name in self.posted_lookup.split('__'):
-            value = getattr(value, name)
-        return value == self.unposted_value
+        for path, expected in self.editable_filters().items():
+            value = obj
+            for name in path.split('__'):
+                value = getattr(value, name)
+            if value != expected:
+                return False
+        return True
 
     def related_records(self, db_field, scope):
         queryset = db_field.related_model._default_manager.all()
         lookup = self.scoped_foreign_keys.get(db_field.name)
         if lookup is not None:
             queryset = scoped_queryset(queryset, scope, lookup)
-        if self.posted_lookup:
-            parent, _, state_field = self.posted_lookup.partition('__')
+        for path, expected in self.editable_filters().items():
+            parent, _, state_field = path.partition('__')
             if state_field and parent == db_field.name:
-                queryset = queryset.filter(**{state_field: self.unposted_value})
+                queryset = queryset.filter(**{state_field: expected})
         return queryset
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
@@ -92,8 +101,7 @@ class WarehouseScopedAdmin(AuditedAdmin):
 
     def check_existing_records(self, scope, ids):
         records = self.scope_queryset(self.model._default_manager.filter(pk__in=ids), scope)
-        if self.posted_lookup:
-            records = records.filter(**{self.posted_lookup: self.unposted_value})
+        records = records.filter(**self.editable_filters())
         if set(records.select_for_update().values_list('pk', flat=True)) != set(ids):
             raise PermissionDenied('A selected record is completed or outside your warehouse access.')
 
@@ -177,8 +185,8 @@ class StockAdmin(ReadOnlyWarehouseAdmin):
 class WarehouseTransferAdmin(WarehouseScopedAdmin):
     scoped_foreign_keys = {'source_warehouse': 'pk', 'destination_warehouse': 'pk'}
     all_warehouses_to_write = True
-    posted_lookup = 'is_completed'
-    list_display = ['transfer_number', 'transfer_date', 'source_warehouse', 'destination_warehouse', 'is_completed']
+    posted_filters = {'is_completed': False, 'dispatched_at': None}
+    list_display = ['transfer_number', 'transfer_date', 'source_warehouse', 'destination_warehouse', 'stage_label']
     list_filter = ['is_completed', 'transfer_date']
     search_fields = ['transfer_number', 'source_warehouse__name', 'destination_warehouse__name']
     list_select_related = ['source_warehouse', 'destination_warehouse']
@@ -191,7 +199,7 @@ class WarehouseTransferAdmin(WarehouseScopedAdmin):
 class WarehouseTransferItemAdmin(WarehouseScopedAdmin):
     scoped_foreign_keys = {'transfer': 'source_warehouse_id'}
     all_warehouses_to_write = True
-    posted_lookup = 'transfer__is_completed'
+    posted_filters = {'transfer__is_completed': False, 'transfer__dispatched_at': None}
     list_display = ['transfer', 'line_number', 'product', 'unit', 'quantity']
     search_fields = ['transfer__transfer_number', 'product__name', 'product__sku']
     list_select_related = ['transfer', 'product', 'unit']

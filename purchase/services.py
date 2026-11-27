@@ -1,6 +1,7 @@
 """Receive a complete purchase once and protect received purchase writes."""
 from collections import defaultdict
 from decimal import Decimal, InvalidOperation
+from uuid import uuid4
 
 from django.db import IntegrityError, OperationalError, transaction
 from django.db.models import F
@@ -45,7 +46,7 @@ def lock_editable_purchase(pk, actor):
         if 'locked' in str(exc).lower() or 'deadlock' in str(exc).lower():
             raise PurchaseBusy() from exc
         raise
-    if order.is_received:
+    if order.locked:
         raise PurchaseReceived()
     return order
 
@@ -70,6 +71,33 @@ class PurchaseDeleteGuardMixin:
         return super().perform_destroy(instance)
 
 
+def receive_stock(warehouse, items, line_quantities, actor, now):
+    products = {product.pk: product for product in Product.objects.select_for_update().filter(
+        pk__in={item.product_id for item in items}).order_by('pk')}
+    quantities = defaultdict(Decimal)
+    for item in items:
+        product = products.get(item.product_id)
+        if product is None or item.unit_id != product.unit_id:
+            raise ValidationError({'items': f'Line {item.line_number}: the purchase unit must match the product unit.'})
+        if line_quantities[item.pk] <= 0:
+            raise ValidationError({'items': 'Purchase quantities must be positive.'})
+        quantities[item.product_id] += line_quantities[item.pk]
+    for product_id, quantity in sorted(quantities.items()):
+        if quantity > MAX_STOCK_QUANTITY:
+            raise ValidationError({'quantity': 'The received quantity exceeds the supported stock limit.'})
+        stock, _ = Stock.objects.get_or_create(warehouse=warehouse, product_id=product_id,
+            defaults={'quantity': Decimal('0'), 'create_by': actor.get_username(),
+                      'modified_by': actor.get_username()})
+        expected_quantity = stock.quantity + quantity
+        updated = Stock.objects.filter(pk=stock.pk, quantity__lte=MAX_STOCK_QUANTITY - quantity).update(
+            quantity=F('quantity') + quantity, updated_at=now, modified_by=actor.get_username())
+        if not updated:
+            raise ValidationError({'quantity': 'Receiving this purchase would exceed the stock quantity limit.'})
+        stock.refresh_from_db(fields=['quantity'])
+        if stock.quantity != expected_quantity:
+            raise ValidationError({'quantity': 'The database cannot store this resulting stock quantity accurately.'})
+
+
 def receive_purchase(actor, purchase_id):
     if not has_role_permissions(actor, ('purchase.change_purchaseorder',)):
         raise PermissionDenied('You do not have permission to receive a purchase.')
@@ -82,14 +110,22 @@ def receive_purchase(actor, purchase_id):
             now = timezone.now()
             # This is both a once-only claim and the first database write. Losing
             # requests wait/retry and then see True; any later failure rolls it back.
-            claimed = orders.filter(pk=purchase_id, is_received=False).update(
-                is_received=True, modified_by=actor.get_username(), updated_at=now)
+            orders.filter(pk=purchase_id, is_received=False).update(is_received=False)
             try:
                 order = orders.select_for_update().get(pk=purchase_id)
             except PurchaseOrder.DoesNotExist as exc:
                 raise NotFound('Purchase order not found.') from exc
-            if not claimed:
+            if order.is_received:
                 return order, False
+            if order.receipts_started:
+                from .receipts import record_receipt
+                outstanding = {line.pk: line.quantity - line.received_quantity for line in order.items.all()
+                               if line.quantity > line.received_quantity}
+                record_receipt(actor, order, uuid4(), outstanding)
+                return order, True
+            order.is_received = True
+            order.modified_by = actor.get_username()
+            order.save(update_fields=['is_received', 'modified_by', 'updated_at'])
             if not order.warehouse_id:
                 raise ValidationError({'warehouse': 'Set the receiving warehouse on this purchase before receiving it.'})
             warehouse = WareHouse.objects.select_for_update().filter(pk=order.warehouse_id).first()
@@ -98,30 +134,7 @@ def receive_purchase(actor, purchase_id):
             items = list(order.items.order_by('line_number', 'pk'))
             if not items:
                 raise ValidationError({'items': 'Add at least one purchase item before receiving.'})
-            products = {product.pk: product for product in Product.objects.select_for_update().filter(
-                pk__in={item.product_id for item in items}).order_by('pk')}
-            quantities = defaultdict(Decimal)
-            for item in items:
-                product = products.get(item.product_id)
-                if product is None or item.unit_id != product.unit_id:
-                    raise ValidationError({'items': f'Line {item.line_number}: the purchase unit must match the product unit.'})
-                if item.quantity <= 0:
-                    raise ValidationError({'items': 'Purchase quantities must be positive.'})
-                quantities[item.product_id] += item.quantity
-            for product_id, quantity in sorted(quantities.items()):
-                if quantity > MAX_STOCK_QUANTITY:
-                    raise ValidationError({'quantity': 'The received quantity exceeds the supported stock limit.'})
-                stock, _ = Stock.objects.get_or_create(warehouse=warehouse, product_id=product_id,
-                    defaults={'quantity': Decimal('0'), 'create_by': actor.get_username(),
-                              'modified_by': actor.get_username()})
-                expected_quantity = stock.quantity + quantity
-                updated = Stock.objects.filter(pk=stock.pk, quantity__lte=MAX_STOCK_QUANTITY - quantity).update(
-                    quantity=F('quantity') + quantity, updated_at=now, modified_by=actor.get_username())
-                if not updated:
-                    raise ValidationError({'quantity': 'Receiving this purchase would exceed the stock quantity limit.'})
-                stock.refresh_from_db(fields=['quantity'])
-                if stock.quantity != expected_quantity:
-                    raise ValidationError({'quantity': 'The database cannot store this resulting stock quantity accurately.'})
+            receive_stock(warehouse, items, {line.pk: line.quantity for line in items}, actor, now)
             record_lines(warehouse.pk, order, items, 'receipt', order.order_date, actor)
             if order.settlement_mode == SettlementMode.AUTO_FULL:
                 post_received_purchase_payment(order, scope, actor, date=timezone.localdate(now))

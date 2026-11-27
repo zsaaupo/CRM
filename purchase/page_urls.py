@@ -1,4 +1,5 @@
 from django.urls import path
+from .receipt_views import ReceiptPage
 
 from .page_views import (
     PurchaseCreatePageView, PurchaseDetailPageView, PurchaseEditPageView, PurchaseListPageView,
@@ -9,6 +10,8 @@ from .page_views import (
 app_name = 'purchase_pages'
 
 urlpatterns = [
+    path('purchase-orders/<int:pk>/receipts/', ReceiptPage.as_view(), name='receipts'),
+    path('purchase-orders/<int:pk>/receipt-invoices/', ReceiptPage.as_view(invoice=True, http_method_names=['post', 'options']), name='receipt-invoice'),
     path('purchase-orders/', PurchaseListPageView.as_view(), name='purchase-list'),
     path('purchase-orders/add/', PurchaseCreatePageView.as_view(), name='create-purchase'),
     path('purchase-orders/<int:pk>/', PurchaseDetailPageView.as_view(), name='purchase-detail'),

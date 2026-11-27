@@ -277,9 +277,10 @@ class PurchaseReturnOptionsAPIView(PurchaseReturnResource, BaseAPIMixin, APIView
         returned = returned_quantities(order)
         lines = []
         for line in order.items.select_related('product', 'unit'):
-            remaining = max(line.quantity - returned[line.pk], Decimal('0'))
+            received = line.received_quantity if order.receipts_started else line.quantity
+            remaining = max(received - returned[line.pk], Decimal('0'))
             lines.append({'id': line.pk, 'line_number': line.line_number, 'product_name': line.product.name,
-                          'product_sku': line.product.sku, 'unit_code': line.unit.code, 'received_quantity': str(line.quantity),
+                          'product_sku': line.product.sku, 'unit_code': line.unit.code, 'received_quantity': str(received),
                           'returned_quantity': str(returned[line.pk]), 'remaining_quantity': str(remaining),
                           'returnable': order.warehouse.is_active and line.product.is_returnable and line.product.unit_id == line.unit_id})
         return Response({'order': self.order_option(order), 'lines': lines})

@@ -61,7 +61,7 @@ class PurchaseEditingTests(TestCase):
         listing = self.client.get(reverse('purchase_pages:purchase-list'))
         self.assertEqual(listing.context['edit_url_template'], '/purchase/purchase-orders/0/edit/')
         self.assertEqual(listing.context['edit_disabled_field'], 'is_received')
-        self.assertContains(listing, 'data-edit-disabled-field="is_received"')
+        self.assertContains(listing, 'data-edit-disabled-field="locked"')
         page = self.client.get(self.edit_page)
         self.assertEqual(page.status_code, 200)
         self.assertContains(page, 'Edit purchase')
