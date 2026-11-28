@@ -21,6 +21,7 @@ class AuditLogPageView(ProtectedAccountPageView):
                 ('occurred_at', 'Date and time', 'datetime'), ('actor', 'User', 'text'),
                 ('action_label', 'Activity', 'text'), ('resource_label', 'Record type', 'text'),
                 ('reference', 'Reference', 'text'), ('warehouse_label', 'Warehouse', 'text'),
+                ('domain_label', 'Domain', 'text'),
             ]],
         })
         return context

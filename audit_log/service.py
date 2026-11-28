@@ -27,6 +27,29 @@ from .models import AuditLog
 
 AUDIT_LOG_VIEW = ('audit_log.view_auditlog',)
 
+DOMAIN_LABELS = {
+    # HR — all HRM resources plus user-account management
+    **dict.fromkeys([r for r in [
+        'hrm.department', 'hrm.designation', 'hrm.employmenttype', 'hrm.employeestatus',
+        'hrm.employee', 'hrm.employeedesignationchange', 'hrm.workschedule',
+        'hrm.employeescheduleassignment', 'hrm.holiday', 'hrm.employeeattendancestatus',
+        'hrm.attendance', 'hrm.attendancepolicy', 'hrm.leavetype', 'hrm.leaverequest',
+        'hrm.leavebalance', 'hrm.leavebalancemovement', 'hrm.approvedleaveday',
+        'hrm.salarycomponent', 'hrm.salarystructure', 'hrm.salarystructureline',
+        'hrm.employeecompensation', 'hrm.payrollperiod', 'hrm.payrollrun',
+        'hrm.payrolladjustment', 'hrm.payrolldeductionrule', 'hrm.employeeloan',
+        'hrm.loaninstallment', 'hrm.payslip', 'hrm.payslipline', 'hrm.payrollevent',
+        'hrm.salarypayment', 'hrm.notice',
+        'account.account',
+    ]], 'HR'),
+    # System — authentication, roles, global configuration
+    **dict.fromkeys([
+        'auth.user', 'auth.group', 'auth.group_permissions', 'auth.user_permissions',
+        'common.productstatus', 'common.tradestatus', 'common.erpbranding',
+    ], 'System'),
+    # Everything else defaults to 'Warehouse' (see get_domain_label)
+}
+
 
 @dataclass(frozen=True)
 class Visibility:
@@ -165,11 +188,13 @@ def visible_record_types(user):
 class AuditLogSerializer(serializers.ModelSerializer):
     action_label = serializers.SerializerMethodField()
     warehouse_label = serializers.SerializerMethodField()
+    domain_label = serializers.SerializerMethodField()
 
     class Meta:
         model = AuditLog
         fields = ['id', 'occurred_at', 'actor', 'resource', 'resource_label', 'object_id', 'reference',
-                  'action', 'action_label', 'warehouse_id', 'related_warehouse_id', 'warehouse_label']
+                  'action', 'action_label', 'warehouse_id', 'related_warehouse_id', 'warehouse_label',
+                  'domain_label']
         read_only_fields = fields
 
     def get_action_label(self, event):
@@ -184,6 +209,9 @@ class AuditLogSerializer(serializers.ModelSerializer):
             if key is not None:
                 warehouses[key] = name or f'Warehouse #{key}'
         return ' / '.join(warehouses.values()) or None
+
+    def get_domain_label(self, event):
+        return DOMAIN_LABELS.get(event.resource, 'Warehouse')
 
 
 active_request = ContextVar('audit_log_request', default=None)
