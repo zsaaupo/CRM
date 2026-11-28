@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.core.exceptions import PermissionDenied
 
-from .models import ProductStatus, TradeStatus
+from .models import ERPBranding, ProductStatus, TradeStatus
 
 
 class AuditedAdmin(admin.ModelAdmin):
@@ -45,3 +45,26 @@ class ProductStatusAdmin(admin.ModelAdmin):
         if queryset.filter(code='draft').exists():
             raise PermissionDenied('The default draft status cannot be deleted.')
         super().delete_queryset(request, queryset)
+
+
+@admin.register(ERPBranding)
+class ERPBrandingAdmin(admin.ModelAdmin):
+    fields = ('has_custom_logo', 'updated_at', 'modified_by')
+    list_display = fields
+    readonly_fields = fields
+
+    @admin.display(boolean=True, description='Custom logo')
+    def has_custom_logo(self, obj):
+        return obj.logo_revision is not None
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).defer('logo')
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False

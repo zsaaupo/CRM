@@ -141,13 +141,14 @@ button:focus-visible { outline: 2px solid var(--erp-primary); outline-offset: 3p
 }
 
 .workspace-sidebar { position: fixed; inset: 0 auto 0 0; z-index: 50; display: flex; width: var(--erp-sidebar-width); flex-direction: column; border-right: 1px solid var(--erp-line); background: #fff; padding: 0 14px 18px; }
-.sidebar-brand-row { display: flex; min-height: 76px; align-items: center; justify-content: space-between; padding: 0 10px; }
+.sidebar-brand-row { position: relative; box-sizing: border-box; display: flex; height: 68px; flex-shrink: 0; align-items: center; justify-content: center; padding: 10px 18px; border-bottom: 1px solid #f1f5f9; background: #fff; }
 .workspace-brand { display: inline-flex; align-items: center; gap: 10px; border-radius: 6px; color: var(--erp-text); font-size: 1.3125rem; font-weight: 700; letter-spacing: -0.6px; }
+.brand-image { height: 32px; max-width: 88px; object-fit: contain; flex-shrink: 0; }
+.sidebar-brand-row .workspace-brand { display: flex; width: 100%; max-width: 175px; height: 100%; justify-content: center; user-select: none; }
+.sidebar-brand-row .brand-image { display: block; width: 100%; height: auto; max-width: 100%; max-height: 100%; }
+.sidebar-brand-row .sidebar-close { position: absolute; inset-inline-end: 0; }
+.logo-settings-preview .brand-image { height: 64px; max-width: min(180px, 50vw); }
 .brand-mark { display: inline-flex; width: 29px; height: 27px; align-items: flex-end; gap: 3px; transform: skew(-12deg); color: var(--erp-primary); }
-.sidebar-workspace { display: flex; min-width: 0; align-items: center; gap: 9px; margin: 2px 2px 12px; border: 1px solid var(--erp-line); border-radius: 10px; background: var(--erp-bg); padding: 10px; }
-.workspace-monogram { display: grid; width: 36px; height: 36px; flex-shrink: 0; place-items: center; border-radius: 8px; background: linear-gradient(135deg, var(--erp-primary), #9d95f5); color: white; font-size: 0.75rem; font-weight: 700; }
-.sidebar-workspace p { color: var(--erp-heading); font-size: 0.875rem; font-weight: 650; }
-.sidebar-workspace div > span { display: block; color: var(--erp-muted); font-size: 0.75rem; }
 .sidebar-label { margin: 13px 13px 6px; color: var(--erp-muted); font-size: 0.75rem; font-weight: 650; letter-spacing: 0.08em; text-transform: uppercase; }
 .sidebar-link { display: flex; min-height: 42px; align-items: center; gap: 12px; border-radius: 8px; padding: 9px 13px; color: var(--erp-muted); font-size: 0.875rem; font-weight: 500; }
 .sidebar-link:hover { background: var(--erp-surface-alt); color: var(--erp-accent); }
@@ -320,6 +321,7 @@ button:focus-visible { outline: 2px solid var(--erp-primary); outline-offset: 3p
     .workspace-sidebar { transform: translateX(-100%); transition: transform 200ms ease; }
     .workspace-sidebar.is-open { transform: translateX(0); }
     .sidebar-toggle, .sidebar-close { display: inline-flex; }
+    .sidebar-brand-row { padding-inline: 44px; }
     :root { --erp-sidebar-width: 0px; --erp-gutter: 20px; }
     .workspace-sidebar { width: min(260px, calc(100vw - 36px)); box-shadow: 10px 0 30px rgb(30 27 40 / 14%); }
     body.navigation-open { overflow: hidden; }

@@ -1,6 +1,19 @@
 from django.urls import reverse
 
 from account.page_views import ProtectedAccountPageView
+from .branding import CHANGE_LOGO, VIEW_LOGO
+
+
+class LogoSettingsPageView(ProtectedAccountPageView):
+    template_name = 'common/logo_settings.html'
+    permission_required = (VIEW_LOGO,)
+
+    def get_context_data(self, **kwargs):
+        return super().get_context_data(
+            page_section='settings', settings_key='logo', page_label='Logo',
+            logo_api_url=reverse('common:logo-settings'), can_change_logo=self.request.user.has_perms(CHANGE_LOGO),
+            **kwargs,
+        )
 
 
 class TradeStatusPageView(ProtectedAccountPageView):

@@ -48,3 +48,18 @@ API structure. Pages additionally require view permission to reach their list.
 The default draft and trade statuses referenced by purchase or sales orders
 cannot be deleted (409). Product references protect ProductStatus records only.
 Settings edits apply exclusively to TradeStatus.
+
+## ERP logo
+
+Open **Settings → Logo** to check the current logo, upload a replacement, or
+restore the built-in mark. The saved logo appears in the workspace, on sign-in
+pages, and in branded PDF exports. PNG, JPEG and WebP uploads support files up to
+5 MB and 4,096 pixels per side. The server stores a PNG copy scaled to at most
+1,024 pixels per side and retains transparency.
+
+`GET /common/api/logo/` returns `is_custom` and `logo_url`. Grant
+`common.view_erpbranding` to open the page and read the settings. With
+`common.change_erpbranding`, multipart `PATCH` accepts a `logo` file and `DELETE`
+restores the default. Both writes use the session's CSRF token and record the
+acting user in the audit log. The returned image URL is public so sign-in pages
+can display the logo. Each upload gets a new URL to refresh cached images.

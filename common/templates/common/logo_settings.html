@@ -1,0 +1,33 @@
+{% extends 'layouts/dashboard.html' %}
+{% load static %}
+{% block title %}Logo | eManager{% endblock %}
+{% block content %}
+<div class="workspace-content" data-logo-settings data-api-url="{{ logo_api_url }}">
+    <div class="page-heading">
+        <div><p class="page-eyebrow">Settings</p><h1 class="page-title">Logo</h1></div>
+    </div>
+    <section class="user-form-card max-w-xl" aria-labelledby="logo-preview-heading">
+        <h2 class="section-title mb-4" id="logo-preview-heading">Current logo</h2>
+        <div class="workspace-brand logo-settings-preview mb-3" data-erp-brand>
+            {% include 'includes/brand_mark.html' %}
+            <span>eManager</span>
+        </div>
+        <p class="section-description" data-logo-description></p>
+        <p class="form-status mt-4" data-logo-status role="status" hidden></p>
+        <button type="button" class="secondary-button mt-4" data-logo-retry hidden>Retry loading</button>
+        {% if can_change_logo %}
+        <form class="mt-5" method="post" enctype="multipart/form-data" data-logo-form>
+            {% csrf_token %}
+            <label class="form-label" for="erp-logo-file">Upload logo</label>
+            <input class="form-input" id="erp-logo-file" name="logo" type="file" accept="image/png,image/jpeg,image/webp" aria-describedby="erp-logo-hint" required disabled>
+            <p class="section-description" id="erp-logo-hint">Choose a PNG, JPEG or WebP image of up to 5 MB.</p>
+            <div class="user-form-actions">
+                <button type="button" class="secondary-button" data-logo-reset disabled>Restore default</button>
+                <button type="submit" class="primary-button compact-primary" disabled>Save logo</button>
+            </div>
+        </form>
+        {% endif %}
+    </section>
+</div>
+{% endblock %}
+{% block workspace_js %}<script type="module" src="{% static 'common/js/logo_settings.js' %}"></script>{% endblock %}

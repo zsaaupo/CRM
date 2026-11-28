@@ -2,7 +2,7 @@
 <html lang="en">
 <head><meta charset="utf-8"><title>Stock counts</title></head>
 <body>
-    <header class="document-header"><div class="brand"><strong>{{ report.company.name }}</strong></div></header>
+    <header class="document-header"><div class="brand">{% if report.company.has_custom_logo %}<img class="logo" src="report-asset:///logo" alt="{{ report.company.name }}">{% endif %}<strong>{{ report.company.name }}</strong></div></header>
     <section class="document-title"><h1>Stock counts</h1></section>
     <table class="products">
         <thead><tr>{% for heading in report.headers %}<th scope="col">{{ heading }}</th>{% endfor %}</tr></thead>

@@ -35,3 +35,18 @@ class TradeStatus(Status):
     class Meta(Status.Meta):
         verbose_name = 'trade status'
         verbose_name_plural = 'trade statuses'
+
+
+class ERPBranding(TimeStampedModel):
+    id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
+    logo = models.BinaryField(default=bytes, blank=True)
+    logo_revision = models.UUIDField(null=True, blank=True, editable=False)
+
+    class Meta:
+        verbose_name = 'ERP branding'
+        verbose_name_plural = 'ERP branding'
+        default_permissions = ('view', 'change')
+        constraints = [models.CheckConstraint(condition=models.Q(id=1), name='common_erpbranding_singleton')]
+
+    def __str__(self):
+        return 'ERP logo'

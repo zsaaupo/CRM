@@ -9,6 +9,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from accounting.models import AccountTransaction, AccountTransfer, ExpensePayment, IncomePayment, PurchasePayment, SalesPayment
+from common.models import ERPBranding
 from hrm.models import (
     ApprovedLeaveDay, Employee, EmployeeDesignationChange, EmployeeLoan, LeaveBalance, LeaveBalanceMovement,
     LeaveRequest, LeaveType, PayrollPeriod, PayrollRun, Payslip, PayslipLine, SalaryPayment,
@@ -30,7 +31,7 @@ class ProjectAdminTests(TestCase):
     def test_all_project_models_have_admin_lists(self):
         self.client.force_login(self.root)
         posted_models = (AccountTransaction, AccountTransfer, ExpensePayment, IncomePayment, PurchasePayment, SalesPayment,
-                         ApprovedLeaveDay, LeaveBalance, LeaveBalanceMovement, EmployeeDesignationChange)
+                         ApprovedLeaveDay, LeaveBalance, LeaveBalanceMovement, EmployeeDesignationChange, ERPBranding)
         for app_label in ('account', 'accounting', 'common', 'hrm', 'inventory', 'people', 'purchase', 'report', 'sale', 'warehouse'):
             for model in apps.get_app_config(app_label).get_models():
                 with self.subTest(model=model._meta.label):

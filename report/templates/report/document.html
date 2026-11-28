@@ -4,7 +4,7 @@
 <body{% if report.kind == 'packing-slip' %} class="packing-slip"{% endif %}>
     <div class="running-footer"><span>Generated {{ report.generated_at }}</span><span>{{ report.company.name }}</span></div>
     <header class="document-header">
-        <div class="brand">{% if report.company.logo_path %}<img class="logo" src="report-asset:///logo" alt="{{ report.company.name }}">{% else %}<span class="brand-mark">e.</span>{% endif %}<div><strong>{{ report.company.name }}</strong><span class="brand-caption">BUSINESS DOCUMENT</span></div></div>
+        <div class="brand">{% if report.company.has_custom_logo or report.company.logo_path %}<img class="logo" src="report-asset:///logo" alt="{{ report.company.name }}">{% else %}<span class="brand-mark">e.</span>{% endif %}<div><strong>{{ report.company.name }}</strong><span class="brand-caption">BUSINESS DOCUMENT</span></div></div>
         <div class="company-contact">{% if report.company.address %}<p>{{ report.company.address }}</p>{% endif %}{% if report.company.phone %}<p>{{ report.company.phone }}</p>{% endif %}{% if report.company.email %}<p>{{ report.company.email }}</p>{% endif %}</div>
     </header>
     <section class="document-title">

@@ -4,7 +4,7 @@
 <body>
     <div class="running-footer"><span>Generated {{ report.generated_at }}</span><span>{{ report.company.name }}</span></div>
     <header class="document-header">
-        <div class="brand">{% if report.company.logo_path %}<img class="logo" src="report-asset:///logo" alt="{{ report.company.name }}">{% endif %}<div><strong>{{ report.company.name }}</strong><span class="brand-caption">PAYROLL</span></div></div>
+        <div class="brand">{% if report.company.has_custom_logo or report.company.logo_path %}<img class="logo" src="report-asset:///logo" alt="{{ report.company.name }}">{% endif %}<div><strong>{{ report.company.name }}</strong><span class="brand-caption">PAYROLL</span></div></div>
         {% if report.company.address %}<div class="company-contact"><p>{{ report.company.address }}</p></div>{% endif %}
     </header>
     <section class="document-title"><p class="eyebrow">{{ report.month }}</p><h1>Payslip</h1><div class="reference"><span>{{ report.number }}</span><span class="badge badge-complete">{{ report.status }}</span></div></section>

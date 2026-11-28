@@ -36,7 +36,7 @@ class Visibility:
 
 
 POLICIES = dict.fromkeys('''
-    auth.user auth.group common.productstatus common.tradestatus
+    auth.user auth.group common.productstatus common.tradestatus common.erpbranding
     inventory.product inventory.productcategory inventory.brand inventory.unitofmeasure inventory.producttype inventory.currency
     people.party people.lead accounting.expensecategory accounting.incomecategory sale.courier
     hrm.department hrm.designation hrm.employmenttype hrm.employeestatus hrm.employee hrm.employeedesignationchange
@@ -230,6 +230,8 @@ def audit_entry(instance, action, actor, resource=None):
     all_warehouses = False
     if resource == 'hrm.leaverequest':
         subject = instance.employee_id
+    elif resource == 'common.erpbranding':
+        reference = 'ERP logo'
     elif resource == 'hrm.employeedesignationchange':
         subject = instance.employee_id
         old = instance.recorded_previous_designation_name or 'Unassigned'
@@ -298,6 +300,8 @@ def saved(sender, instance, created, raw, using, update_fields, **kwargs):
     action = 'created' if created else 'updated'
     if resource == 'hrm.payrollevent':
         actor, action = instance.actor, instance.action
+    elif resource == 'common.erpbranding':
+        actor, action = instance.modified_by, 'logo_uploaded' if instance.logo_revision else 'logo_reset'
     elif resource == 'hrm.notice' and created:
         actor = instance.created_by
     elif resource == 'hrm.employeedesignationchange' and created:

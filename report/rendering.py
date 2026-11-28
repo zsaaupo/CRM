@@ -11,6 +11,8 @@ from django.conf import settings
 from django.template.loader import render_to_string
 from rest_framework.exceptions import APIException
 
+from common.branding import logo_png
+
 
 logger = logging.getLogger(__name__)
 ASSETS = Path(__file__).resolve().parent / 'static' / 'report'
@@ -40,13 +42,15 @@ def pdf_engine():
     return CSS, HTML, FontConfiguration
 
 
-def asset_fetcher(company):
+def asset_fetcher(company, *, uploaded_logo=None):
     def fetch(url):
         parsed = urlsplit(url)
         if parsed.scheme != 'report-asset' or parsed.netloc:
             raise ValueError('Only local report assets are allowed.')
         name = unquote(parsed.path).lstrip('/')
         if name == 'logo':
+            if uploaded_logo:
+                return {'file_obj': BytesIO(uploaded_logo), 'mime_type': 'image/png', 'redirected_url': url}
             path = Path(company['logo_path']).resolve()
             if path.suffix.lower() not in ('.png', '.jpg', '.jpeg', '.webp'):
                 raise ValueError('Use a PNG, JPEG or WebP report logo.')
@@ -62,7 +66,11 @@ def render_pdf(document, template_name='report/document.html', *, stylesheet='do
     try:
         CSS, HTML, FontConfiguration = pdf_engine()
         fonts = FontConfiguration()
-        fetch = asset_fetcher(document['company'])
+        company = document['company']
+        uploaded_logo = logo_png() if 'logo_path' in company else None
+        if uploaded_logo:
+            document = {**document, 'company': {**company, 'has_custom_logo': True}}
+        fetch = asset_fetcher(company, uploaded_logo=uploaded_logo)
         stylesheets = []
         if stylesheet:
             stylesheets.append(CSS(string=(ASSETS / stylesheet).read_text(encoding='utf-8'),

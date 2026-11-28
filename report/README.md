@@ -31,8 +31,10 @@ report endpoints while the rest of the site remains available.
 
 ## Branding and layout
 
-`REPORT_COMPANY` in Django settings accepts `name`, `address`, `phone`, `email`,
-and `logo_path`. A logo must be a local PNG, JPEG or WebP. Bundled Noto Sans and
+Branded reports use the uploaded image from **Settings → Logo**. The fallback
+uses each report's existing branding. `REPORT_COMPANY` in Django settings
+accepts `name`, `address`, `phone`, `email`, and a local PNG, JPEG or WebP
+`logo_path`. Bundled Noto Sans and
 Noto Sans Bengali font faces have their SIL Open Font License texts beside them.
 Only local report assets can be fetched during rendering; arbitrary network and
 file URLs are disabled. Model text uses Django template escaping.
