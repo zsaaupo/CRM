@@ -7,7 +7,17 @@
 {% include 'inventory/includes/field.html' with name='work_email' label='Work email' field_type='email' maxlength=254 only %}
 {% include 'inventory/includes/field.html' with name='work_phone' label='Work phone' field_type='tel' maxlength=32 only %}
 {% include 'inventory/includes/field.html' with name='department' label='Department' field_type='select' only %}
+{% if page_mode == 'edit' %}
+<div>
+    <label class="form-label" for="id_designation">Designation</label>
+    <select id="id_designation" class="form-input" name="designation" data-options-field="designation" data-label="Designation" aria-describedby="id_designation_hint" disabled>
+        <option value="">Loading designation…</option>
+    </select>
+    <p id="id_designation_hint" class="mt-2 text-xs text-stone-500">Record designation changes through Promotions.</p>
+</div>
+{% else %}
 {% include 'inventory/includes/field.html' with name='designation' label='Designation' field_type='select' only %}
+{% endif %}
 {% include 'inventory/includes/field.html' with name='employment_type' label='Employment type' field_type='select' required=True value='full-time' only %}
 {% include 'inventory/includes/field.html' with name='status' label='Employee status' field_type='select' required=True value='active' only %}
 {% include 'inventory/includes/field.html' with name='joining_date' label='Joining date' field_type='date' required=True value=joining_date_default only %}

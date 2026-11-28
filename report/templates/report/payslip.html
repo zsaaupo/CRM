@@ -13,6 +13,7 @@
         <div><span>Employee code</span><strong>{{ report.employee_code }}</strong></div>
         <div><span>Currency</span><strong>{{ report.currency }}</strong></div>
         {% if report.department %}<div><span>Department</span><strong>{{ report.department }}</strong></div>{% endif %}
+        {% if report.designation %}<div><span>Designation</span><strong>{{ report.designation }}</strong></div>{% endif %}
     </section>
     {% if report.attendance %}
     <div class="section-heading"><h2>Attendance and leave</h2></div>

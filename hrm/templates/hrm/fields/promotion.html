@@ -1,0 +1,9 @@
+{% if correcting %}
+{% include 'inventory/includes/field.html' with name='designation_id' label='Replacement designation' field_type='select' hint='Leave this blank to cancel the recorded change.' only %}
+{% include 'inventory/includes/field.html' with name='remarks' label='Reason for correction' field_type='textarea' required=True maxlength='255' only %}
+{% else %}
+{% include 'inventory/includes/field.html' with name='employee_id' label='Employee' field_type='select' required=True only %}
+{% include 'inventory/includes/field.html' with name='designation_id' label='Designation' field_type='select' required=True only %}
+{% include 'inventory/includes/field.html' with name='effective_date' label='Effective date' field_type='date' value=today required=True only %}
+{% include 'inventory/includes/field.html' with name='remarks' label='Remarks' field_type='textarea' maxlength='255' only %}
+{% endif %}

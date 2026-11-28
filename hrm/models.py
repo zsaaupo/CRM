@@ -14,7 +14,7 @@ from django.utils import timezone
 
 from common.models import TimeStampedModel, Status
 
-from .managers import EmployeeManager, EmployeeQuerySet
+from .managers import EmployeeDesignationChangeQuerySet, EmployeeManager, EmployeeQuerySet
 from .validators import validate_working_days
 
 
@@ -196,6 +196,63 @@ class Employee(TimeStampedModel):
 
     def __str__(self):
         return f'{self.employee_code} - {self.full_name}'
+
+
+class EmployeeDesignationChange(models.Model):
+    class Kind(models.TextChoices):
+        OPENING = 'opening', 'Opening assignment'
+        CHANGE = 'change', 'Designation change'
+        REPLACE = 'replace', 'Correction'
+        CANCEL = 'cancel', 'Cancellation'
+
+    employee = models.ForeignKey(Employee, on_delete=models.PROTECT, related_name='designation_history')
+    designation = models.ForeignKey(Designation, null=True, blank=True, on_delete=models.PROTECT,
+                                    related_name='designation_assignments')
+    previous_designation = models.ForeignKey(Designation, null=True, blank=True, on_delete=models.PROTECT,
+                                             related_name='previous_designation_assignments')
+    effective_date = models.DateField()
+    kind = models.CharField(max_length=8, choices=Kind.choices, default=Kind.CHANGE)
+    supersedes = models.OneToOneField('self', null=True, blank=True, on_delete=models.PROTECT, related_name='superseded_by')
+    employee_code = models.CharField(max_length=40, editable=False)
+    employee_name = models.CharField(max_length=150, editable=False)
+    designation_name = models.CharField(max_length=150, blank=True, editable=False)
+    recorded_previous_designation_name = models.CharField(max_length=150, blank=True, editable=False)
+    remarks = models.CharField(max_length=255, blank=True)
+    recorded_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.PROTECT,
+                                    related_name='recorded_designation_changes')
+    created_at = models.DateTimeField(default=timezone.now, editable=False)
+
+    objects = EmployeeDesignationChangeQuerySet.as_manager()
+
+    class Meta:
+        ordering = ['-effective_date', '-pk']
+        default_permissions = ('view', 'add')
+        permissions = [('correct_employeedesignationchange', 'Can correct employee designation history')]
+        indexes = [
+            models.Index(fields=['employee', '-effective_date', '-id'], name='hrm_designation_employee_idx'),
+            models.Index(fields=['-effective_date', '-id'], name='hrm_designation_history_idx'),
+        ]
+        constraints = [
+            models.UniqueConstraint(fields=['employee'], condition=Q(kind='opening'), name='hrm_designation_one_opening'),
+            models.UniqueConstraint(fields=['employee', 'effective_date'], condition=Q(kind='change'),
+                                    name='hrm_designation_one_change_day'),
+            models.CheckConstraint(condition=(Q(kind='opening', supersedes__isnull=True)
+                | Q(kind='change', supersedes__isnull=True, designation__isnull=False, recorded_by__isnull=False)
+                | Q(kind='replace', supersedes__isnull=False, designation__isnull=False, recorded_by__isnull=False)
+                | Q(kind='cancel', supersedes__isnull=False, designation__isnull=True, recorded_by__isnull=False)),
+                name='hrm_designation_entry_valid'),
+        ]
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            raise ValidationError('Designation history is append-only.')
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError('Designation history is append-only.')
+
+    def __str__(self):
+        return f'{self.employee_code} - {self.get_kind_display()} ({self.effective_date})'
 
 
 # Attendance
@@ -762,6 +819,7 @@ class Payslip(TimeStampedModel):
     employee_code = models.CharField(max_length=40, editable=False)
     employee_name = models.CharField(max_length=150, editable=False)
     department_name = models.CharField(max_length=150, blank=True, editable=False)
+    designation_name = models.CharField(max_length=150, blank=True, editable=False)
     gross_pay = models.DecimalField(max_digits=18, decimal_places=4)
     total_deductions = models.DecimalField(max_digits=18, decimal_places=4)
     net_pay = models.DecimalField(max_digits=18, decimal_places=4)

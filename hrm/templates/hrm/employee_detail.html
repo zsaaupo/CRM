@@ -5,7 +5,7 @@
 <div class="workspace-content" data-record-detail data-api-url="{{ detail_api_url }}" data-title-field="full_name" data-login-url="{% url 'account_pages:login' %}">
     <div class="page-heading">
         <div class="min-w-0 max-w-full"><p class="page-eyebrow">HRM</p><h1 class="page-title break-all"><span data-record-title>Employee details</span><span class="text-emerald-600">.</span></h1><p class="page-description">Contact information, employment details and workplace.</p></div>
-        <div class="flex flex-wrap gap-3"><a href="{{ list_url }}" class="secondary-button">Back to employees <span aria-hidden="true">&rarr;</span></a>{% if edit_url %}<a href="{{ edit_url }}" class="primary-button compact-primary">Edit employee</a>{% endif %}</div>
+        <div class="flex flex-wrap gap-3"><a href="{{ list_url }}" class="secondary-button">Back to employees <span aria-hidden="true">&rarr;</span></a>{% if promotion_url %}<a href="{{ promotion_url }}" class="secondary-button">Designation history</a>{% endif %}{% if edit_url %}<a href="{{ edit_url }}" class="primary-button compact-primary">Edit employee</a>{% endif %}</div>
     </div>
     {% include 'includes/detail_status.html' %}
     <div data-record-content hidden>

@@ -32,6 +32,43 @@ archives. `Employee.objects` returns current records and `Employee.all_objects`
 includes archived records. Referenced employment lookups, workplaces and linked
 users cannot be deleted while retained employee records reference them.
 
+## Promotions and designation history
+
+Open **People & Payroll → Employee → Promotions and designation history** and
+select **Record change**. Pick a current employee with Active or On leave status,
+an active designation, and an effective date within employment and recorded
+history. Employee details link to that employee's filtered history. A new employee's
+opening designation is set on the employee form. The migration captures existing
+titles as opening assignments on the cutover date or the joining date, whichever
+is later.
+
+The history allows one effective change per employee per day. Corrections append
+a linked entry with a reason. Leave the replacement designation blank to cancel
+that day's change. Record a new date to reschedule it. Backdated changes preserve
+the latest title in effect today. Future changes apply on their effective date in
+the company timezone. Scheduled changes outside employment after departure or
+archival stay visible as skipped. New payslips capture the designation from the
+last payable day. Record any related salary change in Employee Compensation.
+
+The directory and profile resolve the effective title at read time. To keep the
+stored employee designation synchronized, schedule the following command daily.
+It also catches up changes from missed runs.
+
+```powershell
+.\venv\Scripts\python.exe manage.py sync_employee_designations
+```
+
+Grant `hrm.view_employeedesignationchange` to view the ledger. Add
+`hrm.add_employeedesignationchange` to record changes or
+`hrm.correct_employeedesignationchange` to correct them. The ledger in Django
+admin is read-only. The audit log records the author and effective date alongside
+the designation change.
+
+`GET /hrm/api/promotions/` returns paginated history and accepts `employee_id` and
+`q` filters. `POST /hrm/api/promotions/` accepts `employee_id`, `designation_id`,
+`effective_date` (`YYYY-MM-DD`), and optional `remarks`. Submit a `designation_id`
+or null, plus required `remarks`, to `POST /hrm/api/promotions/<id>/correction/`.
+
 ## Notices
 
 The Notices board lives at `/hrm/notices/` under **People & Payroll**. Grant

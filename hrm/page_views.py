@@ -14,7 +14,7 @@ from .models import Employee, EmployeeAttendanceStatus, LeaveRequest, PayrollAdj
 from .payroll import RECALCULABLE
 from .payroll_workflow import RUN_ACTIONS
 from .permissions import (ALLOCATE_LEAVE_BALANCES, NOTICE_PUBLISH_PERMISSIONS, NOTICE_REMOVE_PERMISSIONS, PAYROLL_CALCULATE,
-                          PAYROLL_DETAIL, PAYROLL_REVIEW_ADJUSTMENT, REVIEW_LEAVE_PERMISSION, can_apply_for_leave,
+                          PAYROLL_DETAIL, PAYROLL_REVIEW_ADJUSTMENT, REVIEW_LEAVE_PERMISSION, VIEW_PROMOTIONS, can_apply_for_leave,
                           can_view_leave_balances, can_view_notices, leave_requests_for_user)
 
 
@@ -254,6 +254,8 @@ class EmployeeDetailPageView(HRMPageView):
         })
         if self.request.user.has_perm('hrm.change_employee'):
             context['edit_url'] = reverse('hrm_pages:edit-employee', args=[employee.pk])
+        if self.request.user.has_perm(VIEW_PROMOTIONS):
+            context['promotion_url'] = reverse('hrm_pages:promotion-list') + '?' + urlencode({'employee_id': employee.pk})
         return context
 
 

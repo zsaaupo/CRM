@@ -66,6 +66,11 @@ export function initializePayroll(workspace) {
         for (const slip of data.payslips) {
             const row = node("tr");
             const name = node("td", `${slip.employee_name} (${slip.employee_code})`);
+            if (slip.designation_name) {
+                const designation = node("small", slip.designation_name);
+                designation.className = "block text-stone-500";
+                name.append(designation);
+            }
             const cell = node("td");
             cell.append(breakdown(slip, data.currency));
             if (data.published && slip.id && workspace.dataset.payslipPdfTemplate) {

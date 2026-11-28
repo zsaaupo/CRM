@@ -12,6 +12,7 @@ from .models import (
     SalaryComponent, SalaryStructure, SalaryStructureLine, WorkSchedule,
 )
 from .permissions import REVIEW_LEAVE_PERMISSION, check_employee_user_link
+from .promotions import create_opening_designation, with_effective_designation
 from .services import check_basic_salary_line_removal, lock_salary_record
 
 
@@ -87,16 +88,35 @@ class EmployeeSerializer(CatalogSerializer):
         check_employee_user_link(request.user if request else None, self.instance, value)
         return value
 
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        if hasattr(instance, 'effective_designation_id'):
+            data['designation'] = instance.effective_designation_id
+            data['designation_name'] = instance.effective_designation_name
+        return data
+
+    @transaction.atomic
+    def create(self, validated_data):
+        employee = super().create(validated_data)
+        request = self.context.get('request')
+        create_opening_designation(employee, request.user if request else None)
+        return employee
+
     @transaction.atomic
     def update(self, instance, validated_data):
         # Claim the row before reloading it, including on SQLite. A stale update
         # must never save is_archived=False over a concurrent archive.
         if not Employee.objects.filter(pk=instance.pk).update(updated_at=F('updated_at')):
             raise NotFound('Employee not found.')
-        self.instance = Employee.objects.select_for_update().get(pk=instance.pk)
+        self.instance = with_effective_designation(Employee.objects).get(pk=instance.pk)
+        if 'designation' in validated_data:
+            designation = validated_data.pop('designation')
+            if (designation.pk if designation else None) != self.instance.effective_designation_id:
+                raise serializers.ValidationError({'designation': 'Record designation changes through Promotions.'})
         if 'user' in validated_data:
             self.validate_user(validated_data['user'])
-        return super().update(self.instance, self.validate(validated_data))
+        updated = super().update(self.instance, self.validate(validated_data))
+        return with_effective_designation(Employee.objects).get(pk=updated.pk)
 
     class Meta:
         model = Employee

@@ -102,7 +102,8 @@ def payslip_document(pk):
         return {
             'company': {'name': 'eManager', 'address': '', 'logo_path': '', **getattr(settings, 'REPORT_COMPANY', {})},
             'number': f'PS-{slip.pk}', 'employee': slip.employee_name, 'employee_code': slip.employee_code,
-            'department': slip.department_name, 'month': run.period.month.strftime('%B %Y'), 'currency': run.currency_id,
+            'department': slip.department_name, 'designation': slip.designation_name,
+            'month': run.period.month.strftime('%B %Y'), 'currency': run.currency_id,
             'status': run.get_status_display(), 'generated_at': timezone.localtime().strftime('%d %b %Y, %H:%M %Z'),
             'approved_by': run.approved_by.get_username() if run.approved_by_id else '',
             'attendance': slip.calculation_inputs.get('attendance_summary'),

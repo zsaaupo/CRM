@@ -33,6 +33,8 @@ from .models import (
     SalaryStructureLine,
 )
 from .notice_api import NoticeListCreateAPIView, NoticeOptionsAPIView, NoticeRemoveAPIView
+from .promotion_api import (CorrectionOptionsAPIView, PromotionCorrectionAPIView, PromotionDetailAPIView,
+                            PromotionListCreateAPIView, PromotionOptionsAPIView)
 from .leave_balance_api import LeaveBalanceAllocationAPIView, LeaveBalanceListAPIView
 from .payroll_api import (
     PayrollCalculateAPIView, PayrollOptionsAPIView, PayrollPreviewAPIView, PayrollRunDetailAPIView, PayrollRunListAPIView,
@@ -46,6 +48,11 @@ from .payroll_workflow import RUN_ACTIONS
 app_name = 'hrm'
 
 urlpatterns = [
+    path('promotions/', PromotionListCreateAPIView.as_view(), name='promotion-list'),
+    path('promotions/options/', PromotionOptionsAPIView.as_view(), name='promotion-options'),
+    path('promotions/correction/options/', CorrectionOptionsAPIView.as_view(), name='promotion-correction-options'),
+    path('promotions/<int:pk>/', PromotionDetailAPIView.as_view(), name='promotion-detail'),
+    path('promotions/<int:pk>/correction/', PromotionCorrectionAPIView.as_view(), name='promotion-correction'),
     path('notices/', NoticeListCreateAPIView.as_view(), name='notice-list'),
     path('notices/options/', NoticeOptionsAPIView.as_view(), name='notice-options'),
     path('notices/<int:pk>/', NoticeRemoveAPIView.as_view(), name='notice-remove'),

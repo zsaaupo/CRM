@@ -23,6 +23,7 @@ from .models import (
     SalaryComponent, SalaryStructure, SalaryStructureLine, WorkSchedule,
 )
 from .permissions import ADD_LEAVE_PERMISSION, REVIEW_LEAVE_PERMISSION, VIEW_LEAVE_PERMISSION, leave_requests_for_user
+from .promotions import with_effective_designation
 from .serializers import (
     AttendanceFilterSerializer, AttendancePolicySerializer, AttendanceSerializer, DepartmentSerializer, DesignationSerializer,
     EmployeeAttendanceStatusSerializer, EmployeeCompensationFilterSerializer, EmployeeCompensationSerializer,
@@ -125,14 +126,18 @@ class EmployeeStatusUpdateAPIView(BaseUpdateAPIView):
 
 
 class EmployeeQuerysetMixin:
-    search_fields = ['employee_code', 'full_name', 'work_email', 'work_phone', 'department__name', 'designation__name']
+    search_fields = ['employee_code', 'full_name', 'work_email', 'work_phone', 'department__name', 'effective_designation_name']
     ordering = ['full_name', 'pk']
 
     def get_queryset(self):
+        self.queryset = with_effective_designation(type(self).queryset)
         queryset = super().get_queryset()
         filters = EmployeeFilterSerializer(data=self.request.query_params.dict())
         filters.is_valid(raise_exception=True)
-        return queryset.filter(**filters.validated_data)
+        values = filters.validated_data
+        if 'designation' in values:
+            values['effective_designation_id'] = values.pop('designation')
+        return queryset.filter(**values)
 
 
 def employee_queryset():
@@ -172,7 +177,8 @@ class EmployeeOptionsAPIView(BaseAPIMixin, APIView):
 
     def get(self, request):
         def choices(model, field, value_field='pk'):
-            existing = getattr(self.employee, f'{field}_id', None)
+            attribute = 'effective_designation_id' if field == 'designation' else f'{field}_id'
+            existing = getattr(self.employee, attribute, None)
             queryset = model.objects.filter(Q(is_active=True) | Q(**{value_field: existing}))
             return [{'value': row[value_field], 'label': row['name']}
                     for row in queryset.order_by('name', 'pk').values(value_field, 'name')]
@@ -208,7 +214,7 @@ class EmployeeEditOptionsAPIView(EmployeeOptionsAPIView):
     required_permissions = ('hrm.view_employee', 'hrm.change_employee')
 
     def get(self, request, pk):
-        self.employee = get_object_or_404(Employee, pk=pk)
+        self.employee = get_object_or_404(with_effective_designation(employee_queryset()), pk=pk)
         return super().get(request)
 
 

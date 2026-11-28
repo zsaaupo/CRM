@@ -21,6 +21,7 @@ from .models import (
     PayrollRun, Payslip, PayslipLine, SalaryComponent, SalaryStructureLine,
 )
 from .payroll_attendance import attendance_policy_lines
+from .promotions import effective_history
 
 
 MONEY_PRECISION = Decimal('0.0001')
@@ -65,6 +66,7 @@ def payroll_employees(start, end, currency):
     employed = Q(joining_date__lte=end) & (Q(leaving_date__isnull=True) | Q(leaving_date__gte=start)) & (
         Q(is_archived=False) | Q(leaving_date__isnull=False))
     corrections = adjustments.filter(source=PayrollAdjustment.Source.CORRECTION, employee_id=OuterRef('pk'))
+    designations = effective_history().filter(effective_date__lte=end)
     return Employee.all_objects.filter(employed | Exists(corrections)).select_related('department').order_by('full_name', 'pk').prefetch_related(
         Prefetch('compensation_assignments', queryset=compensation, to_attr='payroll_compensation'),
         Prefetch('schedule_assignments', queryset=schedules, to_attr='payroll_schedules'),
@@ -73,6 +75,7 @@ def payroll_employees(start, end, currency):
         Prefetch('attendance_records', queryset=attendance, to_attr='payroll_attendance'),
         Prefetch('payroll_adjustments', queryset=adjustments, to_attr='approved_payroll_adjustments'),
         Prefetch('payroll_loans', queryset=loans, to_attr='due_payroll_loans'),
+        Prefetch('designation_history', queryset=designations, to_attr='payroll_designations'),
     )
 
 
@@ -228,6 +231,11 @@ def calculate_employee(employee, start, end, currency, holidays, divisor, snapsh
 
     lines = list(components.values())
     if payable_days:
+        last_payable_day = max(payable_days)
+        assignment = next((entry for entry in employee.payroll_designations if entry.effective_date <= last_payable_day), None)
+        if assignment and assignment.designation_id:
+            result['designation_name'] = assignment.designation_name
+            result['calculation_inputs']['designation_change_id'] = assignment.pk
         if snapshot:
             lines.extend({'type': DEDUCTION, **line} for line in attendance_policy_lines(
                 employee, payable_days, snapshot, divisor, balance_plan, result, deduction_salary))

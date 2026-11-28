@@ -1,0 +1,28 @@
+{% extends 'layouts/dashboard.html' %}
+{% block title %}Designation change | eManager{% endblock %}
+{% block content %}
+<div class="workspace-content">
+    <div class="page-heading">
+        <div><p class="page-eyebrow">HRM</p><h1 class="page-title">Designation change</h1></div>
+        <div class="flex flex-wrap gap-3">
+            <a class="secondary-button" href="{{ list_url }}?employee_id={{ entry.employee_id }}">Employee history</a>
+            {% if correction_url %}<a class="primary-button compact-primary" href="{{ correction_url }}">Record correction</a>{% endif %}
+        </div>
+    </div>
+    <section class="user-form-card max-w-2xl" aria-label="Designation change details">
+        <dl class="profile-grid">
+            <div><dt>Employee</dt><dd>{{ entry.employee_name }} ({{ entry.employee_code }})</dd></div>
+            <div><dt>Status</dt><dd>{{ entry.status }}</dd></div>
+            <div><dt>Previous designation</dt><dd>{{ entry.previous_designation_name|default:'Unassigned' }}</dd></div>
+            <div><dt>Designation</dt><dd>{{ entry.designation_name|default:'Unassigned' }}</dd></div>
+            {% if entry.recorded_previous_designation_name != entry.previous_designation_name %}
+            <div><dt>Previous designation when recorded</dt><dd>{{ entry.recorded_previous_designation_name|default:'Unassigned' }}</dd></div>
+            {% endif %}
+            <div><dt>Effective date</dt><dd>{{ entry.effective_date }}</dd></div>
+            <div><dt>Recorded by</dt><dd>{{ entry.recorded_by_name|default:'System' }}</dd></div>
+            {% if entry.supersedes_id %}<div><dt>Prior entry</dt><dd><a class="text-button" href="{% url 'hrm_pages:promotion-detail' entry.supersedes_id %}">View prior entry</a></dd></div>{% endif %}
+            {% if entry.remarks %}<div class="user-form-full"><dt>Remarks</dt><dd>{{ entry.remarks|linebreaksbr }}</dd></div>{% endif %}
+        </dl>
+    </section>
+</div>
+{% endblock %}

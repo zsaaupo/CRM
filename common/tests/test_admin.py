@@ -10,8 +10,8 @@ from django.utils import timezone
 
 from accounting.models import AccountTransaction, AccountTransfer, ExpensePayment, IncomePayment, PurchasePayment, SalesPayment
 from hrm.models import (
-    ApprovedLeaveDay, Employee, EmployeeLoan, LeaveBalance, LeaveBalanceMovement, LeaveRequest, LeaveType, PayrollPeriod,
-    PayrollRun, Payslip, PayslipLine, SalaryPayment,
+    ApprovedLeaveDay, Employee, EmployeeDesignationChange, EmployeeLoan, LeaveBalance, LeaveBalanceMovement,
+    LeaveRequest, LeaveType, PayrollPeriod, PayrollRun, Payslip, PayslipLine, SalaryPayment,
 )
 from sale.models import SalesOrder, SalesReturn
 from warehouse.models import RoleWarehouseAccess, WareHouse
@@ -30,7 +30,7 @@ class ProjectAdminTests(TestCase):
     def test_all_project_models_have_admin_lists(self):
         self.client.force_login(self.root)
         posted_models = (AccountTransaction, AccountTransfer, ExpensePayment, IncomePayment, PurchasePayment, SalesPayment,
-                         ApprovedLeaveDay, LeaveBalance, LeaveBalanceMovement)
+                         ApprovedLeaveDay, LeaveBalance, LeaveBalanceMovement, EmployeeDesignationChange)
         for app_label in ('account', 'accounting', 'common', 'hrm', 'inventory', 'people', 'purchase', 'report', 'sale', 'warehouse'):
             for model in apps.get_app_config(app_label).get_models():
                 with self.subTest(model=model._meta.label):

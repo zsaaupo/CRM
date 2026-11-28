@@ -8,6 +8,9 @@ from .models import Employee
 REVIEW_LEAVE_PERMISSION = 'hrm.review_leaverequest'
 VIEW_LEAVE_PERMISSION = 'hrm.view_leaverequest'
 ADD_LEAVE_PERMISSION = 'hrm.add_leaverequest'
+VIEW_PROMOTIONS = 'hrm.view_employeedesignationchange'
+RECORD_PROMOTIONS = (VIEW_PROMOTIONS, 'hrm.add_employeedesignationchange')
+CORRECT_PROMOTIONS = (VIEW_PROMOTIONS, 'hrm.correct_employeedesignationchange')
 VIEW_LEAVE_BALANCE = 'hrm.view_leavebalance'
 VIEW_ALL_LEAVE_BALANCES = (VIEW_LEAVE_BALANCE, 'hrm.view_all_leavebalance')
 ALLOCATE_LEAVE_BALANCES = (*VIEW_ALL_LEAVE_BALANCES, 'hrm.allocate_leavebalance')

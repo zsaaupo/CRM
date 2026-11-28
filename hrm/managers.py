@@ -1,3 +1,4 @@
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
 
@@ -18,3 +19,11 @@ class EmployeeQuerySet(models.QuerySet):
 class EmployeeManager(models.Manager.from_queryset(EmployeeQuerySet)):
     def get_queryset(self):
         return super().get_queryset().filter(is_archived=False)
+
+
+class EmployeeDesignationChangeQuerySet(models.QuerySet):
+    def update(self, **kwargs):
+        raise ValidationError('Designation history is append-only.')
+
+    def delete(self):
+        raise ValidationError('Designation history is append-only.')

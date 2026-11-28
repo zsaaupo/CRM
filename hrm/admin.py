@@ -3,18 +3,22 @@ from uuid import uuid4
 from django import forms
 from django.contrib import admin, messages
 from django.core.exceptions import PermissionDenied, ValidationError
+from django.urls import reverse
+from django.utils.html import format_html
 
 from common.admin import AuditedAdmin
 
 from .models import (
     ApprovedLeaveDay, Attendance, AttendancePolicy, Department, Designation, Employee, EmployeeAttendanceStatus,
-    EmployeeCompensation, EmployeeLoan, EmployeeScheduleAssignment, EmployeeStatus, EmploymentType, Holiday, LeaveBalance,
+    EmployeeCompensation, EmployeeDesignationChange, EmployeeLoan, EmployeeScheduleAssignment, EmployeeStatus,
+    EmploymentType, Holiday, LeaveBalance,
     LeaveBalanceMovement, LeaveRequest, LeaveType, LoanInstallment,
     PayrollAdjustment, PayrollDeductionRule, PayrollEvent, PayrollPeriod, PayrollRun, Payslip, PayslipLine,
     SalaryComponent, SalaryPayment, SalaryStructure, SalaryStructureLine, WorkSchedule,
 )
-from .permissions import (REVIEW_LEAVE_PERMISSION, VIEW_ALL_LEAVE_BALANCES, VIEW_LEAVE_PERMISSION,
+from .permissions import (REVIEW_LEAVE_PERMISSION, VIEW_ALL_LEAVE_BALANCES, VIEW_LEAVE_PERMISSION, VIEW_PROMOTIONS,
                           check_employee_user_link, leave_requests_for_user)
+from .promotions import create_opening_designation, lock_employee, with_effective_designation
 from .services import LeaveAlreadyReviewed, review_leave_request
 
 
@@ -42,7 +46,7 @@ class EmployeeAdminForm(forms.ModelForm):
 @admin.register(Employee)
 class EmployeeAdmin(admin.ModelAdmin):
     form = EmployeeAdminForm
-    list_display = ['employee_code', 'full_name', 'department', 'designation', 'status', 'warehouse',
+    list_display = ['employee_code', 'full_name', 'department', 'current_designation', 'status', 'warehouse',
                     'is_archived', 'archived_at', 'archived_by']
     search_fields = ['employee_code', 'full_name', 'work_email', 'work_phone']
     list_filter = ['is_archived', 'status', 'employment_type', 'department', 'warehouse']
@@ -57,12 +61,27 @@ class EmployeeAdmin(admin.ModelAdmin):
         return form
 
     def get_readonly_fields(self, request, obj=None):
+        fields = [*self.readonly_fields, *(['designation', 'current_designation'] if obj else [])]
+        if obj and request.user.has_perm(VIEW_PROMOTIONS):
+            fields.append('promotion_history')
         if not request.user.has_perm('auth.change_user'):
-            return [*self.readonly_fields, 'user']
-        return self.readonly_fields
+            fields.append('user')
+        return fields
+
+    def get_fields(self, request, obj=None):
+        return [field for field in super().get_fields(request, obj) if not (obj and field == 'designation')]
+
+    @admin.display(description='Current designation', ordering='effective_designation_name')
+    def current_designation(self, obj):
+        return obj.effective_designation_name
+
+    @admin.display(description='Designation history')
+    def promotion_history(self, obj):
+        return format_html('<a href="{}?employee_id={}">Open designation history</a>',
+                           reverse('hrm_pages:promotion-list'), obj.pk)
 
     def get_queryset(self, request):
-        queryset = self.model.all_objects.all()
+        queryset = with_effective_designation(self.model.all_objects.all())
         ordering = self.get_ordering(request)
         return queryset.order_by(*ordering) if ordering else queryset
 
@@ -84,16 +103,37 @@ class EmployeeAdmin(admin.ModelAdmin):
         return ([str(obj) for obj in employees], {str(self.opts.verbose_name_plural): len(employees)}, permissions, [])
 
     def save_model(self, request, obj, form, change):
-        if not change:
+        if change:
+            obj.designation_id = lock_employee(obj.pk).designation_id
+        else:
             obj.create_by = request.user.get_username()
         obj.modified_by = request.user.get_username()
         super().save_model(request, obj, form, change)
+        if not change:
+            create_opening_designation(obj, request.user)
 
     def delete_model(self, request, obj):
         obj.delete(actor=request.user.get_username())
 
     def delete_queryset(self, request, queryset):
         queryset.delete(actor=request.user.get_username())
+
+
+@admin.register(EmployeeDesignationChange)
+class EmployeeDesignationChangeAdmin(admin.ModelAdmin):
+    list_display = ['employee_code', 'employee_name', 'kind', 'designation_name', 'effective_date', 'recorded_by']
+    list_filter = ['kind', 'effective_date']
+    search_fields = ['employee_code', 'employee_name', 'designation_name']
+    list_select_related = ['recorded_by']
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(WorkSchedule)

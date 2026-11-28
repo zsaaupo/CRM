@@ -42,7 +42,7 @@ class PayslipSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Payslip
-        fields = ['id', 'employee', 'employee_code', 'employee_name', 'department_name', 'gross_pay', 'total_deductions', 'net_pay',
+        fields = ['id', 'employee', 'employee_code', 'employee_name', 'department_name', 'designation_name', 'gross_pay', 'total_deductions', 'net_pay',
                   'calculation_inputs', 'warnings', 'lines']
 
 

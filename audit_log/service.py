@@ -39,7 +39,7 @@ POLICIES = dict.fromkeys('''
     auth.user auth.group common.productstatus common.tradestatus
     inventory.product inventory.productcategory inventory.brand inventory.unitofmeasure inventory.producttype inventory.currency
     people.party people.lead accounting.expensecategory accounting.incomecategory sale.courier
-    hrm.department hrm.designation hrm.employmenttype hrm.employeestatus hrm.employee
+    hrm.department hrm.designation hrm.employmenttype hrm.employeestatus hrm.employee hrm.employeedesignationchange
     hrm.workschedule hrm.employeescheduleassignment hrm.holiday hrm.employeeattendancestatus hrm.attendance
     hrm.attendancepolicy hrm.leavetype hrm.leaverequest hrm.salarycomponent hrm.salarystructure hrm.salarystructureline
     hrm.employeecompensation hrm.payrollperiod hrm.payrollrun hrm.payrolladjustment
@@ -230,6 +230,11 @@ def audit_entry(instance, action, actor, resource=None):
     all_warehouses = False
     if resource == 'hrm.leaverequest':
         subject = instance.employee_id
+    elif resource == 'hrm.employeedesignationchange':
+        subject = instance.employee_id
+        old = instance.recorded_previous_designation_name or 'Unassigned'
+        new = instance.designation_name or ('Cancelled' if instance.kind == 'cancel' else 'Unassigned')
+        reference = f'{instance.employee_code[:36]} {instance.effective_date} · {old[:32]} → {new[:32]}'
     elif resource == 'warehouse.rolewarehouseaccess':
         subject = instance.role_id
         restricted_role = instance.role.user_set.filter(is_superuser=True).exists()
@@ -295,6 +300,11 @@ def saved(sender, instance, created, raw, using, update_fields, **kwargs):
         actor, action = instance.actor, instance.action
     elif resource == 'hrm.notice' and created:
         actor = instance.created_by
+    elif resource == 'hrm.employeedesignationchange' and created:
+        if instance.kind == 'opening':
+            return
+        actor = instance.recorded_by
+        action = {'change': 'recorded', 'replace': 'corrected', 'cancel': 'cancelled'}[instance.kind]
     elif created and resource in {'accounting.accounttransfer', 'accounting.accounttransaction', 'accounting.expensepayment',
                                   'accounting.incomepayment', 'accounting.salespayment', 'accounting.purchasepayment',
                                   'accounting.chalanpayment'}:

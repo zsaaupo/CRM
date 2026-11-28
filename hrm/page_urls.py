@@ -7,12 +7,18 @@ from .page_views import (
     LeaveRequestDetailPageView, LeaveRequestListPageView, NoticeBoardPageView,
     PayrollAdjustmentDetailPageView, PayrollCalculationPageView, PayrollReportPageView, PayrollRunDetailPageView,
 )
+from .promotion_pages import (PromotionAddPageView, PromotionCorrectionPageView, PromotionDetailPageView,
+                              PromotionListPageView)
 
 
 app_name = 'hrm_pages'
 
 urlpatterns = [
     path('notices/', NoticeBoardPageView.as_view(), name='notice-board'),
+    path('promotions/', PromotionListPageView.as_view(), name='promotion-list'),
+    path('promotions/add/', PromotionAddPageView.as_view(), name='add-promotion'),
+    path('promotions/<int:pk>/', PromotionDetailPageView.as_view(), name='promotion-detail'),
+    path('promotions/<int:pk>/correct/', PromotionCorrectionPageView.as_view(), name='correct-promotion'),
     path('attendance/import/', AttendanceImportPageView.as_view(), name='import-attendance'),
     path('employees/<int:pk>/', EmployeeDetailPageView.as_view(), name='employee-detail'),
     path('leave-requests/', LeaveRequestListPageView.as_view(), name='leave-request-list'),
