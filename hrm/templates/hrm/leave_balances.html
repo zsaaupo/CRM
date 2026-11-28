@@ -1,0 +1,8 @@
+{% extends 'inventory/list.html' %}
+{% block catalog_filters %}
+<form class="px-5 pb-4 flex flex-wrap items-end gap-3" data-catalog-filters aria-label="Filter leave balances">
+    <div><label class="form-label" for="leave-as-of">Balance date</label>
+    <input class="form-input" id="leave-as-of" name="as_of" type="date" value="{{ today|date:'Y-m-d' }}" required></div>
+    <button type="submit" class="secondary-button">Apply date</button>
+</form>
+{% endblock %}

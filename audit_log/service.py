@@ -41,7 +41,7 @@ POLICIES = dict.fromkeys('''
     people.party people.lead accounting.expensecategory accounting.incomecategory sale.courier
     hrm.department hrm.designation hrm.employmenttype hrm.employeestatus hrm.employee
     hrm.workschedule hrm.employeescheduleassignment hrm.holiday hrm.employeeattendancestatus hrm.attendance
-    hrm.leavetype hrm.leaverequest hrm.salarycomponent hrm.salarystructure hrm.salarystructureline
+    hrm.attendancepolicy hrm.leavetype hrm.leaverequest hrm.salarycomponent hrm.salarystructure hrm.salarystructureline
     hrm.employeecompensation hrm.payrollperiod hrm.payrollrun hrm.payrolladjustment
     hrm.payrolldeductionrule hrm.employeeloan hrm.loaninstallment
 '''.split(), Visibility())
@@ -55,6 +55,9 @@ POLICIES.update({
     'auth.group_permissions': Visibility(permissions=ACCESS_RULES['manage_role_permissions']),
     'auth.user_permissions': Visibility(permissions=ACCESS_RULES['manage_role_permissions'] + ACCESS_RULES['view_users']),
     'hrm.notice': Visibility(permissions=NOTICE_BOARD_PERMISSIONS),
+    'hrm.leavebalance': Visibility(permissions=('hrm.view_leavebalance', 'hrm.view_all_leavebalance')),
+    'hrm.leavebalancemovement': Visibility(permissions=('hrm.view_leavebalance', 'hrm.view_all_leavebalance')),
+    'hrm.approvedleaveday': Visibility(permissions=('hrm.view_leaverequest', REVIEW_LEAVE_PERMISSION)),
     'hrm.payslip': Visibility(permissions=PAYROLL_DETAIL),
     'hrm.payslipline': Visibility(permissions=PAYROLL_DETAIL),
     'hrm.payrollevent': Visibility(permissions=PAYROLL_DETAIL),

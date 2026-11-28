@@ -8,6 +8,9 @@ from .models import Employee
 REVIEW_LEAVE_PERMISSION = 'hrm.review_leaverequest'
 VIEW_LEAVE_PERMISSION = 'hrm.view_leaverequest'
 ADD_LEAVE_PERMISSION = 'hrm.add_leaverequest'
+VIEW_LEAVE_BALANCE = 'hrm.view_leavebalance'
+VIEW_ALL_LEAVE_BALANCES = (VIEW_LEAVE_BALANCE, 'hrm.view_all_leavebalance')
+ALLOCATE_LEAVE_BALANCES = (*VIEW_ALL_LEAVE_BALANCES, 'hrm.allocate_leavebalance')
 VIEW_NOTICE_PERMISSION = 'hrm.view_notice'
 NOTICE_BOARD_PERMISSIONS = (VIEW_NOTICE_PERMISSION, 'hrm.view_all_notice')
 NOTICE_PUBLISH_PERMISSIONS = (*NOTICE_BOARD_PERMISSIONS, 'hrm.add_notice')
@@ -32,6 +35,11 @@ def leave_requests_for_user(queryset, user):
     if user.has_perm(REVIEW_LEAVE_PERMISSION):
         return queryset
     return queryset.filter(employee__user_id=user.pk, employee__is_archived=False)
+
+
+def can_view_leave_balances(user):
+    return user.has_perms(VIEW_ALL_LEAVE_BALANCES) or (
+        user.has_perm(VIEW_LEAVE_BALANCE) and Employee.objects.filter(user_id=user.pk).exists())
 
 
 def can_apply_for_leave(user):

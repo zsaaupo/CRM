@@ -1,18 +1,21 @@
 from uuid import uuid4
 
 from django import forms
-from django.contrib import admin
+from django.contrib import admin, messages
 from django.core.exceptions import PermissionDenied, ValidationError
 
 from common.admin import AuditedAdmin
 
 from .models import (
-    Attendance, Department, Designation, Employee, EmployeeAttendanceStatus, EmployeeCompensation, EmployeeLoan,
-    EmployeeScheduleAssignment, EmployeeStatus, EmploymentType, Holiday, LeaveRequest, LeaveType, LoanInstallment,
+    ApprovedLeaveDay, Attendance, AttendancePolicy, Department, Designation, Employee, EmployeeAttendanceStatus,
+    EmployeeCompensation, EmployeeLoan, EmployeeScheduleAssignment, EmployeeStatus, EmploymentType, Holiday, LeaveBalance,
+    LeaveBalanceMovement, LeaveRequest, LeaveType, LoanInstallment,
     PayrollAdjustment, PayrollDeductionRule, PayrollEvent, PayrollPeriod, PayrollRun, Payslip, PayslipLine,
     SalaryComponent, SalaryPayment, SalaryStructure, SalaryStructureLine, WorkSchedule,
 )
-from .permissions import REVIEW_LEAVE_PERMISSION, check_employee_user_link, leave_requests_for_user
+from .permissions import (REVIEW_LEAVE_PERMISSION, VIEW_ALL_LEAVE_BALANCES, VIEW_LEAVE_PERMISSION,
+                          check_employee_user_link, leave_requests_for_user)
+from .services import LeaveAlreadyReviewed, review_leave_request
 
 
 @admin.register(Department, Designation, EmploymentType, EmployeeStatus)
@@ -127,7 +130,7 @@ class HolidayAdmin(AuditedAdmin):
 
 @admin.register(Attendance)
 class AttendanceAdmin(AuditedAdmin):
-    list_display = ['employee', 'work_date', 'status', 'check_in', 'check_out']
+    list_display = ['employee', 'work_date', 'status', 'check_in', 'check_out', 'is_late']
     search_fields = ['employee__employee_code', 'employee__full_name', 'notes']
     list_filter = ['work_date', 'status']
     list_select_related = ['employee', 'status']
@@ -135,23 +138,41 @@ class AttendanceAdmin(AuditedAdmin):
 
 @admin.register(LeaveType)
 class LeaveTypeAdmin(HRMLookupAdmin):
-    list_display = ['code', 'name', 'is_paid', 'is_active']
+    list_display = ['code', 'name', 'is_paid', 'annual_quota_days', 'carry_forward_limit_days', 'is_active']
     list_filter = ['is_paid', 'is_active']
+
+
+@admin.register(AttendancePolicy)
+class AttendancePolicyAdmin(AuditedAdmin):
+    list_display = ['effective_from', 'grace_minutes', 'monthly_late_allowance', 'late_marks_per_leave_day']
+
+    def get_readonly_fields(self, request, obj=None):
+        return [*super().get_readonly_fields(request, obj), *(['effective_from'] if obj else [])]
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 class LeaveRequestAdminForm(forms.ModelForm):
     def clean(self):
-        cleaned_data = super().clean()
-        employee = cleaned_data.get('employee')
-        review_fields = {'status', 'reviewed_by', 'reviewed_at'}
-        if employee and employee.user_id == self.actor.pk and review_fields.intersection(self.changed_data):
+        cleaned = super().clean()
+        submitted_status = self.data.get('status')
+        if submitted_status in (None, '', self.instance.status) and not (
+            self.data.get('reviewed_by') or self.data.get('reviewed_at')
+        ):
+            return cleaned
+        employee = cleaned.get('employee') or (self.instance.employee if self.instance.employee_id else None)
+        if employee and employee.user_id == self.actor.pk:
             self.add_error(None, 'You cannot review your own leave request.')
-        return cleaned_data
+        else:
+            self.add_error(None, 'Use the approve or reject action to review leave requests.')
+        return cleaned
 
 
 @admin.register(LeaveRequest)
 class LeaveRequestAdmin(AuditedAdmin):
     form = LeaveRequestAdminForm
+    actions = ['approve_requests', 'reject_requests']
     list_display = ['employee', 'leave_type', 'start_date', 'end_date', 'status']
     search_fields = ['employee__employee_code', 'employee__full_name', 'leave_type__name']
     list_filter = ['status', 'start_date']
@@ -166,15 +187,76 @@ class LeaveRequestAdmin(AuditedAdmin):
         return form
 
     def get_readonly_fields(self, request, obj=None):
-        fields = super().get_readonly_fields(request, obj)
-        if not request.user.has_perm(REVIEW_LEAVE_PERMISSION) or (obj and obj.employee.user_id == request.user.pk):
-            fields.extend(['status', 'reviewed_by', 'reviewed_at'])
+        fields = [*super().get_readonly_fields(request, obj), 'status', 'reviewed_by', 'reviewed_at']
+        if obj:
+            fields.append('employee')
+            if obj.status != LeaveRequest.Status.PENDING:
+                fields.extend(['leave_type', 'start_date', 'end_date', 'reason'])
         return fields
+
+    def has_review_permission(self, request):
+        return request.user.has_perms((VIEW_LEAVE_PERMISSION, REVIEW_LEAVE_PERMISSION))
+
+    def review_selected(self, request, queryset, status):
+        for pk in queryset.order_by('start_date', 'pk').values_list('pk', flat=True):
+            try:
+                review_leave_request(pk, request.user, status)
+            except (LeaveAlreadyReviewed, LeaveRequest.DoesNotExist, PermissionDenied, ValidationError) as exc:
+                detail = ' '.join(exc.messages) if isinstance(exc, ValidationError) else str(exc)
+                self.message_user(request, f'Leave request #{pk}: {detail or "Only pending requests can be reviewed."}', messages.ERROR)
+            else:
+                self.message_user(request, f'Leave request #{pk} {status}.', messages.SUCCESS)
+
+    @admin.action(permissions=['review'], description='Approve selected leave requests')
+    def approve_requests(self, request, queryset):
+        self.review_selected(request, queryset, LeaveRequest.Status.APPROVED)
+
+    @admin.action(permissions=['review'], description='Reject selected leave requests')
+    def reject_requests(self, request, queryset):
+        self.review_selected(request, queryset, LeaveRequest.Status.REJECTED)
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == 'employee' and not request.user.has_perm(REVIEW_LEAVE_PERMISSION):
             kwargs['queryset'] = Employee.objects.filter(user=request.user)
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+
+class LeaveHistoryAdmin(AuditedAdmin):
+    view_permissions = VIEW_ALL_LEAVE_BALANCES
+
+    def has_view_permission(self, request, obj=None):
+        return request.user.has_perms(self.view_permissions)
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(LeaveBalance)
+class LeaveBalanceAdmin(LeaveHistoryAdmin):
+    list_display = ['employee', 'leave_type', 'year', 'annual_quota_days', 'annual_used_days', 'carried_days',
+                    'carry_used_days', 'carry_finalized']
+    list_filter = ['year', 'carry_finalized']
+    list_select_related = ['employee', 'leave_type']
+
+
+@admin.register(ApprovedLeaveDay)
+class ApprovedLeaveDayAdmin(LeaveHistoryAdmin):
+    view_permissions = (VIEW_LEAVE_PERMISSION, REVIEW_LEAVE_PERMISSION)
+    list_display = ['employee', 'work_date', 'is_paid', 'request']
+    list_select_related = ['employee', 'request', 'request__employee', 'request__leave_type']
+
+
+@admin.register(LeaveBalanceMovement)
+class LeaveBalanceMovementAdmin(LeaveHistoryAdmin):
+    list_display = ['balance', 'effective_date', 'bucket', 'quantity_days', 'leave_request', 'payslip']
+    list_select_related = ['balance__employee', 'balance__leave_type', 'leave_request__employee', 'leave_request__leave_type',
+                           'payslip', 'payslip__payroll_run', 'payslip__payroll_run__period']
 
 
 @admin.register(SalaryComponent)

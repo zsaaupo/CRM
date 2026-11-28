@@ -18,13 +18,13 @@ from warehouse.models import WareHouse
 
 from .attendance_import import AttendanceCSVImportSerializer, attendance_csv_template
 from .models import (
-    Attendance, Department, Designation, Employee, EmployeeAttendanceStatus, EmployeeScheduleAssignment,
+    Attendance, AttendancePolicy, Department, Designation, Employee, EmployeeAttendanceStatus, EmployeeScheduleAssignment,
     EmployeeCompensation, EmployeeStatus, EmploymentType, Holiday, LeaveRequest, LeaveType,
     SalaryComponent, SalaryStructure, SalaryStructureLine, WorkSchedule,
 )
 from .permissions import ADD_LEAVE_PERMISSION, REVIEW_LEAVE_PERMISSION, VIEW_LEAVE_PERMISSION, leave_requests_for_user
 from .serializers import (
-    AttendanceFilterSerializer, AttendanceSerializer, DepartmentSerializer, DesignationSerializer,
+    AttendanceFilterSerializer, AttendancePolicySerializer, AttendanceSerializer, DepartmentSerializer, DesignationSerializer,
     EmployeeAttendanceStatusSerializer, EmployeeCompensationFilterSerializer, EmployeeCompensationSerializer,
     EmployeeDetailSerializer, EmployeeFilterSerializer,
     EmployeeScheduleAssignmentFilterSerializer, EmployeeScheduleAssignmentSerializer, EmployeeSerializer,
@@ -380,6 +380,30 @@ class AttendanceUpdateAPIView(AttendanceResource, BaseUpdateAPIView):
     pass
 
 
+class AttendancePolicyResource:
+    queryset = AttendancePolicy.objects.select_related('penalty_leave_type')
+    serializer_class = AttendancePolicySerializer
+    search_fields = ['penalty_leave_type__name']
+    ordering = ['-effective_from', '-pk']
+
+
+class AttendancePolicyListCreateAPIView(AttendancePolicyResource, BaseListCreateAPIView):
+    response_key = 'attendance_policy'
+
+
+class AttendancePolicyListAPIView(AttendancePolicyResource, BaseListAPIView):
+    pass
+
+
+@method_decorator(never_cache, name='dispatch')
+class AttendancePolicyDetailAPIView(AttendancePolicyResource, BaseAPIMixin, RetrieveAPIView):
+    http_method_names = ['get', 'head', 'options']
+
+
+class AttendancePolicyUpdateAPIView(AttendancePolicyResource, BaseUpdateAPIView):
+    pass
+
+
 @method_decorator(never_cache, name='dispatch')
 class HRMFormOptionsAPIView(BaseAPIMixin, APIView):
     model = None
@@ -424,6 +448,19 @@ class AttendanceFormOptionsAPIView(HRMFormOptionsAPIView):
         elif self.model is Holiday:
             options['warehouse'] = lookup_choices(WareHouse, 'warehouse')
         return options
+
+
+class AttendancePolicyOptionsAPIView(HRMFormOptionsAPIView):
+    model = AttendancePolicy
+
+    def get_options(self, record):
+        existing = record.penalty_leave_type_id if record else None
+        leave_types = LeaveType.objects.filter(Q(is_active=True, is_paid=True) | Q(pk=existing))
+        return {
+            'penalty_leave_type': [{'value': pk, 'label': name} for pk, name in leave_types.values_list('pk', 'name')],
+            'deduction_basis': [{'value': value, 'label': label} for value, label in AttendancePolicy.DeductionBasis.choices],
+            'deduction_divisor': [{'value': value, 'label': label} for value, label in AttendancePolicy.DeductionDivisor.choices],
+        }
 
 
 class LeaveTypeResource(HRMLookupQuerysetMixin):

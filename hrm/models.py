@@ -1,6 +1,7 @@
 """Employee, notice, attendance, leave, salary configuration, and payroll models."""
 
 from calendar import monthrange
+from datetime import date, time
 from decimal import Decimal
 
 from django.conf import settings
@@ -309,6 +310,10 @@ class Attendance(TimeStampedModel):
     status = models.ForeignKey(EmployeeAttendanceStatus, to_field='code', on_delete=models.PROTECT,
                                default=EmployeeAttendanceStatus.Code.UNRECORDED, related_name='employees')
     notes = models.TextField(blank=True)
+    scheduled_start = models.DateTimeField(null=True, blank=True, editable=False)
+    scheduled_end = models.DateTimeField(null=True, blank=True, editable=False)
+    schedule_snapshot = models.JSONField(default=dict, blank=True, editable=False)
+    is_late = models.BooleanField(null=True, editable=False)
 
     class Meta:
         ordering = ['-work_date', 'employee_id', '-pk']
@@ -341,6 +346,16 @@ class Attendance(TimeStampedModel):
         if errors:
             raise ValidationError(errors)
 
+    def save(self, *args, **kwargs):
+        from .attendance_policy import classify_attendance
+
+        fields = kwargs.get('update_fields')
+        if fields is None or set(fields) & {'employee', 'employee_id', 'work_date', 'check_in', 'check_out', 'status', 'status_id'}:
+            classify_attendance(self)
+            if fields is not None:
+                kwargs['update_fields'] = set(fields) | {'scheduled_start', 'scheduled_end', 'schedule_snapshot', 'is_late'}
+        return super().save(*args, **kwargs)
+
     def __str__(self):
         return f'{self.employee} - {self.work_date} ({self.status_id})'
 
@@ -350,9 +365,74 @@ class Attendance(TimeStampedModel):
 
 class LeaveType(HRMLookup):
     is_paid = models.BooleanField(help_text='Whether time off under this leave type is paid.')
+    annual_quota_days = models.DecimalField(max_digits=8, decimal_places=2, default=0, validators=[MinValueValidator(0)])
+    carry_forward_limit_days = models.DecimalField(max_digits=8, decimal_places=2, default=0,
+                                                  validators=[MinValueValidator(0)])
 
     class Meta(HRMLookup.Meta):
         abstract = False
+        constraints = [
+            *HRMLookup.Meta.constraints,
+            models.CheckConstraint(condition=Q(annual_quota_days__gte=0, carry_forward_limit_days__gte=0),
+                                   name='hrm_leave_type_quota_nonnegative'),
+        ]
+
+
+def default_working_days():
+    return [0, 1, 2, 3, 4]
+
+
+class AttendancePolicy(TimeStampedModel):
+    class DeductionBasis(models.TextChoices):
+        BASIC = 'basic', 'Basic salary'
+        GROSS = 'gross', 'Recurring gross earnings'
+
+    class DeductionDivisor(models.TextChoices):
+        CALENDAR = 'calendar', 'Calendar days'
+        WORKING = 'working', 'Scheduled working days'
+
+    effective_from = models.DateField(unique=True, help_text='First day of the first payroll month using this policy.')
+    start_time = models.TimeField(default=time(9))
+    end_time = models.TimeField(default=time(17))
+    working_days = models.JSONField(default=default_working_days, validators=[validate_working_days])
+    grace_minutes = models.PositiveSmallIntegerField(default=15)
+    monthly_late_allowance = models.PositiveSmallIntegerField(default=0)
+    late_marks_per_leave_day = models.PositiveSmallIntegerField(default=3, validators=[MinValueValidator(1)])
+    early_leave_threshold_minutes = models.PositiveSmallIntegerField(default=240, validators=[MinValueValidator(1)])
+    penalty_leave_type = models.ForeignKey(LeaveType, on_delete=models.PROTECT, null=True, blank=True,
+                                          related_name='attendance_policies')
+    deduction_basis = models.CharField(max_length=8, choices=DeductionBasis.choices, default=DeductionBasis.BASIC)
+    deduction_divisor = models.CharField(max_length=8, choices=DeductionDivisor.choices, default=DeductionDivisor.CALENDAR)
+    deduct_absences = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ['-effective_from']
+        verbose_name = 'late policy'
+        verbose_name_plural = 'late policies'
+        default_permissions = ('view', 'add', 'change')
+        constraints = [
+            models.CheckConstraint(condition=Q(effective_from__day=1), name='hrm_policy_month_start'),
+            models.CheckConstraint(condition=~Q(start_time=F('end_time')), name='hrm_policy_shift_times_differ'),
+            models.CheckConstraint(condition=Q(late_marks_per_leave_day__gt=0, early_leave_threshold_minutes__gt=0),
+                                   name='hrm_policy_thresholds_positive'),
+        ]
+
+    def clean(self):
+        super().clean()
+        errors = {}
+        if self.effective_from and self.effective_from.day != 1:
+            errors['effective_from'] = 'Choose the first day of a payroll month.'
+        if self.start_time is not None and self.start_time == self.end_time:
+            errors['end_time'] = 'The default shift end must differ from its start.'
+        if self.penalty_leave_type_id and not LeaveType.objects.filter(
+            pk=self.penalty_leave_type_id, is_active=True, is_paid=True,
+        ).exists():
+            errors['penalty_leave_type'] = 'Choose an active paid leave type.'
+        if errors:
+            raise ValidationError(errors)
+
+    def __str__(self):
+        return f'Late policy from {self.effective_from}'
 
 
 class LeaveRequest(TimeStampedModel):
@@ -405,7 +485,7 @@ class LeaveRequest(TimeStampedModel):
         if self.start_date and self.end_date:
             if self.end_date < self.start_date:
                 errors['end_date'] = 'The end date cannot be before the start date.'
-            elif self.employee_id and self.status == self.Status.APPROVED:
+            elif self.employee_id and self.status == self.Status.APPROVED and not getattr(self, '_validate_daily_leave', False):
                 overlapping = type(self).objects.filter(
                     employee_id=self.employee_id, status=self.Status.APPROVED,
                     start_date__lte=self.end_date, end_date__gte=self.start_date,
@@ -417,6 +497,73 @@ class LeaveRequest(TimeStampedModel):
 
     def __str__(self):
         return f'{self.employee} - {self.leave_type} ({self.start_date} to {self.end_date})'
+
+
+class LeaveBalance(TimeStampedModel):
+    employee = models.ForeignKey(Employee, on_delete=models.PROTECT, related_name='leave_balances')
+    leave_type = models.ForeignKey(LeaveType, on_delete=models.PROTECT, related_name='balances')
+    year = models.PositiveSmallIntegerField()
+    annual_quota_days = models.DecimalField(max_digits=8, decimal_places=2)
+    annual_used_days = models.DecimalField(max_digits=8, decimal_places=2, default=0)
+    carry_forward_limit_days = models.DecimalField(max_digits=8, decimal_places=2, default=0)
+    carried_days = models.DecimalField(max_digits=8, decimal_places=2, default=0)
+    carry_used_days = models.DecimalField(max_digits=8, decimal_places=2, default=0)
+    carry_finalized = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ['-year', 'employee_id', 'leave_type_id']
+        default_permissions = ('view',)
+        permissions = [('view_all_leavebalance', 'Can view leave balances for all employees'),
+                       ('allocate_leavebalance', 'Can allocate and reconcile leave balances')]
+        constraints = [
+            models.UniqueConstraint(fields=['employee', 'leave_type', 'year'], name='hrm_leave_balance_year_unique'),
+            models.CheckConstraint(condition=Q(year__range=(1, 9999), annual_used_days__gte=0, carry_used_days__gte=0,
+                                               annual_quota_days__gte=F('annual_used_days'), carried_days__gte=F('carry_used_days'),
+                                               carry_forward_limit_days__gte=F('carried_days')),
+                                   name='hrm_leave_balance_amounts_valid'),
+        ]
+
+    @property
+    def carry_expires_on(self):
+        return date(self.year, 3, 31)
+
+    def __str__(self):
+        return f'{self.employee} - {self.leave_type} ({self.year})'
+
+
+class ApprovedLeaveDay(TimeStampedModel):
+    request = models.ForeignKey(LeaveRequest, on_delete=models.PROTECT, related_name='approved_days')
+    employee = models.ForeignKey(Employee, on_delete=models.PROTECT, related_name='approved_leave_days')
+    work_date = models.DateField()
+    is_paid = models.BooleanField()
+
+    class Meta:
+        ordering = ['work_date', 'pk']
+        default_permissions = ()
+        constraints = [models.UniqueConstraint(fields=['employee', 'work_date'], name='hrm_approved_leave_day_unique')]
+
+
+class LeaveBalanceMovement(TimeStampedModel):
+    class Bucket(models.TextChoices):
+        CARRY = 'carry', 'Carry-forward'
+        ANNUAL = 'annual', 'Annual'
+
+    balance = models.ForeignKey(LeaveBalance, on_delete=models.PROTECT, related_name='movements')
+    effective_date = models.DateField()
+    bucket = models.CharField(max_length=8, choices=Bucket.choices)
+    quantity_days = models.DecimalField(max_digits=8, decimal_places=2, validators=[MinValueValidator(Decimal('0.01'))])
+    leave_request = models.ForeignKey(LeaveRequest, on_delete=models.PROTECT, null=True, blank=True)
+    payslip = models.ForeignKey('Payslip', on_delete=models.PROTECT, null=True, blank=True)
+    idempotency_key = models.CharField(max_length=100, unique=True)
+
+    class Meta:
+        ordering = ['effective_date', 'id']
+        default_permissions = ()
+        constraints = [
+            models.CheckConstraint(condition=Q(quantity_days__gt=0), name='hrm_leave_movement_qty_positive'),
+            models.CheckConstraint(condition=Q(leave_request__isnull=False, payslip__isnull=True) |
+                Q(leave_request__isnull=True, payslip__isnull=False), name='hrm_leave_movement_source'),
+        ]
 
 
 # Salary
@@ -554,6 +701,8 @@ class EmployeeCompensation(TimeStampedModel):
 
 class PayrollPeriod(TimeStampedModel):
     month = models.DateField(unique=True, help_text='First calendar day of the payroll month.')
+    attendance_snapshot = models.JSONField(default=dict, blank=True, editable=False)
+    attendance_frozen_at = models.DateTimeField(null=True, blank=True, editable=False)
 
     class Meta:
         ordering = ['-month']

@@ -6,6 +6,7 @@ from rest_framework import serializers
 from audit_log.service import bulk_create_with_audit
 from common.csv_files import MAX_CSV_ERRORS, csv_response, read_csv_rows
 
+from .attendance_policy import classify_attendance
 from .models import Attendance, Employee
 from .serializers import AttendanceSerializer
 
@@ -64,5 +65,7 @@ class AttendanceCSVImportSerializer(serializers.Serializer):
                 records.append(Attendance(**data, create_by=actor, modified_by=actor))
         if errors:
             raise serializers.ValidationError({'file': errors})
+        for record in records:
+            classify_attendance(record)
         bulk_create_with_audit(Attendance.objects, records)
         return {'imported_count': len(records)}

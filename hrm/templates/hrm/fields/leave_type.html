@@ -1,2 +1,4 @@
 {% include 'hrm/fields/lookup.html' %}
 {% include 'inventory/includes/field.html' with name='is_paid' label='Paid leave' field_type='checkbox' only %}
+{% include 'inventory/includes/field.html' with name='annual_quota_days' label='Annual quota in days' field_type='number' value='0' step='0.01' maximum='999999.99' hint='New allocations use this quota.' only %}
+{% include 'inventory/includes/field.html' with name='carry_forward_limit_days' label='Carry-forward limit in days' field_type='number' value='0' step='0.01' maximum='999999.99' hint='Eligible carry expires after March 31.' only %}

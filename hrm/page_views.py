@@ -13,9 +13,9 @@ from .catalog import RESOURCE_MAP
 from .models import Employee, EmployeeAttendanceStatus, LeaveRequest, PayrollAdjustment, PayrollRun, SalaryPayment
 from .payroll import RECALCULABLE
 from .payroll_workflow import RUN_ACTIONS
-from .permissions import (NOTICE_PUBLISH_PERMISSIONS, NOTICE_REMOVE_PERMISSIONS, PAYROLL_CALCULATE, PAYROLL_DETAIL,
-                          PAYROLL_REVIEW_ADJUSTMENT, REVIEW_LEAVE_PERMISSION, can_apply_for_leave, can_view_notices,
-                          leave_requests_for_user)
+from .permissions import (ALLOCATE_LEAVE_BALANCES, NOTICE_PUBLISH_PERMISSIONS, NOTICE_REMOVE_PERMISSIONS, PAYROLL_CALCULATE,
+                          PAYROLL_DETAIL, PAYROLL_REVIEW_ADJUSTMENT, REVIEW_LEAVE_PERMISSION, can_apply_for_leave,
+                          can_view_leave_balances, can_view_notices, leave_requests_for_user)
 
 
 class NoticeBoardPageView(ProtectedAccountPageView):
@@ -65,7 +65,7 @@ class HRMPageView(ProtectedAccountPageView):
             'add_url': reverse(f'hrm_pages:add-{resource.key}'),
             'list_api_url': reverse(f'hrm:{resource.key}-list-view'),
             'can_add': user.has_perm(resource.permission('add')),
-            'can_delete': user.has_perm(resource.permission('delete')),
+            'can_delete': resource.key != 'attendance-policy' and user.has_perm(resource.permission('delete')),
             'list_description': f'Your {resource.plural}, in one place.',
             'columns': [{'key': key, 'label': label, 'type': kind} for key, label, kind in resource.columns],
         })
@@ -127,6 +127,44 @@ class AttendanceImportPageView(HRMPageView):
             max_csv_rows=f'{MAX_CSV_ROWS:,}', attendance_timezone=timezone.get_current_timezone_name(),
         )
         return context
+
+
+class LeaveBalanceListPageView(ProtectedAccountPageView):
+    template_name = 'hrm/leave_balances.html'
+
+    def has_permission(self):
+        return can_view_leave_balances(self.request.user)
+
+    def get_context_data(self, **kwargs):
+        return super().get_context_data(
+            page_section='hrm', section_label='HRM', hrm_group='leave', hrm_key='leave-balance',
+            page_label='Leave balances', resource={'plural': 'leave balances'}, today=timezone.localdate(),
+            list_api_url=reverse('hrm:leave-balance-list'),
+            list_description='Available days account for existing approvals and payroll reservations.',
+            secondary_url=reverse('hrm_pages:allocate-leave-balances')
+            if self.request.user.has_perms(ALLOCATE_LEAVE_BALANCES) else '', secondary_label='Allocate quotas',
+            columns=[{'key': key, 'label': label, 'type': 'text'} for key, label in (
+                ('employee_name', 'Employee'), ('employee_code', 'Code'), ('leave_type_name', 'Leave type'),
+                ('annual_quota_days', 'Annual quota'), ('annual_used_days', 'Annual used'), ('carried_days', 'Carried days'),
+                ('carry_used_days', 'Carry used'), ('carry_status', 'Carry status'), ('reserved_days', 'Reserved'),
+                ('available_days', 'Available'),
+            )], **kwargs,
+        )
+
+
+class LeaveBalanceAllocationPageView(ProtectedAccountPageView):
+    template_name = 'inventory/add.html'
+    permission_required = ALLOCATE_LEAVE_BALANCES
+
+    def get_context_data(self, **kwargs):
+        return super().get_context_data(
+            page_section='hrm', section_label='HRM', hrm_group='leave', hrm_key='leave-balance',
+            page_label='Allocate leave quotas', form_heading='Allocate leave quotas', save_label='Allocate quotas',
+            form_description='Allocate annual quotas for eligible employees and active paid leave types.',
+            resource={'singular': 'leave allocation', 'plural': 'leave balances'}, year=timezone.localdate().year,
+            fields_template='hrm/fields/leave_allocation.html', list_url=reverse('hrm_pages:leave-balance-list'),
+            create_api_url=reverse('hrm:allocate-leave-balances'), **kwargs,
+        )
 
 
 class PayrollCalculationPageView(HRMPageView):
@@ -314,7 +352,7 @@ class LeaveRequestDetailPageView(HRMPageView):
         user = self.request.user
         queryset = LeaveRequest.objects.select_related('employee', 'leave_type', 'reviewed_by')
         leave = get_object_or_404(leave_requests_for_user(queryset, user), pk=self.kwargs['pk'])
-        context.update({'page_label': 'Leave request details', 'leave': leave})
+        context.update({'page_label': 'Leave request details', 'leave': leave, 'approved_days': leave.approved_days.all()})
         if leave.status == LeaveRequest.Status.PENDING and user.has_perm(REVIEW_LEAVE_PERMISSION) and leave.employee.user_id != user.pk:
             context['review_api_url'] = reverse('hrm:leave-request-review', args=[leave.pk])
         return context

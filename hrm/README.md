@@ -224,6 +224,57 @@ Configure at least one active paid or unpaid leave type before submitting reques
   only to pending requests, and records the logged-in reviewer and review time.
   Reviewers cannot decide their own requests.
 
+### Leave balances and late policy
+
+Set annual quotas and carry limits under **People & Payroll → Leave → Leave type list**.
+Open **Leave balances** to review available days or **Allocate quotas** to initialize a year.
+Use `hrm.view_leavebalance` for employee access to personal balances. Add
+`hrm.view_all_leavebalance` for HR access across employees and `hrm.allocate_leavebalance`
+for allocation and reconciliation. The balance-date filter selects the entitlement year
+and applies the March 31 carry cutoff. Availability accounts for approved leave and
+outstanding payroll reservations.
+
+The daily scheduler can run the same idempotent allocation service with:
+
+```powershell
+.\venv\Scripts\python.exe manage.py allocate_leave_balances
+```
+
+The command defaults to the current year in the business timezone. Use `--year`
+for another year. Before cutover, enter paid leave quotas and use
+`--reconcile-approved` to charge existing approved requests against their opening
+balances. Resolve any reported mismatch with saved payroll or work schedules before
+retrying. Use `--finalize-carry` once prior-year usage is reconciled. Earlier drafts,
+pending requests and unreconciled legacy approvals can leave carry pending. Missing
+prior-year balances receive zero carry. Reruns preserve the original annual quota.
+
+Create a policy under **People & Payroll → Attendance → Late policy list** starting
+on the first day of an open payroll month. Use the `hrm.view_attendancepolicy`,
+`hrm.add_attendancepolicy`, and `hrm.change_attendancepolicy` permissions to delegate
+access. The default shift is Monday through Friday, 09:00–17:00, with 15 minutes of
+grace. Employee assignments override the default shift. Manual punches, CSV imports,
+and the admin record the schedule and punctuality used at save time. Re-save reviewed
+legacy punches in the effective period if payroll flags them as unclassified.
+
+The policy defaults to three late marks per penalty day and a half-day penalty
+for a valid checkout at least 240 minutes early. Assign an active paid leave type
+to cover eligible penalties. The loss-of-pay settings offer basic salary or recurring
+gross earnings and calendar days or scheduled working days. New policy forms default
+to basic salary divided by calendar days. Enable the separate absence option to deduct
+for absences or missing attendance. Existing earnings proration still uses calendar days.
+
+The first saved run freezes the month's working calendar and policy. Calculated and
+reviewed runs reserve leave coverage. Approval posts the debits. Rejection and
+cancellation release reservations, and recalculation replaces them. If a saved draft
+covers a requested leave date, resolve the draft before approving that request.
+Finalize earlier payable months under the policy before calculating later months.
+Use a later payroll adjustment for corrections to approved payroll.
+
+`GET /hrm/api/leave-balances/?as_of=YYYY-MM-DD` returns scoped balances.
+`POST /hrm/api/leave-balances/allocate/` accepts `year` and optional booleans
+`finalize_carry` and `reconcile_approved`. Late policies use the HRM catalog routes
+under `/hrm/api/late-policies/`.
+
 ## Payroll workflow
 
 Open **HRM > Salary > Payroll run list**. Preview a month and currency, save the

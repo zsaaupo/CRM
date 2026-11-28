@@ -100,6 +100,10 @@ assert.deepEqual(redirects, ['/hrm/payroll-runs/4/']);
 
 panels.form = null;
 testWorkspace.dataset.detailUrl = '/detail/';
+slip.calculation_inputs = {attendance_summary: {working_days: 20, late_marks: 7, late_penalty_days: '2',
+    early_penalty_days: '0.50', covered_days: '1.00', unpaid_days: '2.50'}};
 await vm.runInContext('initializePayroll(testWorkspace)', context);
 assert.equal(panels.rows.children[0].children[3].textContent, 'BDT 30000.0000');
+const breakdown = panels.rows.children[0].children[4].children[0];
+assert.match(breakdown.children[1].textContent, /7 late marks.*1\.00 days covered by leave.*2\.50 unpaid days/);
 console.log('Payroll UI passed: currency retry, blockers, stale preview, save redirect, and saved payslip display.');

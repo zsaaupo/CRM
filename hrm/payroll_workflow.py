@@ -6,8 +6,9 @@ from django.utils import timezone
 from rest_framework.exceptions import NotFound
 
 from audit_log.service import record_activity
+from .leave_balances import lock_employees, post_debits
 from .models import LoanInstallment, PayrollEvent, PayrollPeriod, PayrollRun, Payslip, SalaryPayment
-from .payroll import PayrollConflict, preview_payroll
+from .payroll import FINALIZED, PayrollConflict, preview_payroll
 
 
 RUN = PayrollRun.Status
@@ -63,6 +64,10 @@ def recover_installments(slip, actor):
 @transaction.atomic
 def transition_run(pk, action, actor, note=''):
     run = lock_run(pk)
+    if run.period.attendance_snapshot:
+        if action == 'approve' and run.status in FINALIZED:
+            return run
+        lock_employees(run.payslips.order_by().values('employee_id'))
     allowed, destination, event = RUN_ACTIONS[action]
     if run.status not in allowed:
         raise PayrollConflict('This action is unavailable for the current payroll status.')
@@ -84,6 +89,9 @@ def transition_run(pk, action, actor, note=''):
     run.save()
     record_event(run, actor, event, note)
     if action == 'approve':
+        if run.period.attendance_snapshot:
+            for slip in run.payslips.select_related('payroll_run').order_by('employee_id'):
+                post_debits(slip.calculation_inputs.get('leave_coverage', ()), actor.get_username(), payslip=slip)
         for slip in run.payslips.filter(net_pay=0):
             recover_installments(slip, actor)
         if not run.payslips.filter(net_pay__gt=0).exists():

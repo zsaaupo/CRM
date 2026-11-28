@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
 from .models import (
-    Attendance, Department, Designation, Employee, EmployeeAttendanceStatus, EmployeeCompensation, EmployeeLoan,
+    Attendance, AttendancePolicy, Department, Designation, Employee, EmployeeAttendanceStatus, EmployeeCompensation, EmployeeLoan,
     EmployeeScheduleAssignment, EmployeeStatus, EmploymentType, Holiday, LeaveRequest, LeaveType, LoanInstallment,
     PayrollAdjustment, PayrollDeductionRule, PayrollRun,
     SalaryComponent, SalaryStructure, SalaryStructureLine, WorkSchedule,
@@ -48,7 +48,7 @@ ATTENDANCE_RESOURCES = (
     HRMResource('attendance', 'attendance', 'attendance record', 'attendance records', Attendance,
                 (('work_date', 'Work date', 'text'), ('employee_name', 'Employee', 'text'),
                  ('status_name', 'Status', 'text'), ('check_in', 'Check-in', 'datetime'),
-                 ('check_out', 'Check-out', 'datetime')),
+                 ('check_out', 'Check-out', 'datetime'), ('punctuality', 'Punctuality', 'text')),
                 group='attendance', fields='attendance', has_options=True),
     HRMResource('work-schedule', 'work-schedules', 'work schedule', 'work schedules', WorkSchedule,
                 (('name', 'Schedule', 'text'), ('code', 'Code', 'text'), ('working_days', 'Working days', 'weekdays'),
@@ -67,6 +67,13 @@ ATTENDANCE_RESOURCES = (
                 (('name', 'Name', 'text'), ('code', 'Code', 'text'), ('description', 'Description', 'text'),
                  ('is_active', 'Status', 'status')), group='attendance'),
 )
+ATTENDANCE_POLICY_RESOURCE = HRMResource(
+    'attendance-policy', 'late-policies', 'late policy', 'late policies', AttendancePolicy,
+    (('effective_from', 'Effective from', 'text'), ('grace_minutes', 'Grace minutes', 'text'),
+     ('monthly_late_allowance', 'Monthly allowance', 'text'), ('late_marks_per_leave_day', 'Marks per penalty day', 'text'),
+     ('deduction_basis_name', 'Deduction basis', 'text'), ('deduction_divisor_name', 'Divisor', 'text')),
+    group='attendance', fields='attendance_policy', has_options=True,
+)
 LEAVE_REQUEST_RESOURCE = HRMResource(
     'leave-request', 'leave-requests', 'leave request', 'leave requests', LeaveRequest,
     (('employee_name', 'Employee', 'text'), ('leave_type_name', 'Leave type', 'text'),
@@ -75,7 +82,9 @@ LEAVE_REQUEST_RESOURCE = HRMResource(
 )
 LEAVE_TYPE_RESOURCE = HRMResource(
     'leave-type', 'leave-types', 'leave type', 'leave types', LeaveType,
-    (('name', 'Name', 'text'), ('code', 'Code', 'text'), ('is_paid', 'Paid', 'boolean'), ('is_active', 'Status', 'status')),
+    (('name', 'Name', 'text'), ('code', 'Code', 'text'), ('is_paid', 'Paid', 'boolean'),
+     ('annual_quota_days', 'Annual quota', 'text'), ('carry_forward_limit_days', 'Carry limit', 'text'),
+     ('is_active', 'Status', 'status')),
     group='leave', fields='leave_type',
 )
 SALARY_RESOURCES = (
@@ -121,7 +130,7 @@ LOAN_RESOURCES = (
          ('recovered', 'Recovered', 'boolean')),
         group='loan', fields='loan_installment', has_options=True),
 )
-RESOURCES = (*EMPLOYEE_RESOURCES, *ATTENDANCE_RESOURCES, LEAVE_TYPE_RESOURCE, *SALARY_RESOURCES,
+RESOURCES = (*EMPLOYEE_RESOURCES, *ATTENDANCE_RESOURCES, ATTENDANCE_POLICY_RESOURCE, LEAVE_TYPE_RESOURCE, *SALARY_RESOURCES,
              *PAYROLL_INPUT_RESOURCES, *LOAN_RESOURCES)
 PAYROLL_RUN_RESOURCE = HRMResource(
     'payroll-run', 'payroll-runs', 'payroll run', 'payroll runs', PayrollRun,

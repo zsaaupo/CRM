@@ -105,6 +105,7 @@ def payslip_document(pk):
             'department': slip.department_name, 'month': run.period.month.strftime('%B %Y'), 'currency': run.currency_id,
             'status': run.get_status_display(), 'generated_at': timezone.localtime().strftime('%d %b %Y, %H:%M %Z'),
             'approved_by': run.approved_by.get_username() if run.approved_by_id else '',
+            'attendance': slip.calculation_inputs.get('attendance_summary'),
             'rows': [{'name': line.name, 'code': line.code, 'type': line.get_type_display(),
                       'amount': formatted_money(line.amount)} for line in slip.lines.all()],
             'totals': [('Gross earnings', formatted_money(slip.gross_pay)),

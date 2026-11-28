@@ -20,6 +20,14 @@
             {% endif %}
             {% if leave.reason %}<div class="user-form-full"><dt>Reason</dt><dd>{{ leave.reason|linebreaksbr }}</dd></div>{% endif %}
         </dl>
+        {% if approved_days %}
+        <div class="mt-6">
+            <h2 class="section-title">Approved working days</h2>
+            <ul class="mt-2 space-y-1 text-sm">
+                {% for day in approved_days %}<li>{{ day.work_date|date:'Y-m-d' }} · {% if day.is_paid %}Paid{% else %}Unpaid{% endif %}</li>{% endfor %}
+            </ul>
+        </div>
+        {% endif %}
         {% if review_api_url %}
         <form method="post" action="{{ review_api_url }}" data-leave-review>
             {% csrf_token %}

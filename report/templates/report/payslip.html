@@ -14,6 +14,17 @@
         <div><span>Currency</span><strong>{{ report.currency }}</strong></div>
         {% if report.department %}<div><span>Department</span><strong>{{ report.department }}</strong></div>{% endif %}
     </section>
+    {% if report.attendance %}
+    <div class="section-heading"><h2>Attendance and leave</h2></div>
+    <section class="metadata">
+        <div><span>Working days</span><strong>{{ report.attendance.working_days }}</strong></div>
+        <div><span>Late marks</span><strong>{{ report.attendance.late_marks }}</strong></div>
+        <div><span>Late penalty days</span><strong>{{ report.attendance.late_penalty_days }}</strong></div>
+        <div><span>Early penalty days</span><strong>{{ report.attendance.early_penalty_days }}</strong></div>
+        <div><span>Days covered by leave</span><strong>{{ report.attendance.covered_days }}</strong></div>
+        <div><span>Unpaid days</span><strong>{{ report.attendance.unpaid_days }}</strong></div>
+    </section>
+    {% endif %}
     <div class="section-heading"><h2>Earnings and deductions</h2><span>Amounts in {{ report.currency }}</span></div>
     <table class="products">
         <colgroup><col style="width:55%"><col style="width:23%"><col style="width:22%"></colgroup>

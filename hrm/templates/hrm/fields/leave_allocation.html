@@ -1,0 +1,4 @@
+{% include 'inventory/includes/field.html' with name='year' label='Balance year' field_type='number' value=year required=True step='1' minimum='1' maximum='9999' only %}
+{% include 'inventory/includes/field.html' with name='finalize_carry' label='Finalize eligible carry-forward' field_type='checkbox' only %}
+{% include 'inventory/includes/field.html' with name='reconcile_approved' label='Record approved leave from before the policy' field_type='checkbox' only %}
+<p class="user-form-full section-description">Reconcile prior-year usage before finalizing carry. Open prior-year requests or payroll reservations can delay carry for affected balances.</p>

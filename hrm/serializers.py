@@ -7,7 +7,7 @@ from common.serializers import AUDIT_FIELDS, CatalogSerializer
 from common.view import RecordInUse
 from inventory.models import Currency
 from .models import (
-    Attendance, Department, Designation, Employee, EmployeeAttendanceStatus, EmployeeScheduleAssignment,
+    Attendance, AttendancePolicy, Department, Designation, Employee, EmployeeAttendanceStatus, EmployeeScheduleAssignment,
     EmployeeCompensation, EmployeeStatus, EmploymentType, Holiday, HRMLookup, LeaveRequest, LeaveType,
     SalaryComponent, SalaryStructure, SalaryStructureLine, WorkSchedule,
 )
@@ -210,12 +210,18 @@ class AttendanceSerializer(EmployeeRecordSerializer):
     status = serializers.SlugRelatedField(slug_field='code', queryset=EmployeeAttendanceStatus.objects.all(),
                                           required=False)
     status_name = serializers.CharField(source='status.name', read_only=True)
+    punctuality = serializers.SerializerMethodField()
+
+    def get_punctuality(self, row):
+        if row.is_late is not None:
+            return 'Late' if row.is_late else 'On time'
+        return None
 
     class Meta:
         model = Attendance
         fields = ['id', 'employee', 'employee_name', 'work_date', 'check_in', 'check_out', 'status', 'status_name',
-                  'notes', *AUDIT_FIELDS[1:]]
-        read_only_fields = AUDIT_FIELDS
+                  'notes', 'scheduled_start', 'scheduled_end', 'schedule_snapshot', 'is_late', 'punctuality', *AUDIT_FIELDS[1:]]
+        read_only_fields = [*AUDIT_FIELDS, 'scheduled_start', 'scheduled_end', 'schedule_snapshot', 'is_late']
         # Keep the model's work date default and validate uniqueness against the merged record.
         validators = []
 
@@ -228,6 +234,25 @@ class AttendanceDateFilterSerializer(serializers.Serializer):
         if 'from_date' in attrs and 'to_date' in attrs and attrs['to_date'] < attrs['from_date']:
             raise serializers.ValidationError({'to_date': 'The end date cannot be before the start date.'})
         return attrs
+
+
+class AttendancePolicySerializer(CatalogSerializer):
+    penalty_leave_type_name = serializers.CharField(source='penalty_leave_type.name', read_only=True, default=None)
+    deduction_basis_name = serializers.CharField(source='get_deduction_basis_display', read_only=True)
+    deduction_divisor_name = serializers.CharField(source='get_deduction_divisor_display', read_only=True)
+
+    def validate_effective_from(self, value):
+        if self.instance and value != self.instance.effective_from:
+            raise serializers.ValidationError('Create a new policy to change the effective month.')
+        return value
+
+    class Meta:
+        model = AttendancePolicy
+        fields = ['id', 'effective_from', 'start_time', 'end_time', 'working_days', 'grace_minutes',
+                  'monthly_late_allowance', 'late_marks_per_leave_day', 'early_leave_threshold_minutes',
+                  'penalty_leave_type', 'penalty_leave_type_name', 'deduction_basis', 'deduction_basis_name',
+                  'deduction_divisor', 'deduction_divisor_name', 'deduct_absences', *AUDIT_FIELDS[1:]]
+        read_only_fields = AUDIT_FIELDS
 
 
 class AttendanceFilterSerializer(AttendanceDateFilterSerializer):
@@ -247,7 +272,7 @@ class HolidayFilterSerializer(AttendanceDateFilterSerializer):
 class LeaveTypeSerializer(HRMLookupSerializer):
     class Meta:
         model = LeaveType
-        fields = [*LOOKUP_FIELDS, 'is_paid']
+        fields = [*LOOKUP_FIELDS, 'is_paid', 'annual_quota_days', 'carry_forward_limit_days']
         read_only_fields = AUDIT_FIELDS
 
 

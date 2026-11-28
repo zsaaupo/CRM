@@ -24,13 +24,19 @@ function breakdown(slip, currency) {
     for (const warning of slip.warnings || []) {
         details.append(node("p", `${warning.message} on ${warning.dates.join(", ")}`));
     }
+    const attendance = slip.calculation_inputs?.attendance_summary;
+    if (attendance) {
+        details.append(node("p", `${attendance.working_days} working days · ${attendance.late_marks} late marks · ` +
+            `${attendance.late_penalty_days} late penalty days · ${attendance.early_penalty_days} early penalty days · ` +
+            `${attendance.covered_days} days covered by leave · ${attendance.unpaid_days} unpaid days`));
+    }
     for (const line of slip.lines) {
         const label = line.type === "deduction" ? "Deduction" : "Earning";
         details.append(node("p", `${line.name} · ${label} · ${amount(line.amount, currency)}`));
         const inputs = node("ul");
         inputs.className = "mb-2 pl-4 text-xs text-stone-500";
         for (const input of line.calculation_inputs) {
-            const text = input.date ? input.date :
+            const text = input.date ? (input.days ? `${input.date} · ${input.days} unpaid days` : input.date) :
                 `${input.from} to ${input.to} · ${input.days} of ${input.calendar_days} days · ${amount(input.monthly_amount, currency)} monthly`;
             inputs.append(node("li", text));
         }

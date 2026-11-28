@@ -1,0 +1,20 @@
+{% include 'inventory/includes/field.html' with name='effective_from' label='Effective month start' field_type='date' required=True locked=lock_code hint='Use the first day of the payroll month.' only %}
+{% include 'inventory/includes/field.html' with name='penalty_leave_type' label='Leave type for penalty coverage' field_type='select' only %}
+<fieldset class="user-form-full" data-number-checkbox-group="working_days" tabindex="-1" aria-describedby="id_working_days_error">
+    <legend class="form-label">Default working days</legend>
+    <div class="flex flex-wrap gap-3">
+        {% for day in weekday_names %}
+        <label class="inventory-check-label"><input type="checkbox" class="inventory-check-input" value="{{ forloop.counter0 }}"{% if forloop.counter <= 5 %} checked{% endif %}><span>{{ day }}</span></label>
+        {% endfor %}
+    </div>
+    <p id="id_working_days_error" class="form-error" data-error-for="working_days" hidden></p>
+</fieldset>
+{% include 'inventory/includes/field.html' with name='start_time' label='Default shift start' field_type='time' value='09:00' required=True step='1' only %}
+{% include 'inventory/includes/field.html' with name='end_time' label='Default shift end' field_type='time' value='17:00' required=True step='1' hint='Use an earlier time for a shift that ends the next day.' only %}
+{% include 'inventory/includes/field.html' with name='grace_minutes' label='Grace minutes' field_type='number' value='15' required=True step='1' maximum='32767' only %}
+{% include 'inventory/includes/field.html' with name='monthly_late_allowance' label='Free late marks per month' field_type='number' value='0' required=True step='1' maximum='32767' only %}
+{% include 'inventory/includes/field.html' with name='late_marks_per_leave_day' label='Late marks per penalty day' field_type='number' value='3' required=True step='1' minimum='1' maximum='32767' only %}
+{% include 'inventory/includes/field.html' with name='early_leave_threshold_minutes' label='Minutes early for a half-day penalty' field_type='number' value='240' required=True step='1' minimum='1' maximum='32767' only %}
+{% include 'inventory/includes/field.html' with name='deduction_basis' label='Loss-of-pay salary basis' field_type='select' value='basic' required=True only %}
+{% include 'inventory/includes/field.html' with name='deduction_divisor' label='Loss-of-pay divisor' field_type='select' value='calendar' required=True only %}
+{% include 'inventory/includes/field.html' with name='deduct_absences' label='Deduct absences and missing attendance' field_type='checkbox' only %}

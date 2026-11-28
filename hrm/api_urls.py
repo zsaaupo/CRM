@@ -3,7 +3,8 @@ from .catalog import LOAN_RESOURCES, PAYROLL_INPUT_RESOURCES
 
 from .api_views import (
     AttendanceDetailAPIView, AttendanceFormOptionsAPIView, AttendanceImportAPIView, AttendanceListAPIView,
-    AttendanceListCreateAPIView, AttendanceUpdateAPIView,
+    AttendanceListCreateAPIView, AttendancePolicyDetailAPIView, AttendancePolicyListAPIView,
+    AttendancePolicyListCreateAPIView, AttendancePolicyOptionsAPIView, AttendancePolicyUpdateAPIView, AttendanceUpdateAPIView,
     DepartmentDetailAPIView, DepartmentListAPIView, DepartmentListCreateAPIView, DepartmentUpdateAPIView,
     DesignationDetailAPIView, DesignationListAPIView, DesignationListCreateAPIView, DesignationUpdateAPIView,
     EmployeeAttendanceStatusDetailAPIView, EmployeeAttendanceStatusListAPIView,
@@ -32,6 +33,7 @@ from .models import (
     SalaryStructureLine,
 )
 from .notice_api import NoticeListCreateAPIView, NoticeOptionsAPIView, NoticeRemoveAPIView
+from .leave_balance_api import LeaveBalanceAllocationAPIView, LeaveBalanceListAPIView
 from .payroll_api import (
     PayrollCalculateAPIView, PayrollOptionsAPIView, PayrollPreviewAPIView, PayrollRunDetailAPIView, PayrollRunListAPIView,
     PayrollRunTransitionAPIView, SalaryPaymentCreateAPIView, SalaryPaymentResolveAPIView,
@@ -106,6 +108,14 @@ urlpatterns = [
     path('attendance/<int:pk>/options/', AttendanceFormOptionsAPIView.as_view(model=Attendance), name='attendance-edit-options'),
     path('attendance/<int:pk>/', AttendanceDetailAPIView.as_view(), name='attendance-detail'),
     path('attendance/<int:pk>/update/', AttendanceUpdateAPIView.as_view(), name='attendance-update'),
+    path('late-policies/', AttendancePolicyListCreateAPIView.as_view(), name='attendance-policy-list'),
+    path('late-policies/list/', AttendancePolicyListAPIView.as_view(), name='attendance-policy-list-view'),
+    path('late-policies/options/', AttendancePolicyOptionsAPIView.as_view(), name='attendance-policy-options'),
+    path('late-policies/<int:pk>/options/', AttendancePolicyOptionsAPIView.as_view(), name='attendance-policy-edit-options'),
+    path('late-policies/<int:pk>/', AttendancePolicyDetailAPIView.as_view(), name='attendance-policy-detail'),
+    path('late-policies/<int:pk>/update/', AttendancePolicyUpdateAPIView.as_view(), name='attendance-policy-update'),
+    path('leave-balances/', LeaveBalanceListAPIView.as_view(), name='leave-balance-list'),
+    path('leave-balances/allocate/', LeaveBalanceAllocationAPIView.as_view(), name='allocate-leave-balances'),
     path('leave-types/', LeaveTypeListCreateAPIView.as_view(), name='leave-type-list'),
     path('leave-types/list/', LeaveTypeListAPIView.as_view(), name='leave-type-list-view'),
     path('leave-types/<int:pk>/', LeaveTypeDetailAPIView.as_view(), name='leave-type-detail'),
