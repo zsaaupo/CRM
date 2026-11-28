@@ -5,8 +5,10 @@ from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import never_cache
+from rest_framework import status
 from rest_framework.exceptions import APIException, NotFound, PermissionDenied, ValidationError
-from rest_framework.generics import RetrieveAPIView
+from rest_framework.generics import GenericAPIView, RetrieveAPIView
+from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -14,6 +16,7 @@ from common.view import BaseAPIMixin, BaseDetailAPIView, BaseListAPIView, BaseLi
 from inventory.models import Currency
 from warehouse.models import WareHouse
 
+from .attendance_import import AttendanceCSVImportSerializer, attendance_csv_template
 from .models import (
     Attendance, Department, Designation, Employee, EmployeeAttendanceStatus, EmployeeScheduleAssignment,
     EmployeeCompensation, EmployeeStatus, EmploymentType, Holiday, LeaveRequest, LeaveType,
@@ -345,6 +348,24 @@ class AttendanceResource:
 
 class AttendanceListCreateAPIView(AttendanceResource, AttendanceDateFilters, BaseListCreateAPIView):
     response_key = 'attendance'
+
+
+@method_decorator(never_cache, name='dispatch')
+class AttendanceImportAPIView(BaseAPIMixin, GenericAPIView):
+    serializer_class = AttendanceCSVImportSerializer
+    required_permissions = ('hrm.add_attendance',)
+    parser_classes = [MultiPartParser]
+    http_method_names = ['get', 'post', 'head', 'options']
+
+    def get(self, request):
+        return attendance_csv_template()
+
+    def post(self, request):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.save_record(serializer, actor=request.user)
+        return Response({'message': 'Attendance imported successfully.', **serializer.instance},
+                        status=status.HTTP_201_CREATED)
 
 
 class AttendanceListAPIView(AttendanceResource, AttendanceDateFilters, BaseListAPIView):

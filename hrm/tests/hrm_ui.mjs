@@ -19,6 +19,7 @@ class Element {
     append(...nodes) { for (const node of nodes) { node.parent = this; this.children.push(node); } }
     replaceChildren(...nodes) { this.children = []; this.append(...nodes); }
     setAttribute(name, value) { this.attributes[name] = value; }
+    getAttribute(name) { return this.attributes[name] ?? (name === 'type' ? this.type : null); }
     removeAttribute(name) { delete this.attributes[name]; }
     addEventListener(name, callback) { this.listeners[name] = callback; }
     checkValidity() { return this.valid; }
@@ -177,12 +178,12 @@ const attendanceRow = vm.runInContext(`catalogRow({id: 8, check_in: '2026-11-18T
 assert.deepEqual(attendanceRow.children.map(cell => cell.textContent),
     ['2026-11-18 10:15 PM', '2026-11-19 12:00 AM', '\u2014']);
 
-async function attendanceForm(fields, groups, record = null) {
+async function attendanceForm(fields, groups, record = null, {fileErrors, action = '/create/'} = {}) {
     const form = new Element('form');
-    form.action = record ? '/update/' : '/create/';
+    form.action = record ? '/update/' : action;
     form.dataset = {detailUrl: record ? '/detail/' : '', method: record ? 'PATCH' : 'POST', successUrl: '/list/'};
     const error = new Element();
-    error.dataset.errorFor = 'working_days';
+    error.dataset.errorFor = fields.find(field => field.type === 'file')?.name || 'working_days';
     const parts = Object.fromEntries(['form-status', 'submit', 'load-retry']
         .map(name => [`[data-catalog-${name}]`, new Element()]));
     parts['[data-submit-label]'] = new Element();
@@ -191,17 +192,23 @@ async function attendanceForm(fields, groups, record = null) {
     form.querySelectorAll = selector => ({
         'input, select, textarea': fields, '[data-number-checkbox-group]': groups, '[data-error-for]': [error],
     })[selector] || [];
-    form.elements = {namedItem: name => name === 'csrfmiddlewaretoken' ? {value: 'csrf'} : null};
-    const requests = [];
+    form.elements = {namedItem: name => name === 'csrfmiddlewaretoken' ? {value: 'csrf'} : fields.find(field => field.name === name)};
+    const requests = [], redirects = [];
     vm.runInNewContext(formSource, {
-        document: {querySelector: () => form}, APIError,
+        document: {querySelector: () => form}, APIError, FormData: Payload,
         getJSON: async () => record,
         postJSON: async (url, data) => requests.push(structuredClone(data)),
+        postFormData: async (url, data, token) => {
+            assert.equal(url, action);
+            assert.equal(token, 'csrf');
+            if (fileErrors) throw new APIError(400, {file: fileErrors});
+            requests.push(data);
+        },
         patchJSON: async (url, data) => requests.push(structuredClone(data)),
-        window: {location: {assign() {}}},
+        window: {location: {assign: url => redirects.push(url)}},
     });
     await new Promise(resolve => setImmediate(resolve));
-    return {form, error, requests};
+    return {form, error, requests, redirects};
 }
 
 const workingDays = new Element('fieldset');
@@ -233,6 +240,20 @@ checkOut.value = '';
 await attendanceEdit.form.listeners.submit(event);
 assert.deepEqual(JSON.parse(JSON.stringify(attendanceEdit.requests[0])), {check_out: null});
 console.log('Attendance forms passed: numeric weekdays, edit values, overnight timestamps and clearing checkout.');
+
+const csvFile = Object.assign(new Element('input'), {name: 'file', type: 'file', files: [{name: 'attendance.csv'}]});
+const importAction = '/hrm/api/attendance/import/';
+const fileErrors = ['Row 2: Invalid work date.', 'Row 3: Enter a current employee code.'];
+const rejectedImport = await attendanceForm([csvFile], [], null, {action: importAction, fileErrors});
+await rejectedImport.form.listeners.submit(event);
+assert.equal(rejectedImport.error.textContent, fileErrors.join('\n'));
+assert.equal(rejectedImport.error.hidden, false);
+assert.deepEqual(rejectedImport.redirects, []);
+const attendanceImport = await attendanceForm([csvFile], [], null, {action: importAction});
+await attendanceImport.form.listeners.submit(event);
+assert.equal(attendanceImport.requests[0].get('file').name, 'attendance.csv');
+assert.deepEqual(attendanceImport.redirects, ['/list/']);
+console.log('Attendance CSV form passed: multipart upload, row errors and list redirect.');
 
 const detailSource = (await readFile(new URL('../../static/js/record_detail.js', import.meta.url), 'utf8'))
     .replace(/^import .*;\r?\n/gm, '').replace(/^export /gm, '');

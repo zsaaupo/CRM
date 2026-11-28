@@ -2,8 +2,8 @@ from django.urls import path
 from .catalog import LOAN_RESOURCES, PAYROLL_INPUT_RESOURCES
 
 from .api_views import (
-    AttendanceDetailAPIView, AttendanceFormOptionsAPIView, AttendanceListAPIView, AttendanceListCreateAPIView,
-    AttendanceUpdateAPIView,
+    AttendanceDetailAPIView, AttendanceFormOptionsAPIView, AttendanceImportAPIView, AttendanceListAPIView,
+    AttendanceListCreateAPIView, AttendanceUpdateAPIView,
     DepartmentDetailAPIView, DepartmentListAPIView, DepartmentListCreateAPIView, DepartmentUpdateAPIView,
     DesignationDetailAPIView, DesignationListAPIView, DesignationListCreateAPIView, DesignationUpdateAPIView,
     EmployeeAttendanceStatusDetailAPIView, EmployeeAttendanceStatusListAPIView,
@@ -31,6 +31,7 @@ from .models import (
     Attendance, EmployeeCompensation, EmployeeScheduleAssignment, Holiday, SalaryComponent, SalaryStructure,
     SalaryStructureLine,
 )
+from .notice_api import NoticeListCreateAPIView, NoticeOptionsAPIView, NoticeRemoveAPIView
 from .payroll_api import (
     PayrollCalculateAPIView, PayrollOptionsAPIView, PayrollPreviewAPIView, PayrollRunDetailAPIView, PayrollRunListAPIView,
     PayrollRunTransitionAPIView, SalaryPaymentCreateAPIView, SalaryPaymentResolveAPIView,
@@ -43,6 +44,9 @@ from .payroll_workflow import RUN_ACTIONS
 app_name = 'hrm'
 
 urlpatterns = [
+    path('notices/', NoticeListCreateAPIView.as_view(), name='notice-list'),
+    path('notices/options/', NoticeOptionsAPIView.as_view(), name='notice-options'),
+    path('notices/<int:pk>/', NoticeRemoveAPIView.as_view(), name='notice-remove'),
     path('departments/', DepartmentListCreateAPIView.as_view(), name='department-list'),
     path('departments/list/', DepartmentListAPIView.as_view(), name='department-list-view'),
     path('departments/<int:pk>/', DepartmentDetailAPIView.as_view(), name='department-detail'),
@@ -97,6 +101,7 @@ urlpatterns = [
          name='employee-attendance-status-update'),
     path('attendance/', AttendanceListCreateAPIView.as_view(), name='attendance-list'),
     path('attendance/list/', AttendanceListAPIView.as_view(), name='attendance-list-view'),
+    path('attendance/import/', AttendanceImportAPIView.as_view(), name='attendance-import'),
     path('attendance/options/', AttendanceFormOptionsAPIView.as_view(model=Attendance), name='attendance-options'),
     path('attendance/<int:pk>/options/', AttendanceFormOptionsAPIView.as_view(model=Attendance), name='attendance-edit-options'),
     path('attendance/<int:pk>/', AttendanceDetailAPIView.as_view(), name='attendance-detail'),

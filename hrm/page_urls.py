@@ -2,8 +2,8 @@ from django.urls import path
 
 from .catalog import RESOURCES
 from .page_views import (
-    EmployeeDetailPageView, HRMAddPageView, HRMEditPageView, HRMListPageView,
-    LeaveApplyPageView, LeaveRequestDetailPageView, LeaveRequestListPageView,
+    AttendanceImportPageView, EmployeeDetailPageView, HRMAddPageView, HRMEditPageView, HRMListPageView,
+    LeaveApplyPageView, LeaveRequestDetailPageView, LeaveRequestListPageView, NoticeBoardPageView,
     PayrollAdjustmentDetailPageView, PayrollCalculationPageView, PayrollReportPageView, PayrollRunDetailPageView,
 )
 
@@ -11,6 +11,8 @@ from .page_views import (
 app_name = 'hrm_pages'
 
 urlpatterns = [
+    path('notices/', NoticeBoardPageView.as_view(), name='notice-board'),
+    path('attendance/import/', AttendanceImportPageView.as_view(), name='import-attendance'),
     path('employees/<int:pk>/', EmployeeDetailPageView.as_view(), name='employee-detail'),
     path('leave-requests/', LeaveRequestListPageView.as_view(), name='leave-request-list'),
     path('leave-requests/add/', LeaveApplyPageView.as_view(), name='add-leave-request'),

@@ -1,0 +1,63 @@
+{% extends 'layouts/dashboard.html' %}
+{% load static %}
+{% block title %}Notices | eManager{% endblock %}
+{% block content %}
+<div class="workspace-content" data-notice-board data-api-url="{{ list_api_url }}" data-remove-url="{{ remove_api_template }}">
+    <div class="page-heading">
+        <div><p class="page-eyebrow">HRM</p><h1 class="page-title">Notices</h1></div>
+    </div>
+    {% if options_api_url %}
+    <section class="user-form-card mb-6" aria-labelledby="publish-notice-heading">
+        <h2 id="publish-notice-heading" class="section-title mb-5">Publish a notice</h2>
+        <form method="post" action="{{ list_api_url }}" data-notice-form data-options-url="{{ options_api_url }}">
+            {% csrf_token %}
+            <div class="user-form-grid">
+                <div>
+                    <label class="form-label" for="notice-title">Title</label>
+                    <input id="notice-title" class="form-input" name="title" maxlength="255" required>
+                </div>
+                <div>
+                    <label class="form-label" for="notice-audience">Audience</label>
+                    <select id="notice-audience" class="form-input" name="department_id" disabled>
+                        <option value="">All employees</option>
+                    </select>
+                </div>
+                <div class="user-form-full">
+                    <label class="form-label" for="notice-message">Message</label>
+                    <textarea id="notice-message" class="form-input" name="message" rows="4" required></textarea>
+                </div>
+            </div>
+            <p class="form-status mt-5" data-notice-form-status role="status" hidden></p>
+            <div class="user-form-actions">
+                <button type="button" class="secondary-button" data-notice-options-retry hidden>Retry loading audiences</button>
+                <button type="submit" class="primary-button compact-primary" disabled>Publish notice</button>
+            </div>
+        </form>
+    </section>
+    {% elif remove_api_template %}
+        {% csrf_token %}
+    {% endif %}
+    <section aria-label="Notice feed">
+        <p class="form-status mb-4" data-notice-removal-status role="status" hidden></p>
+        <p class="form-status mb-4" data-notice-feed-status role="status" hidden></p>
+        <button type="button" class="secondary-button mb-4" data-notice-feed-retry hidden>Retry loading notices</button>
+        <div class="grid gap-4" data-notice-feed></div>
+        <nav class="flex gap-3 mt-5" aria-label="Notice pages" data-notice-pagination hidden>
+            <button type="button" class="secondary-button" data-notice-previous>Previous</button>
+            <button type="button" class="secondary-button" data-notice-next>Next</button>
+        </nav>
+    </section>
+    <template data-notice-card>
+        <article class="user-form-card">
+            <h2 class="section-title wrap-anywhere" data-notice-title></h2>
+            <p class="mt-1 text-sm text-stone-600"><span data-notice-audience></span> <span aria-hidden="true">|</span> <time></time></p>
+            <p class="mt-4 whitespace-pre-wrap wrap-anywhere" data-notice-message></p>
+            {% if remove_api_template %}
+            <div class="user-form-actions"><button type="button" class="secondary-button" data-notice-remove>Remove</button></div>
+            {% endif %}
+        </article>
+    </template>
+    <noscript><p class="form-error">Enable JavaScript to use the notice board.</p></noscript>
+</div>
+{% endblock %}
+{% block workspace_js %}<script type="module" src="{% static 'hrm/js/notices.js' %}"></script>{% endblock %}

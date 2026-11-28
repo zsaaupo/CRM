@@ -8,6 +8,10 @@ from .models import Employee
 REVIEW_LEAVE_PERMISSION = 'hrm.review_leaverequest'
 VIEW_LEAVE_PERMISSION = 'hrm.view_leaverequest'
 ADD_LEAVE_PERMISSION = 'hrm.add_leaverequest'
+VIEW_NOTICE_PERMISSION = 'hrm.view_notice'
+NOTICE_BOARD_PERMISSIONS = (VIEW_NOTICE_PERMISSION, 'hrm.view_all_notice')
+NOTICE_PUBLISH_PERMISSIONS = (*NOTICE_BOARD_PERMISSIONS, 'hrm.add_notice')
+NOTICE_REMOVE_PERMISSIONS = (*NOTICE_BOARD_PERMISSIONS, 'hrm.delete_notice')
 PAYROLL_VIEW = ('hrm.view_payrollrun',)
 PAYROLL_DETAIL = (*PAYROLL_VIEW, 'hrm.view_payslip', 'hrm.view_payslipline')
 PAYROLL_CALCULATE = (*PAYROLL_DETAIL, 'hrm.calculate_payrollrun')
@@ -16,6 +20,12 @@ PAYROLL_APPROVE = (*PAYROLL_DETAIL, 'hrm.approve_payrollrun')
 PAYROLL_PAYMENT_VIEW = (*PAYROLL_DETAIL, 'hrm.view_salarypayment')
 PAYROLL_PAYMENT_WRITE = (*PAYROLL_PAYMENT_VIEW, 'hrm.record_salarypayment')
 PAYROLL_REVIEW_ADJUSTMENT = ('hrm.view_payrolladjustment', 'hrm.review_payrolladjustment')
+
+
+def can_view_notices(user):
+    return user.has_perms(NOTICE_BOARD_PERMISSIONS) or (
+        user.has_perm(VIEW_NOTICE_PERMISSION) and Employee.objects.filter(user_id=user.pk).exists()
+    )
 
 
 def leave_requests_for_user(queryset, user):

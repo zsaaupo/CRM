@@ -17,7 +17,7 @@ from accounting.services import (
     STATEMENT_VIEW, TRANSFER_VIEW,
 )
 from hrm.models import Employee
-from hrm.permissions import PAYROLL_DETAIL, PAYROLL_PAYMENT_VIEW, REVIEW_LEAVE_PERMISSION
+from hrm.permissions import NOTICE_BOARD_PERMISSIONS, PAYROLL_DETAIL, PAYROLL_PAYMENT_VIEW, REVIEW_LEAVE_PERMISSION
 from inventory.models import RAW_MATERIAL_TYPE
 from sale.permissions import DELIVERY_VIEW, PACKING_SLIP_VIEW
 from warehouse.models import WareHouse
@@ -54,6 +54,7 @@ POLICIES.update({
     'account.account': Visibility(permissions=ACCESS_RULES['view_users']),
     'auth.group_permissions': Visibility(permissions=ACCESS_RULES['manage_role_permissions']),
     'auth.user_permissions': Visibility(permissions=ACCESS_RULES['manage_role_permissions'] + ACCESS_RULES['view_users']),
+    'hrm.notice': Visibility(permissions=NOTICE_BOARD_PERMISSIONS),
     'hrm.payslip': Visibility(permissions=PAYROLL_DETAIL),
     'hrm.payslipline': Visibility(permissions=PAYROLL_DETAIL),
     'hrm.payrollevent': Visibility(permissions=PAYROLL_DETAIL),
@@ -289,6 +290,8 @@ def saved(sender, instance, created, raw, using, update_fields, **kwargs):
     action = 'created' if created else 'updated'
     if resource == 'hrm.payrollevent':
         actor, action = instance.actor, instance.action
+    elif resource == 'hrm.notice' and created:
+        actor = instance.created_by
     elif created and resource in {'accounting.accounttransfer', 'accounting.accounttransaction', 'accounting.expensepayment',
                                   'accounting.incomepayment', 'accounting.salespayment', 'accounting.purchasepayment',
                                   'accounting.chalanpayment'}:

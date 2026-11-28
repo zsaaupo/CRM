@@ -32,6 +32,20 @@ archives. `Employee.objects` returns current records and `Employee.all_objects`
 includes archived records. Referenced employment lookups, workplaces and linked
 users cannot be deleted while retained employee records reference them.
 
+## Notices
+
+The Notices board lives at `/hrm/notices/` under **People & Payroll**. Grant
+`hrm.view_notice` to employee roles for the company-wide and current-department
+feed. Grant `hrm.view_all_notice` alongside it for board-wide access. Board-wide
+roles need `hrm.add_notice` to publish and `hrm.delete_notice` to remove notices.
+Grant `audit_log.view_auditlog` alongside board-wide access to view notice events.
+
+`GET /hrm/api/notices/` returns 20 visible notices per page, newest first.
+Publishers can fetch active departments from `/hrm/api/notices/options/` and
+send `title`, `message` and an optional `department_id` to `POST /hrm/api/notices/`.
+A null department targets all employees. `DELETE /hrm/api/notices/<id>/`
+removes a notice from the feed and retains its publication and removal history.
+
 ## Attendance models
 
 Four models and a status lookup provide the attendance data layer:
@@ -63,6 +77,26 @@ The API serializes assignment writes per employee and checks for overlaps before
 saving. Writes outside the API should follow the same locking pattern.
 Create a new dated assignment for a shift change, and retain referenced schedules
 for history rather than editing their historical working hours.
+
+### Import attendance from CSV
+
+Open **Attendance record list → Import CSV** to download the template and upload
+a UTF-8 CSV of up to 1,000 rows and 5 MB. The required columns are
+`employee_code` and `work_date` (`YYYY-MM-DD`). Optional columns are `status`,
+`check_in`, `check_out` and `notes`. Use a configured status code or leave it blank
+for `unrecorded`. Enter punches as full local date-times (for example,
+`2026-11-18 22:00:00`) or include a UTC offset. An overnight check-out uses the next
+date, while `work_date` stays on the day the shift started.
+
+The import applies the existing attendance validation rules. A row error or an
+existing employee and work-date combination rejects the whole file. Each saved
+row records the importing user in the audit log.
+
+The page requires `hrm.view_attendance` and `hrm.add_attendance`. Users with
+`hrm.add_attendance` can fetch the template with `GET /hrm/api/attendance/import/`
+or upload a multipart `file` to that URL with `POST`. A successful upload returns
+HTTP 201 and `imported_count`. Validation errors return HTTP 400 with details under
+`file`.
 
 ## CRUD APIs
 

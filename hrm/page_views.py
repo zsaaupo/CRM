@@ -8,12 +8,32 @@ from django.urls import reverse
 from django.utils import timezone
 
 from account.page_views import ProtectedAccountPageView
+from common.csv_files import MAX_CSV_ROWS
 from .catalog import RESOURCE_MAP
 from .models import Employee, EmployeeAttendanceStatus, LeaveRequest, PayrollAdjustment, PayrollRun, SalaryPayment
 from .payroll import RECALCULABLE
 from .payroll_workflow import RUN_ACTIONS
-from .permissions import (PAYROLL_CALCULATE, PAYROLL_DETAIL, PAYROLL_REVIEW_ADJUSTMENT, REVIEW_LEAVE_PERMISSION,
-                          can_apply_for_leave, leave_requests_for_user)
+from .permissions import (NOTICE_PUBLISH_PERMISSIONS, NOTICE_REMOVE_PERMISSIONS, PAYROLL_CALCULATE, PAYROLL_DETAIL,
+                          PAYROLL_REVIEW_ADJUSTMENT, REVIEW_LEAVE_PERMISSION, can_apply_for_leave, can_view_notices,
+                          leave_requests_for_user)
+
+
+class NoticeBoardPageView(ProtectedAccountPageView):
+    template_name = 'hrm/notices.html'
+
+    def has_permission(self):
+        return can_view_notices(self.request.user)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        user = self.request.user
+        context.update(
+            page_section='hrm', page_label='Notices', hrm_key='notices',
+            list_api_url=reverse('hrm:notice-list'),
+            options_api_url=reverse('hrm:notice-options') if user.has_perms(NOTICE_PUBLISH_PERMISSIONS) else '',
+            remove_api_template=reverse('hrm:notice-remove', args=[0]) if user.has_perms(NOTICE_REMOVE_PERMISSIONS) else '',
+        )
+        return context
 
 
 class HRMPageView(ProtectedAccountPageView):
@@ -28,7 +48,7 @@ class HRMPageView(ProtectedAccountPageView):
 
     def get_permission_required(self):
         permissions = [self.resource.permission('view')]
-        if self.mode == 'add':
+        if self.mode in ('add', 'import'):
             permissions.append(self.resource.permission('add'))
         elif self.mode == 'edit':
             permissions.append(self.resource.permission('change'))
@@ -85,6 +105,28 @@ class HRMPageView(ProtectedAccountPageView):
 
 class HRMListPageView(HRMPageView):
     template_name = 'inventory/list.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        if self.resource_key == 'attendance' and context['can_add']:
+            context.update(secondary_url=reverse('hrm_pages:import-attendance'), secondary_label='Import CSV')
+        return context
+
+
+class AttendanceImportPageView(HRMPageView):
+    template_name = 'inventory/add.html'
+    resource_key = 'attendance'
+    mode = 'import'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context.update(
+            page_label='Import attendance', form_heading='Import attendance', save_label='Import attendance',
+            form_description='Upload a CSV to create attendance records for multiple employees or dates.',
+            fields_template='hrm/fields/attendance_import.html', create_api_url=reverse('hrm:attendance-import'),
+            max_csv_rows=f'{MAX_CSV_ROWS:,}', attendance_timezone=timezone.get_current_timezone_name(),
+        )
+        return context
 
 
 class PayrollCalculationPageView(HRMPageView):

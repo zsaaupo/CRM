@@ -138,7 +138,7 @@ if (form) {
         const box = [...form.querySelectorAll("[data-error-for]")].find((element) => element.dataset.errorFor === name);
         if (!input || !box) return false;
         input.setAttribute("aria-invalid", "true");
-        box.textContent = message;
+        box.textContent = Array.isArray(message) ? message.join(input.type === "file" ? "\n" : " ") : String(message);
         box.hidden = false;
         return true;
     }
@@ -236,8 +236,7 @@ if (form) {
             }
             if (error instanceof APIError) {
                 for (const [name, value] of Object.entries(error.errors)) {
-                    const message = Array.isArray(value) ? value.join(" ") : String(value);
-                    if (!fieldError(name, message)) general.push(message);
+                    if (!fieldError(name, value)) general.push(Array.isArray(value) ? value.join(" ") : String(value));
                 }
             }
             status.dataset.tone = "error";

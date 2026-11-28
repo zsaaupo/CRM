@@ -1,4 +1,4 @@
-"""Employee, attendance, leave, salary configuration, and payroll models."""
+"""Employee, notice, attendance, leave, salary configuration, and payroll models."""
 
 from calendar import monthrange
 from decimal import Decimal
@@ -53,6 +53,31 @@ class Department(HRMLookup):
         abstract = False
         verbose_name = 'department'
         verbose_name_plural = 'departments'
+
+
+class Notice(TimeStampedModel):
+    title = models.CharField(max_length=255)
+    message = models.TextField()
+    department = models.ForeignKey(Department, on_delete=models.PROTECT, null=True, blank=True,
+                                   related_name='notices', help_text='Leave empty for all employees.')
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, editable=False,
+                                   related_name='published_notices')
+    deleted_at = models.DateTimeField(null=True, blank=True, editable=False)
+    deleted_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True,
+                                   editable=False, related_name='removed_notices')
+
+    class Meta:
+        ordering = ['-created_at', '-pk']
+        default_permissions = ('view', 'add', 'delete')
+        permissions = [('view_all_notice', 'Can view notices across all departments')]
+        indexes = [models.Index(fields=['deleted_at', '-created_at', '-id'], name='hrm_notice_feed_idx')]
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(deleted_at__isnull=True, deleted_by__isnull=True)
+                | Q(deleted_at__isnull=False, deleted_by__isnull=False),
+                name='hrm_notice_removal_actor_time',
+            ),
+        ]
 
 
 class Designation(HRMLookup):

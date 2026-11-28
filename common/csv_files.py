@@ -5,9 +5,9 @@ from django.http import HttpResponse
 from rest_framework.exceptions import ValidationError
 
 
-MAX_PRODUCT_CSV_BYTES = 5 * 1024 * 1024
-MAX_PRODUCT_CSV_ROWS = 1000
-MAX_PRODUCT_CSV_ERRORS = 50
+MAX_CSV_BYTES = MAX_PRODUCT_CSV_BYTES = 5 * 1024 * 1024
+MAX_CSV_ROWS = MAX_PRODUCT_CSV_ROWS = 1000
+MAX_CSV_ERRORS = MAX_PRODUCT_CSV_ERRORS = 50
 
 
 def csv_response(filename, headers, rows):
@@ -20,10 +20,14 @@ def csv_response(filename, headers, rows):
 
 
 def read_product_csv(upload, required, *, optional=(), document):
-    """Read product rows with their CSV line numbers."""
+    return read_csv_rows(upload, required, optional=optional, row_label='product', document=document)
+
+
+def read_csv_rows(upload, required, *, optional=(), row_label, document=None):
+    """Read the specified columns with their CSV line numbers."""
     if not upload.name.lower().endswith('.csv'):
         raise ValidationError('Choose a .csv file.')
-    if upload.size > MAX_PRODUCT_CSV_BYTES:
+    if upload.size > MAX_CSV_BYTES:
         raise ValidationError('Choose a CSV file of 5 MB or less.')
 
     rows, errors = [], []
@@ -43,17 +47,18 @@ def read_product_csv(upload, required, *, optional=(), document):
             if len(cells) != len(headers):
                 count = 'two' if len(headers) == 2 else str(len(headers))
                 errors.append(f'Row {reader.line_num}: expected {count} columns.')
-                if len(errors) == MAX_PRODUCT_CSV_ERRORS:
+                if len(errors) == MAX_CSV_ERRORS:
                     break
                 continue
             rows.append((reader.line_num, dict(zip(headers, (cell.strip() for cell in cells)))))
-            if len(rows) > MAX_PRODUCT_CSV_ROWS:
-                raise ValidationError(f'Include at most {MAX_PRODUCT_CSV_ROWS:,} product rows per {document}.')
+            if len(rows) > MAX_CSV_ROWS:
+                scope = f' per {document}' if document else ''
+                raise ValidationError(f'Include at most {MAX_CSV_ROWS:,} {row_label} rows{scope}.')
     except (UnicodeError, csv.Error, ValueError) as exc:
         raise ValidationError('The file is malformed. Save it as UTF-8 CSV and try again.') from exc
 
     if errors:
         raise ValidationError(errors)
     if not rows:
-        raise ValidationError('Add at least one product row to the CSV file.')
+        raise ValidationError(f'Add at least one {row_label} row to the CSV file.')
     return rows

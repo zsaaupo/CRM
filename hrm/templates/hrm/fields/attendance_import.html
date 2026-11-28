@@ -1,0 +1,11 @@
+<div class="user-form-full">
+    <label class="form-label" for="id_file">Attendance CSV</label>
+    <input class="form-input" id="id_file" name="file" type="file" accept=".csv,text/csv" required aria-describedby="id_file_hint id_file_error">
+    <div id="id_file_hint" class="section-description">
+        <p>Upload a UTF-8 CSV with up to {{ max_csv_rows }} attendance rows and a file size of 5 MB or less. Use existing <code>employee_code</code> values and enter <code>work_date</code> as <code>YYYY-MM-DD</code>.</p>
+        <p class="mt-2">Use a status code such as <code>present</code> or <code>absent</code>. A blank status uses <code>unrecorded</code>. Enter check-in and check-out times as <code>YYYY-MM-DD HH:MM:SS</code> in {{ attendance_timezone }}. For overnight shifts, enter the next date for check-out.</p>
+        <p class="mt-2">Correct flagged rows before retrying. The import rejects duplicate employee and work date combinations, including records already saved.</p>
+    </div>
+    <p id="id_file_error" data-error-for="file" class="form-error whitespace-pre-line" hidden></p>
+    <a class="text-button mt-3" href="{{ create_api_url }}" download>Download CSV template</a>
+</div>
