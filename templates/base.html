@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="{% static 'css/custom.css' %}">
     {% block extra_css %}{% endblock %}
 </head>
-<body class="min-h-screen bg-stone-50 font-sans text-stone-900 antialiased">
+<body class="app-body min-h-screen antialiased">
     <a href="#main-content" class="skip-link">Skip to content</a>
     {% block header %}{% include "includes/header.html" %}{% endblock %}
 
@@ -19,6 +19,7 @@
         {% block content %}{% endblock %}
     </main>
 
+    {% block footer %}{% endblock %}
     {% block extra_js %}{% endblock %}
 </body>
 </html>

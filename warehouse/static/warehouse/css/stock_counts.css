@@ -30,9 +30,10 @@
     gap: 0.5rem;
     padding: 0.75rem;
     background: white;
-    border: 1px solid #e7e5e4;
+    border: 1px solid var(--erp-border);
     border-radius: 0.5rem;
     font-size: 0.875rem;
+    box-shadow: var(--erp-shadow);
 }
 
 .stock-count-sort {

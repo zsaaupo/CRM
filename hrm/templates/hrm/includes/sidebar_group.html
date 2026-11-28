@@ -10,7 +10,7 @@
 <div id="hrm-{{ group_key }}-submenu" class="sidebar-submenu sidebar-nested-submenu" {% if hrm_group != group_key %}hidden{% endif %}>
     {% with shortcut_key=add_key|default:group_key %}
     {% for item in menu %}
-    <a href="{{ item.list_url }}" data-nav-item class="sidebar-sub-link {% if hrm_key == item.key and page_mode != 'add' %}is-current{% endif %}" {% if hrm_key == item.key and page_mode != 'add' %}aria-current="page"{% endif %}>{{ item.label }}</a>
+    <a href="{{ item.list_url }}" data-nav-item data-nav-list class="sidebar-sub-link {% if hrm_key == item.key and page_mode != 'add' %}is-current{% endif %}" {% if hrm_key == item.key and page_mode != 'add' %}aria-current="page"{% endif %}>{{ item.label }}</a>
     {% if item.key == shortcut_key and item.can_add %}<a href="{{ item.add_url }}" data-nav-item class="sidebar-sub-link {% if hrm_key == shortcut_key and page_mode == 'add' %}is-current{% endif %}" {% if hrm_key == shortcut_key and page_mode == 'add' %}aria-current="page"{% endif %}>{{ add_label }}</a>{% endif %}
     {% endfor %}
     {% endwith %}

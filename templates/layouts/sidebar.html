@@ -1,34 +1,17 @@
 <aside id="workspace-sidebar" class="workspace-sidebar" data-sidebar>
     <div class="sidebar-brand-row">
-        <a href="{% url 'dashboard' %}" class="workspace-brand" aria-label="eManager dashboard"><span class="brand-mark" aria-hidden="true">e</span><span>eManager<span class="text-emerald-600">.</span></span></a>
+        {% include "includes/brand.html" %}
         <button type="button" class="icon-button sidebar-close" data-sidebar-close aria-label="Close navigation"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" stroke-linecap="round"/></svg></button>
     </div>
-    <div class="sidebar-workspace"><span class="workspace-monogram" aria-hidden="true">W</span><div><p>Personal workspace</p><span>Your space to stay organized</span></div></div>
-    <p class="sidebar-label">Workspace</p>
+    <div class="sidebar-workspace"><span class="workspace-monogram" aria-hidden="true">EM</span><div><p>eManager</p><span>Enterprise workspace</span></div></div>
     <nav aria-label="Main navigation" class="sidebar-nav">
+        <p class="sidebar-label">Workspace</p>
         <a href="{% url 'dashboard' %}" data-nav-item class="sidebar-link {% if page_section == 'dashboard' %}is-current{% endif %}" {% if page_section == 'dashboard' %}aria-current="page"{% endif %}>
             <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
             Dashboard
         </a>
-        {% if access.add_user or access.view_users %}<button type="button" class="sidebar-link sidebar-group-toggle {% if page_section == 'users' %}is-current{% endif %}" data-nav-toggle data-users-toggle aria-controls="users-submenu" aria-expanded="{% if page_section == 'users' %}true{% else %}false{% endif %}">
-            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3 21v-2a6 6 0 0 1 12 0v2M16 5a3 3 0 0 1 0 6M18 15a5 5 0 0 1 3 4v2" stroke-linecap="round"/></svg>
-            <span>Users</span>
-            <svg class="sidebar-chevron" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m9 5 7 7-7 7" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </button>
-        <div id="users-submenu" class="sidebar-submenu" {% if page_section != 'users' %}hidden{% endif %}>
-            {% if access.add_user %}<a href="{% url 'account_pages:add-user' %}" data-nav-item class="sidebar-sub-link {% if user_page == 'add' %}is-current{% endif %}" {% if user_page == 'add' %}aria-current="page"{% endif %}>Add user</a>{% endif %}
-            {% if access.view_users %}<a href="{% url 'account_pages:user-list' %}" data-nav-item class="sidebar-sub-link {% if user_page == 'list' %}is-current{% endif %}" {% if user_page == 'list' %}aria-current="page"{% endif %}>User list</a>{% endif %}
-        </div>
-        {% endif %}
-        {% if access.view_roles or access.add_role %}<button type="button" class="sidebar-link sidebar-group-toggle {% if page_section == 'roles' %}is-current{% endif %}" data-nav-toggle data-roles-toggle aria-controls="roles-submenu" aria-expanded="{% if page_section == 'roles' %}true{% else %}false{% endif %}">
-            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="m12 3 8 3v6c0 5-8 9-8 9S4 17 4 12V6l8-3Z" stroke-linejoin="round"/><path d="m8.5 12 2.5 2.5 4.5-5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            <span>Roles &amp; Permissions</span>
-            <svg class="sidebar-chevron" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m9 5 7 7-7 7" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </button>
-        <div id="roles-submenu" class="sidebar-submenu" {% if page_section != 'roles' %}hidden{% endif %}>
-            {% if access.view_roles %}<a href="{% url 'account_pages:role-list' %}" data-nav-item class="sidebar-sub-link {% if role_page == 'list' %}is-current{% endif %}" {% if role_page == 'list' %}aria-current="page"{% endif %}>Role list</a>{% endif %}
-            {% if access.add_role %}<a href="{% url 'account_pages:add-role' %}" data-nav-item class="sidebar-sub-link {% if role_page == 'add' %}is-current{% endif %}" {% if role_page == 'add' %}aria-current="page"{% endif %}>Add role</a>{% endif %}
-        </div>
+        {% if inventory_menu or people_menu or lead_access.view or raw_material_access.view or warehouse_access.view or warehouse_access.stock or warehouse_access.adjustments or warehouse_access.stock_counts or warehouse_access.transfers or warehouse_access.report or purchase_access.view or purchase_access.returns or sale_access.view or sale_access.returns or sale_access.quotations or sale_access.coupons or sale_access.gift_cards or sale_access.chalans or sale_access.packing_slips or sale_access.couriers or sale_access.deliveries %}
+        <p class="sidebar-label">Operations</p>
         {% endif %}
         {% if inventory_menu %}
         <button type="button" class="sidebar-link sidebar-group-toggle {% if page_section == 'inventory' %}is-current{% endif %}" data-nav-toggle data-inventory-toggle aria-controls="inventory-submenu" aria-expanded="{% if page_section == 'inventory' %}true{% else %}false{% endif %}">
@@ -38,10 +21,34 @@
         </button>
         <div id="inventory-submenu" class="sidebar-submenu" {% if page_section != 'inventory' %}hidden{% endif %}>
             {% for item in inventory_menu %}
-            <a href="{{ item.list_url }}" data-nav-item class="sidebar-sub-link {% if inventory_key == item.key and inventory_mode != 'add' %}is-current{% endif %}" {% if inventory_key == item.key and inventory_mode != 'add' %}aria-current="page"{% endif %}>{{ item.label }}</a>
+            <a href="{{ item.list_url }}" data-nav-item data-nav-list class="sidebar-sub-link {% if inventory_key == item.key and inventory_mode != 'add' %}is-current{% endif %}" {% if inventory_key == item.key and inventory_mode != 'add' %}aria-current="page"{% endif %}>{{ item.label }}</a>
             {% if item.key == 'product' and item.can_add %}<a href="{{ item.add_url }}" data-nav-item class="sidebar-sub-link {% if inventory_key == 'product' and inventory_mode == 'add' %}is-current{% endif %}" {% if inventory_key == 'product' and inventory_mode == 'add' %}aria-current="page"{% endif %}>Add product</a>{% endif %}
             {% if item.key == 'product' %}<a href="{% url 'inventory_pages:print-barcodes' %}" data-nav-item class="sidebar-sub-link {% if inventory_mode == 'print-barcodes' %}is-current{% endif %}" {% if inventory_mode == 'print-barcodes' %}aria-current="page"{% endif %}>Print barcodes</a>{% endif %}
             {% endfor %}
+        </div>
+        {% endif %}
+        {% if people_menu %}
+        <button type="button" class="sidebar-link sidebar-group-toggle {% if page_section == 'people' %}is-current{% endif %}" data-nav-toggle data-people-toggle aria-controls="people-submenu" aria-expanded="{% if page_section == 'people' %}true{% else %}false{% endif %}">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3 21v-2a6 6 0 0 1 12 0v2M16 5a3 3 0 0 1 0 6M18 15a5 5 0 0 1 3 4v2" stroke-linecap="round"/></svg>
+            <span>Customers &amp; suppliers</span>
+            <svg class="sidebar-chevron" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m9 5 7 7-7 7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <div id="people-submenu" class="sidebar-submenu" {% if page_section != 'people' %}hidden{% endif %}>
+            {% for item in people_menu %}
+            <a href="{{ item.list_url }}" data-nav-item data-nav-list class="sidebar-sub-link {% if people_role == item.role and page_mode != 'add' %}is-current{% endif %}" {% if people_role == item.role and page_mode != 'add' %}aria-current="page"{% endif %}>{{ item.label }}</a>
+            {% if item.can_add %}<a href="{{ item.add_url }}" data-nav-item class="sidebar-sub-link {% if people_role == item.role and page_mode == 'add' %}is-current{% endif %}" {% if people_role == item.role and page_mode == 'add' %}aria-current="page"{% endif %}>{{ item.add_label }}</a>{% endif %}
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% if lead_access.view %}
+        <button type="button" class="sidebar-link sidebar-group-toggle {% if page_section == 'lead' %}is-current{% endif %}" data-nav-toggle data-lead-toggle aria-controls="lead-submenu" aria-expanded="{% if page_section == 'lead' %}true{% else %}false{% endif %}">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M4 4h16l-6 7v6l-4 3v-9L4 4Z" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span>Leads</span>
+            <svg class="sidebar-chevron" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m9 5 7 7-7 7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <div id="lead-submenu" class="sidebar-submenu" {% if page_section != 'lead' %}hidden{% endif %}>
+            <a href="{% url 'people_pages:lead-list' %}" data-nav-item data-nav-list class="sidebar-sub-link {% if page_section == 'lead' and page_mode != 'add' %}is-current{% endif %}" {% if page_section == 'lead' and page_mode != 'add' %}aria-current="page"{% endif %}>Lead list</a>
+            {% if lead_access.add %}<a href="{% url 'people_pages:add-lead' %}" data-nav-item class="sidebar-sub-link {% if page_section == 'lead' and page_mode == 'add' %}is-current{% endif %}" {% if page_section == 'lead' and page_mode == 'add' %}aria-current="page"{% endif %}>Add lead</a>{% endif %}
         </div>
         {% endif %}
         {% if raw_material_access.view %}
@@ -51,7 +58,7 @@
             <svg class="sidebar-chevron" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m9 5 7 7-7 7" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
         <div id="raw-material-submenu" class="sidebar-submenu" {% if page_section != 'raw_material' %}hidden{% endif %}>
-            <a href="{% url 'raw_material_pages:material-list' %}" data-nav-item class="sidebar-sub-link {% if page_section == 'raw_material' and page_mode != 'add' %}is-current{% endif %}" {% if page_section == 'raw_material' and page_mode == 'list' %}aria-current="page"{% endif %}>Raw material list</a>
+            <a href="{% url 'raw_material_pages:material-list' %}" data-nav-item data-nav-list class="sidebar-sub-link {% if page_section == 'raw_material' and page_mode != 'add' %}is-current{% endif %}" {% if page_section == 'raw_material' and page_mode == 'list' %}aria-current="page"{% endif %}>Raw material list</a>
             {% if raw_material_access.add %}<a href="{% url 'raw_material_pages:add-material' %}" data-nav-item class="sidebar-sub-link {% if page_section == 'raw_material' and page_mode == 'add' %}is-current{% endif %}" {% if page_section == 'raw_material' and page_mode == 'add' %}aria-current="page"{% endif %}>Add raw material</a>{% endif %}
         </div>
         {% endif %}
@@ -63,56 +70,93 @@
         </button>
         <div id="warehouses-submenu" class="sidebar-submenu" {% if page_section != 'warehouses' %}hidden{% endif %}>
             {% if warehouse_access.report %}<a href="{% url 'warehouse_pages:report' %}" data-nav-item class="sidebar-sub-link {% if page_mode == 'report' and page_section == 'warehouses' %}is-current{% endif %}" {% if page_mode == 'report' and page_section == 'warehouses' %}aria-current="page"{% endif %}>Warehouse report</a>{% endif %}
-            {% if warehouse_access.view %}<a href="{% url 'warehouse_pages:warehouse-list' %}" data-nav-item class="sidebar-sub-link {% if page_section == 'warehouses' and page_mode == 'list' or page_section == 'warehouses' and page_mode == 'edit' %}is-current{% endif %}" {% if page_section == 'warehouses' and page_mode == 'list' or page_section == 'warehouses' and page_mode == 'edit' %}aria-current="page"{% endif %}>Warehouse list</a>{% endif %}
+            {% if warehouse_access.view %}<a href="{% url 'warehouse_pages:warehouse-list' %}" data-nav-item data-nav-list class="sidebar-sub-link {% if page_section == 'warehouses' and page_mode == 'list' or page_section == 'warehouses' and page_mode == 'edit' %}is-current{% endif %}" {% if page_section == 'warehouses' and page_mode == 'list' or page_section == 'warehouses' and page_mode == 'edit' %}aria-current="page"{% endif %}>Warehouse list</a>{% endif %}
             {% if warehouse_access.add %}<a href="{% url 'warehouse_pages:add-warehouse' %}" data-nav-item class="sidebar-sub-link {% if page_section == 'warehouses' and page_mode == 'add' %}is-current{% endif %}" {% if page_section == 'warehouses' and page_mode == 'add' %}aria-current="page"{% endif %}>Add warehouse</a>{% endif %}
-            {% if warehouse_access.stock %}<a href="{% url 'warehouse_pages:stock-list' %}" data-nav-item class="sidebar-sub-link {% if page_mode == 'stock-list' or page_mode == 'stock-detail' %}is-current{% endif %}" {% if page_mode == 'stock-list' or page_mode == 'stock-detail' %}aria-current="page"{% endif %}>Stock list</a>{% endif %}
+            {% if warehouse_access.stock %}<a href="{% url 'warehouse_pages:stock-list' %}" data-nav-item data-nav-list class="sidebar-sub-link {% if page_mode == 'stock-list' or page_mode == 'stock-detail' %}is-current{% endif %}" {% if page_mode == 'stock-list' or page_mode == 'stock-detail' %}aria-current="page"{% endif %}>Stock list</a>{% endif %}
             {% if warehouse_access.stock_chart %}<a href="{% url 'warehouse_pages:stock-chart' %}" data-nav-item class="sidebar-sub-link {% if page_mode == 'stock-chart' %}is-current{% endif %}" {% if page_mode == 'stock-chart' %}aria-current="page"{% endif %}>Stock chart</a>{% endif %}
-            {% if warehouse_access.stock_counts %}<a href="{% url 'warehouse_pages:stock-count-list' %}" data-nav-item class="sidebar-sub-link {% if page_mode == 'stock-count' %}is-current{% endif %}" {% if page_mode == 'stock-count' %}aria-current="page"{% endif %}>Stock counts</a>{% endif %}
-            {% if warehouse_access.adjustments %}<a href="{% url 'warehouse_pages:adjustment-list' %}" data-nav-item class="sidebar-sub-link {% if page_mode == 'adjustment-list' or page_mode == 'adjustment-add' or page_mode == 'adjustment-edit' or page_mode == 'adjustment-detail' %}is-current{% endif %}" {% if page_mode == 'adjustment-list' %}aria-current="page"{% endif %}>Stock adjustments</a>{% endif %}
-            {% if warehouse_access.transfers %}<a href="{% url 'warehouse_pages:transfer-list' %}" data-nav-item class="sidebar-sub-link {% if page_mode == 'transfer-list' or page_mode == 'transfer-edit' or page_mode == 'transfer-detail' or page_mode == 'transfer-import' %}is-current{% endif %}">Transfer list</a>{% endif %}
+            {% if warehouse_access.stock_counts %}<a href="{% url 'warehouse_pages:stock-count-list' %}" data-nav-item data-nav-list class="sidebar-sub-link {% if page_mode == 'stock-count' %}is-current{% endif %}" {% if page_mode == 'stock-count' %}aria-current="page"{% endif %}>Stock counts</a>{% endif %}
+            {% if warehouse_access.adjustments %}<a href="{% url 'warehouse_pages:adjustment-list' %}" data-nav-item data-nav-list class="sidebar-sub-link {% if page_mode == 'adjustment-list' or page_mode == 'adjustment-add' or page_mode == 'adjustment-edit' or page_mode == 'adjustment-detail' %}is-current{% endif %}" {% if page_mode == 'adjustment-list' %}aria-current="page"{% endif %}>Stock adjustments</a>{% endif %}
+            {% if warehouse_access.transfers %}<a href="{% url 'warehouse_pages:transfer-list' %}" data-nav-item data-nav-list class="sidebar-sub-link {% if page_mode == 'transfer-list' or page_mode == 'transfer-edit' or page_mode == 'transfer-detail' or page_mode == 'transfer-import' %}is-current{% endif %}">Transfer list</a>{% endif %}
             {% if warehouse_access.add_transfer %}<a href="{% url 'warehouse_pages:add-transfer' %}" data-nav-item class="sidebar-sub-link {% if page_mode == 'transfer-add' %}is-current{% endif %}">Add transfer</a>{% endif %}
         </div>
         {% endif %}
         {% if purchase_access.view or purchase_access.returns %}
         <button type="button" class="sidebar-link sidebar-group-toggle {% if page_section == 'purchase' %}is-current{% endif %}" data-nav-toggle data-purchase-toggle aria-controls="purchase-submenu" aria-expanded="{% if page_section == 'purchase' %}true{% else %}false{% endif %}">
             <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M9 5H5v16h14V5h-4M9 3h6v4H9V3ZM8 12h8M8 16h5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            <span>Purchase</span>
+            <span>Purchasing</span>
             <svg class="sidebar-chevron" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m9 5 7 7-7 7" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
         <div id="purchase-submenu" class="sidebar-submenu" {% if page_section != 'purchase' %}hidden{% endif %}>
-            {% if purchase_access.view %}<a href="{% url 'purchase_pages:purchase-list' %}" data-nav-item class="sidebar-sub-link {% if page_section == 'purchase' and purchase_area != 'returns' and page_mode != 'add' %}is-current{% endif %}" {% if page_section == 'purchase' and purchase_area != 'returns' and page_mode != 'add' %}aria-current="page"{% endif %}>Purchase list</a>{% endif %}
+            {% if purchase_access.view %}<a href="{% url 'purchase_pages:purchase-list' %}" data-nav-item data-nav-list class="sidebar-sub-link {% if page_section == 'purchase' and purchase_area != 'returns' and page_mode != 'add' %}is-current{% endif %}" {% if page_section == 'purchase' and purchase_area != 'returns' and page_mode != 'add' %}aria-current="page"{% endif %}>Purchase list</a>{% endif %}
             {% if purchase_access.add %}<a href="{% url 'purchase_pages:create-purchase' %}" data-nav-item class="sidebar-sub-link {% if page_section == 'purchase' and purchase_area != 'returns' and page_mode == 'add' %}is-current{% endif %}" {% if page_section == 'purchase' and purchase_area != 'returns' and page_mode == 'add' %}aria-current="page"{% endif %}>Create purchase</a>{% endif %}
-            {% if purchase_access.returns %}<a href="{% url 'purchase_pages:return-list' %}" data-nav-item class="sidebar-sub-link {% if purchase_area == 'returns' %}is-current{% endif %}" {% if purchase_area == 'returns' and page_mode == 'list' %}aria-current="page"{% endif %}>Purchase returns</a>{% endif %}
+            {% if purchase_access.returns %}<a href="{% url 'purchase_pages:return-list' %}" data-nav-item data-nav-list class="sidebar-sub-link {% if purchase_area == 'returns' %}is-current{% endif %}" {% if purchase_area == 'returns' and page_mode == 'list' %}aria-current="page"{% endif %}>Purchase returns</a>{% endif %}
         </div>
         {% endif %}
-        {% if people_menu %}
-        <button type="button" class="sidebar-link sidebar-group-toggle {% if page_section == 'people' %}is-current{% endif %}" data-nav-toggle data-people-toggle aria-controls="people-submenu" aria-expanded="{% if page_section == 'people' %}true{% else %}false{% endif %}">
-            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3 21v-2a6 6 0 0 1 12 0v2M16 5a3 3 0 0 1 0 6M18 15a5 5 0 0 1 3 4v2" stroke-linecap="round"/></svg>
-            <span>People</span>
-            <svg class="sidebar-chevron" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m9 5 7 7-7 7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        {% if sale_access.view or sale_access.returns or sale_access.quotations or sale_access.coupons or sale_access.gift_cards or sale_access.chalans or sale_access.packing_slips or sale_access.couriers or sale_access.deliveries %}
+        <button type="button" class="sidebar-link sidebar-group-toggle {% if page_section == 'sale' %}is-current{% endif %}" data-nav-toggle data-sales-toggle aria-controls="sales-submenu" aria-expanded="{% if page_section == 'sale' %}true{% else %}false{% endif %}">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M3 3h2l3 12h10l3-8H6M9 20h.01M18 20h.01" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span>Sales &amp; POS</span><svg class="sidebar-chevron" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m9 5 7 7-7 7" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
-        <div id="people-submenu" class="sidebar-submenu" {% if page_section != 'people' %}hidden{% endif %}>
-            {% for item in people_menu %}
-            <a href="{{ item.list_url }}" data-nav-item class="sidebar-sub-link {% if people_role == item.role and page_mode != 'add' %}is-current{% endif %}" {% if people_role == item.role and page_mode != 'add' %}aria-current="page"{% endif %}>{{ item.label }}</a>
-            {% if item.can_add %}<a href="{{ item.add_url }}" data-nav-item class="sidebar-sub-link {% if people_role == item.role and page_mode == 'add' %}is-current{% endif %}" {% if people_role == item.role and page_mode == 'add' %}aria-current="page"{% endif %}>{{ item.add_label }}</a>{% endif %}
-            {% endfor %}
+        <div id="sales-submenu" class="sidebar-submenu" {% if page_section != 'sale' %}hidden{% endif %}>
+            {% if sale_access.pos %}<a href="{% url 'sale_pages:pos' %}" data-nav-item class="sidebar-sub-link {% if sale_area == 'pos' %}is-current{% endif %}">Point of sale</a>{% endif %}
+            {% if sale_access.coupons %}<a href="{% url 'sale_pages:coupons' %}" data-nav-item class="sidebar-sub-link {% if sale_area == 'coupons' %}is-current{% endif %}">Coupons</a>{% endif %}
+            {% if sale_access.gift_cards %}<a href="{% url 'sale_pages:gift-cards' %}" data-nav-item class="sidebar-sub-link {% if sale_area == 'gift-cards' %}is-current{% endif %}">Gift cards</a>{% endif %}
+            {% if sale_access.view %}<a href="{% url 'sale_pages:sale-list' %}" data-nav-item data-nav-list class="sidebar-sub-link {% if page_section == 'sale' and not sale_area and page_mode != 'add' %}is-current{% endif %}" {% if page_section == 'sale' and not sale_area and page_mode != 'add' %}aria-current="page"{% endif %}>Sales list</a>{% endif %}
+            {% if sale_access.add %}<a href="{% url 'sale_pages:create-sale' %}" data-nav-item class="sidebar-sub-link {% if page_section == 'sale' and not sale_area and page_mode == 'add' %}is-current{% endif %}" {% if page_section == 'sale' and not sale_area and page_mode == 'add' %}aria-current="page"{% endif %}>Create sale</a>{% endif %}
+            {% if sale_access.chalans %}<a href="{% url 'sale_pages:chalan-list' %}" data-nav-item data-nav-list class="sidebar-sub-link {% if sale_area == 'chalans' %}is-current{% endif %}" {% if sale_area == 'chalans' and page_mode == 'list' %}aria-current="page"{% endif %}>Chalan</a>{% endif %}
+            {% if sale_access.packing_slips %}<a href="{% url 'sale_pages:packing-slip-list' %}" data-nav-item data-nav-list class="sidebar-sub-link {% if sale_area == 'packing-slips' %}is-current{% endif %}" {% if sale_area == 'packing-slips' %}aria-current="page"{% endif %}>Packing slip list</a>{% endif %}
+            {% if sale_access.deliveries %}<a href="{% url 'sale_pages:delivery-list' %}" data-nav-item data-nav-list class="sidebar-sub-link {% if sale_area == 'deliveries' %}is-current{% endif %}" {% if sale_area == 'deliveries' %}aria-current="page"{% endif %}>Deliveries</a>{% endif %}
+            {% if sale_access.couriers %}<a href="{% url 'sale_pages:courier-list' %}" data-nav-item data-nav-list class="sidebar-sub-link {% if sale_area == 'couriers' %}is-current{% endif %}" {% if sale_area == 'couriers' %}aria-current="page"{% endif %}>Couriers</a>{% endif %}
+            {% if sale_access.quotations %}<a href="{% url 'sale_pages:quotation-list' %}" data-nav-item data-nav-list class="sidebar-sub-link {% if sale_area == 'quotations' %}is-current{% endif %}" {% if sale_area == 'quotations' and page_mode == 'list' %}aria-current="page"{% endif %}>Quotations</a>{% endif %}
+            {% if sale_access.returns %}<a href="{% url 'sale_pages:return-list' %}" data-nav-item data-nav-list class="sidebar-sub-link {% if sale_area == 'returns' %}is-current{% endif %}" {% if sale_area == 'returns' and page_mode == 'list' %}aria-current="page"{% endif %}>Sales returns</a>{% endif %}
         </div>
         {% endif %}
-        {% if lead_access.view %}
-        <button type="button" class="sidebar-link sidebar-group-toggle {% if page_section == 'lead' %}is-current{% endif %}" data-nav-toggle data-lead-toggle aria-controls="lead-submenu" aria-expanded="{% if page_section == 'lead' %}true{% else %}false{% endif %}">
-            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M4 4h16l-6 7v6l-4 3v-9L4 4Z" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            <span>Lead</span>
-            <svg class="sidebar-chevron" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m9 5 7 7-7 7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        {% if finance_access.accounts or finance_access.transfers or expense_access.expenses or expense_access.categories or income_access.incomes or income_access.categories or hrm_menu or hrm_attendance_menu or hrm_leave_menu or hrm_salary_menu or hrm_loan_menu or access.add_user or access.view_users or access.view_roles or access.add_role or settings_access.trade_status or perms.audit_log.view_auditlog %}
+        <p class="sidebar-label">Management</p>
+        {% endif %}
+        {% if finance_access.accounts or finance_access.transfers %}
+        <button type="button" class="sidebar-link sidebar-group-toggle {% if page_section == 'accounting' %}is-current{% endif %}" data-nav-toggle aria-controls="accounting-submenu" aria-expanded="{% if page_section == 'accounting' %}true{% else %}false{% endif %}">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="m3 9 9-5 9 5M4 10h16M6 11v6m6-6v6m6-6v6M3 19h18" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span>Accounting</span><svg class="sidebar-chevron" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m9 5 7 7-7 7" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
-        <div id="lead-submenu" class="sidebar-submenu" {% if page_section != 'lead' %}hidden{% endif %}>
-            <a href="{% url 'people_pages:lead-list' %}" data-nav-item class="sidebar-sub-link {% if page_section == 'lead' and page_mode != 'add' %}is-current{% endif %}" {% if page_section == 'lead' and page_mode != 'add' %}aria-current="page"{% endif %}>Lead list</a>
-            {% if lead_access.add %}<a href="{% url 'people_pages:add-lead' %}" data-nav-item class="sidebar-sub-link {% if page_section == 'lead' and page_mode == 'add' %}is-current{% endif %}" {% if page_section == 'lead' and page_mode == 'add' %}aria-current="page"{% endif %}>Add lead</a>{% endif %}
+        <div id="accounting-submenu" class="sidebar-submenu" {% if page_section != 'accounting' %}hidden{% endif %}>
+            {% if finance_access.accounts %}<a href="{% url 'accounting_pages:financial-account-list' %}" data-nav-item data-nav-list class="sidebar-sub-link {% if finance_key == 'accounts' %}is-current{% endif %}">Financial accounts</a>{% endif %}
+            {% if finance_access.cash_flow %}<a href="{% url 'accounting_pages:cash-flow-list' %}" data-nav-item data-nav-list class="sidebar-sub-link {% if finance_key == 'cash-flow' %}is-current{% endif %}" {% if finance_key == 'cash-flow' %}aria-current="page"{% endif %}>Cash flow</a>{% endif %}
+            {% if finance_access.ledger %}<a href="{% url 'accounting_pages:ledger' %}" data-nav-item class="sidebar-sub-link {% if finance_key == 'ledger' %}is-current{% endif %}" {% if finance_key == 'ledger' %}aria-current="page"{% endif %}>Ledger</a>{% endif %}
+            {% if finance_access.ledger %}
+            <a href="{% url 'accounting_pages:balance-sheet' %}" data-nav-item class="sidebar-sub-link {% if finance_key == 'balance-sheet' %}is-current{% endif %}" {% if finance_key == 'balance-sheet' %}aria-current="page"{% endif %}>Balance Sheet</a>
+            <a href="{% url 'accounting_pages:daybook' %}" data-nav-item class="sidebar-sub-link {% if finance_key == 'daybook' %}is-current{% endif %}">Daybook</a>
+            {% endif %}
+            {% if finance_access.transfers %}
+            <a href="{% url 'accounting_pages:account-transfer-list' %}" data-nav-item data-nav-list class="sidebar-sub-link {% if finance_key == 'account-transfer' %}is-current{% endif %}">Fund transfers</a>
+            <a href="{% url 'accounting_pages:money-transfer-list' %}" data-nav-item data-nav-list class="sidebar-sub-link {% if finance_key == 'money-transfer' %}is-current{% endif %}">Money transfers</a>
+            {% endif %}
+        </div>
+        {% endif %}
+        {% if expense_access.expenses or expense_access.categories %}
+        <button type="button" class="sidebar-link sidebar-group-toggle {% if page_section == 'expense' %}is-current{% endif %}" data-nav-toggle aria-controls="expense-submenu" aria-expanded="{% if page_section == 'expense' %}true{% else %}false{% endif %}">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M4 6h16v13H4zM4 6V4h13M20 10h-5a2 2 0 0 0 0 4h5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span>Expenses</span><svg class="sidebar-chevron" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m9 5 7 7-7 7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <div id="expense-submenu" class="sidebar-submenu" {% if page_section != 'expense' %}hidden{% endif %}>
+            {% if expense_access.expenses %}<a href="{% url 'accounting_pages:expense-list' %}" data-nav-item data-nav-list class="sidebar-sub-link {% if expense_key == 'expense' %}is-current{% endif %}" {% if expense_key == 'expense' and page_mode == 'list' %}aria-current="page"{% endif %}>Expense list</a>{% endif %}
+            {% if expense_access.categories %}<a href="{% url 'accounting_pages:expense-category-list' %}" data-nav-item data-nav-list class="sidebar-sub-link {% if expense_key == 'expense-category' %}is-current{% endif %}" {% if expense_key == 'expense-category' and page_mode == 'list' %}aria-current="page"{% endif %}>Expense categories</a>{% endif %}
+        </div>
+        {% endif %}
+        {% if income_access.incomes or income_access.categories %}
+        <button type="button" class="sidebar-link sidebar-group-toggle {% if page_section == 'income' %}is-current{% endif %}" data-nav-toggle aria-controls="income-submenu" aria-expanded="{% if page_section == 'income' %}true{% else %}false{% endif %}">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M4 6h16v13H4zM4 6V4h13M20 10h-5a2 2 0 0 0 0 4h5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span>Income</span><svg class="sidebar-chevron" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m9 5 7 7-7 7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <div id="income-submenu" class="sidebar-submenu" {% if page_section != 'income' %}hidden{% endif %}>
+            {% if income_access.incomes %}<a href="{% url 'accounting_pages:income-list' %}" data-nav-item data-nav-list class="sidebar-sub-link {% if income_key == 'income' %}is-current{% endif %}" {% if income_key == 'income' and page_mode == 'list' %}aria-current="page"{% endif %}>Income list</a>{% endif %}
+            {% if income_access.categories %}<a href="{% url 'accounting_pages:income-category-list' %}" data-nav-item data-nav-list class="sidebar-sub-link {% if income_key == 'income-category' %}is-current{% endif %}" {% if income_key == 'income-category' and page_mode == 'list' %}aria-current="page"{% endif %}>Income categories</a>{% endif %}
         </div>
         {% endif %}
         {% if hrm_menu or hrm_attendance_menu or hrm_leave_menu or hrm_salary_menu or hrm_loan_menu %}
         <button type="button" class="sidebar-link sidebar-group-toggle {% if page_section == 'hrm' %}is-current{% endif %}" data-nav-toggle data-hrm-toggle aria-controls="hrm-submenu" aria-expanded="{% if page_section == 'hrm' %}true{% else %}false{% endif %}">
             <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M9 5V3h6v2M3 11h18M9 11v3h6v-3" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            <span>HRM</span>
+            <span>People &amp; Payroll</span>
             <svg class="sidebar-chevron" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m9 5 7 7-7 7" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
         <div id="hrm-submenu" class="sidebar-submenu" {% if page_section != 'hrm' %}hidden{% endif %}>
@@ -123,62 +167,24 @@
             {% include 'hrm/includes/sidebar_group.html' with menu=hrm_loan_menu group_key='loan' group_label='Loan' %}
         </div>
         {% endif %}
-        {% if sale_access.view or sale_access.returns or sale_access.quotations or sale_access.coupons or sale_access.gift_cards or sale_access.chalans or sale_access.packing_slips or sale_access.couriers or sale_access.deliveries %}
-        <button type="button" class="sidebar-link sidebar-group-toggle {% if page_section == 'sale' %}is-current{% endif %}" data-nav-toggle data-sales-toggle aria-controls="sales-submenu" aria-expanded="{% if page_section == 'sale' %}true{% else %}false{% endif %}">
-            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M3 3h2l3 12h10l3-8H6M9 20h.01M18 20h.01" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            <span>Sales</span><svg class="sidebar-chevron" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m9 5 7 7-7 7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        {% if access.add_user or access.view_users %}<button type="button" class="sidebar-link sidebar-group-toggle {% if page_section == 'users' %}is-current{% endif %}" data-nav-toggle data-users-toggle aria-controls="users-submenu" aria-expanded="{% if page_section == 'users' %}true{% else %}false{% endif %}">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3 21v-2a6 6 0 0 1 12 0v2M16 5a3 3 0 0 1 0 6M18 15a5 5 0 0 1 3 4v2" stroke-linecap="round"/></svg>
+            <span>Users</span>
+            <svg class="sidebar-chevron" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m9 5 7 7-7 7" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
-        <div id="sales-submenu" class="sidebar-submenu" {% if page_section != 'sale' %}hidden{% endif %}>
-            {% if sale_access.pos %}<a href="{% url 'sale_pages:pos' %}" data-nav-item class="sidebar-sub-link {% if sale_area == 'pos' %}is-current{% endif %}">Point of sale</a>{% endif %}
-            {% if sale_access.coupons %}<a href="{% url 'sale_pages:coupons' %}" data-nav-item class="sidebar-sub-link {% if sale_area == 'coupons' %}is-current{% endif %}">Coupons</a>{% endif %}
-            {% if sale_access.gift_cards %}<a href="{% url 'sale_pages:gift-cards' %}" data-nav-item class="sidebar-sub-link {% if sale_area == 'gift-cards' %}is-current{% endif %}">Gift cards</a>{% endif %}
-            {% if sale_access.view %}<a href="{% url 'sale_pages:sale-list' %}" data-nav-item class="sidebar-sub-link {% if page_section == 'sale' and not sale_area and page_mode != 'add' %}is-current{% endif %}" {% if page_section == 'sale' and not sale_area and page_mode != 'add' %}aria-current="page"{% endif %}>Sales list</a>{% endif %}
-            {% if sale_access.add %}<a href="{% url 'sale_pages:create-sale' %}" data-nav-item class="sidebar-sub-link {% if page_section == 'sale' and not sale_area and page_mode == 'add' %}is-current{% endif %}" {% if page_section == 'sale' and not sale_area and page_mode == 'add' %}aria-current="page"{% endif %}>Create sale</a>{% endif %}
-            {% if sale_access.chalans %}<a href="{% url 'sale_pages:chalan-list' %}" data-nav-item class="sidebar-sub-link {% if sale_area == 'chalans' %}is-current{% endif %}" {% if sale_area == 'chalans' and page_mode == 'list' %}aria-current="page"{% endif %}>Chalan</a>{% endif %}
-            {% if sale_access.packing_slips %}<a href="{% url 'sale_pages:packing-slip-list' %}" data-nav-item class="sidebar-sub-link {% if sale_area == 'packing-slips' %}is-current{% endif %}" {% if sale_area == 'packing-slips' %}aria-current="page"{% endif %}>Packing slip list</a>{% endif %}
-            {% if sale_access.deliveries %}<a href="{% url 'sale_pages:delivery-list' %}" data-nav-item class="sidebar-sub-link {% if sale_area == 'deliveries' %}is-current{% endif %}" {% if sale_area == 'deliveries' %}aria-current="page"{% endif %}>Deliveries</a>{% endif %}
-            {% if sale_access.couriers %}<a href="{% url 'sale_pages:courier-list' %}" data-nav-item class="sidebar-sub-link {% if sale_area == 'couriers' %}is-current{% endif %}" {% if sale_area == 'couriers' %}aria-current="page"{% endif %}>Couriers</a>{% endif %}
-            {% if sale_access.quotations %}<a href="{% url 'sale_pages:quotation-list' %}" data-nav-item class="sidebar-sub-link {% if sale_area == 'quotations' %}is-current{% endif %}" {% if sale_area == 'quotations' and page_mode == 'list' %}aria-current="page"{% endif %}>Quotations</a>{% endif %}
-            {% if sale_access.returns %}<a href="{% url 'sale_pages:return-list' %}" data-nav-item class="sidebar-sub-link {% if sale_area == 'returns' %}is-current{% endif %}" {% if sale_area == 'returns' and page_mode == 'list' %}aria-current="page"{% endif %}>Sales returns</a>{% endif %}
+        <div id="users-submenu" class="sidebar-submenu" {% if page_section != 'users' %}hidden{% endif %}>
+            {% if access.add_user %}<a href="{% url 'account_pages:add-user' %}" data-nav-item class="sidebar-sub-link {% if user_page == 'add' %}is-current{% endif %}" {% if user_page == 'add' %}aria-current="page"{% endif %}>Add user</a>{% endif %}
+            {% if access.view_users %}<a href="{% url 'account_pages:user-list' %}" data-nav-item data-nav-list class="sidebar-sub-link {% if user_page == 'list' %}is-current{% endif %}" {% if user_page == 'list' %}aria-current="page"{% endif %}>User list</a>{% endif %}
         </div>
         {% endif %}
-        {% if expense_access.expenses or expense_access.categories %}
-        <button type="button" class="sidebar-link sidebar-group-toggle {% if page_section == 'expense' %}is-current{% endif %}" data-nav-toggle aria-controls="expense-submenu" aria-expanded="{% if page_section == 'expense' %}true{% else %}false{% endif %}">
-            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M4 6h16v13H4zM4 6V4h13M20 10h-5a2 2 0 0 0 0 4h5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            <span>Expenses</span><svg class="sidebar-chevron" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m9 5 7 7-7 7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        {% if access.view_roles or access.add_role %}<button type="button" class="sidebar-link sidebar-group-toggle {% if page_section == 'roles' %}is-current{% endif %}" data-nav-toggle data-roles-toggle aria-controls="roles-submenu" aria-expanded="{% if page_section == 'roles' %}true{% else %}false{% endif %}">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="m12 3 8 3v6c0 5-8 9-8 9S4 17 4 12V6l8-3Z" stroke-linejoin="round"/><path d="m8.5 12 2.5 2.5 4.5-5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span>Roles &amp; Permissions</span>
+            <svg class="sidebar-chevron" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m9 5 7 7-7 7" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
-        <div id="expense-submenu" class="sidebar-submenu" {% if page_section != 'expense' %}hidden{% endif %}>
-            {% if expense_access.expenses %}<a href="{% url 'accounting_pages:expense-list' %}" data-nav-item class="sidebar-sub-link {% if expense_key == 'expense' %}is-current{% endif %}" {% if expense_key == 'expense' and page_mode == 'list' %}aria-current="page"{% endif %}>Expense list</a>{% endif %}
-            {% if expense_access.categories %}<a href="{% url 'accounting_pages:expense-category-list' %}" data-nav-item class="sidebar-sub-link {% if expense_key == 'expense-category' %}is-current{% endif %}" {% if expense_key == 'expense-category' and page_mode == 'list' %}aria-current="page"{% endif %}>Expense categories</a>{% endif %}
-        </div>
-        {% endif %}
-        {% if income_access.incomes or income_access.categories %}
-        <button type="button" class="sidebar-link sidebar-group-toggle {% if page_section == 'income' %}is-current{% endif %}" data-nav-toggle aria-controls="income-submenu" aria-expanded="{% if page_section == 'income' %}true{% else %}false{% endif %}">
-            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M4 6h16v13H4zM4 6V4h13M20 10h-5a2 2 0 0 0 0 4h5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            <span>Income</span><svg class="sidebar-chevron" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m9 5 7 7-7 7" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </button>
-        <div id="income-submenu" class="sidebar-submenu" {% if page_section != 'income' %}hidden{% endif %}>
-            {% if income_access.incomes %}<a href="{% url 'accounting_pages:income-list' %}" data-nav-item class="sidebar-sub-link {% if income_key == 'income' %}is-current{% endif %}" {% if income_key == 'income' and page_mode == 'list' %}aria-current="page"{% endif %}>Income list</a>{% endif %}
-            {% if income_access.categories %}<a href="{% url 'accounting_pages:income-category-list' %}" data-nav-item class="sidebar-sub-link {% if income_key == 'income-category' %}is-current{% endif %}" {% if income_key == 'income-category' and page_mode == 'list' %}aria-current="page"{% endif %}>Income categories</a>{% endif %}
-        </div>
-        {% endif %}
-        {% if finance_access.accounts or finance_access.transfers %}
-        <button type="button" class="sidebar-link sidebar-group-toggle {% if page_section == 'accounting' %}is-current{% endif %}" data-nav-toggle aria-controls="accounting-submenu" aria-expanded="{% if page_section == 'accounting' %}true{% else %}false{% endif %}">
-            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="m3 9 9-5 9 5M4 10h16M6 11v6m6-6v6m6-6v6M3 19h18" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            <span>Accounting</span><svg class="sidebar-chevron" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m9 5 7 7-7 7" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </button>
-        <div id="accounting-submenu" class="sidebar-submenu" {% if page_section != 'accounting' %}hidden{% endif %}>
-            {% if finance_access.accounts %}<a href="{% url 'accounting_pages:financial-account-list' %}" data-nav-item class="sidebar-sub-link {% if finance_key == 'accounts' %}is-current{% endif %}">Financial accounts</a>{% endif %}
-            {% if finance_access.cash_flow %}<a href="{% url 'accounting_pages:cash-flow-list' %}" data-nav-item class="sidebar-sub-link {% if finance_key == 'cash-flow' %}is-current{% endif %}" {% if finance_key == 'cash-flow' %}aria-current="page"{% endif %}>Cash flow</a>{% endif %}
-            {% if finance_access.ledger %}<a href="{% url 'accounting_pages:ledger' %}" data-nav-item class="sidebar-sub-link {% if finance_key == 'ledger' %}is-current{% endif %}" {% if finance_key == 'ledger' %}aria-current="page"{% endif %}>Ledger</a>{% endif %}
-            {% if finance_access.ledger %}
-            <a href="{% url 'accounting_pages:balance-sheet' %}" data-nav-item class="sidebar-sub-link {% if finance_key == 'balance-sheet' %}is-current{% endif %}" {% if finance_key == 'balance-sheet' %}aria-current="page"{% endif %}>Balance Sheet</a>
-            <a href="{% url 'accounting_pages:daybook' %}" data-nav-item class="sidebar-sub-link {% if finance_key == 'daybook' %}is-current{% endif %}">Daybook</a>
-            {% endif %}
-            {% if finance_access.transfers %}
-            <a href="{% url 'accounting_pages:account-transfer-list' %}" data-nav-item class="sidebar-sub-link {% if finance_key == 'account-transfer' %}is-current{% endif %}">Fund transfers</a>
-            <a href="{% url 'accounting_pages:money-transfer-list' %}" data-nav-item class="sidebar-sub-link {% if finance_key == 'money-transfer' %}is-current{% endif %}">Money transfers</a>
-            {% endif %}
+        <div id="roles-submenu" class="sidebar-submenu" {% if page_section != 'roles' %}hidden{% endif %}>
+            {% if access.view_roles %}<a href="{% url 'account_pages:role-list' %}" data-nav-item data-nav-list class="sidebar-sub-link {% if role_page == 'list' %}is-current{% endif %}" {% if role_page == 'list' %}aria-current="page"{% endif %}>Role list</a>{% endif %}
+            {% if access.add_role %}<a href="{% url 'account_pages:add-role' %}" data-nav-item class="sidebar-sub-link {% if role_page == 'add' %}is-current{% endif %}" {% if role_page == 'add' %}aria-current="page"{% endif %}>Add role</a>{% endif %}
         </div>
         {% endif %}
         {% if settings_access.trade_status %}
@@ -187,7 +193,7 @@
             <span>Settings</span><svg class="sidebar-chevron" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m9 5 7 7-7 7" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
         <div id="settings-submenu" class="sidebar-submenu" {% if page_section != 'settings' %}hidden{% endif %}>
-            <a href="{% url 'common_pages:trade-status-list' %}" data-nav-item class="sidebar-sub-link {% if settings_key == 'trade-status' %}is-current{% endif %}" {% if settings_key == 'trade-status' %}aria-current="page"{% endif %}>Trade status setting</a>
+            <a href="{% url 'common_pages:trade-status-list' %}" data-nav-item data-nav-list class="sidebar-sub-link {% if settings_key == 'trade-status' %}is-current{% endif %}" {% if settings_key == 'trade-status' %}aria-current="page"{% endif %}>Trade status setting</a>
         </div>
         {% endif %}
         {% if perms.audit_log.view_auditlog %}
@@ -197,6 +203,5 @@
         </a>
         {% endif %}
     </nav>
-    <div class="sidebar-footer"><span class="status-dot" aria-hidden="true"></span> A little more clarity, every day.</div>
 </aside>
 <button type="button" class="sidebar-overlay" data-sidebar-overlay aria-label="Close navigation" hidden></button>

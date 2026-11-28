@@ -1,28 +1,170 @@
 {% extends "layouts/dashboard.html" %}
+{% load static %}
 
 {% block title %}Dashboard | eManager{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'account/css/dashboard.css' %}">{% endblock %}
 {% block content %}
-<div class="workspace-content">
-    <div class="mb-9 flex flex-wrap items-end justify-between gap-4">
-        <div><p class="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-stone-400">Your overview</p><h1 class="text-3xl font-semibold tracking-tight text-stone-950 sm:text-4xl">Welcome back, {{ first_name }}<span class="text-emerald-600">.</span></h1><p class="mt-3 text-sm leading-6 text-stone-500">A clear view of your account. A little room to focus.</p></div>
-        <div class="date-pill"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 11h18" stroke-linecap="round"/></svg>{{ today|date:"D, j M Y" }}</div>
+{% url 'account_pages:profile' as profile_url %}
+{% url 'sale_pages:sale-list' as sales_url %}
+{% url 'warehouse_pages:stock-list' as stock_url %}
+{% url 'hrm_pages:employee-list' as employees_url %}
+{% url 'accounting_pages:daybook' as daybook_url %}
+{% url 'warehouse_pages:report' as warehouse_report_url %}
+{% url 'audit_log:list' as audit_url %}
+<div class="workspace-content" data-dashboard data-today="{{ today|date:'Y-m-d' }}"
+     {% if sale_access.view %}data-sales-url="{% url 'sale:sales-order-list-view' %}" data-sale-detail-url="{% url 'sale_pages:sale-detail' 0 %}"{% endif %}
+     {% if warehouse_access.stock %}data-stock-url="{% url 'warehouse:stock-list' %}"{% endif %}
+     {% if perms.hrm.view_employee %}data-employees-url="{% url 'hrm:employee-list-view' %}"{% endif %}
+     {% if finance_access.ledger %}data-daybook-url="{% url 'accounting:daybook' %}"{% endif %}
+     {% if perms.audit_log.view_auditlog %}data-audit-url="{% url 'audit_log:api-list' %}"{% endif %}>
+    <div class="page-heading">
+        <div>
+            <p class="page-eyebrow"><time datetime="{{ today|date:'Y-m-d' }}">{{ today|date:"l, j F" }}</time></p>
+            <h1 class="page-title">Welcome back, {{ first_name }}</h1>
+            <p class="page-description">Here’s what’s happening in your workspace.</p>
+        </div>
+        <div class="flex flex-wrap gap-2">
+            {% if finance_access.ledger %}<a class="secondary-button" href="{{ daybook_url }}">Open daybook</a>
+            {% elif warehouse_access.report %}<a class="secondary-button" href="{{ warehouse_report_url }}">Warehouse report</a>{% endif %}
+            {% if sale_access.add %}<a class="primary-button compact-primary" href="{% url 'sale_pages:create-sale' %}">{% include "includes/workspace_icon.html" with icon="plus" size=17 only %} Create sale</a>
+            {% elif sale_access.pos %}<a class="primary-button compact-primary" href="{% url 'sale_pages:pos' %}">Open point of sale</a>{% endif %}
+        </div>
     </div>
 
-    <div class="grid gap-4 sm:grid-cols-3 lg:gap-5">
-        <section class="overview-card"><div class="mb-5 flex items-center justify-between"><h2 class="text-xs font-medium text-stone-500">Account status</h2><span class="metric-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="m12 3 8 4v5c0 5-8 9-8 9s-8-4-8-9V7l8-4Z" stroke-linejoin="round"/><path d="m8 12 3 3 5-6" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div><p class="flex items-center gap-2.5 text-2xl font-semibold tracking-tight"><span class="status-dot" aria-hidden="true"></span>Active</p><p class="mt-2 text-xs leading-5 text-stone-400">You’re signed in and ready to go.</p></section>
-        <section class="overview-card"><div class="mb-5 flex items-center justify-between"><h2 class="text-xs font-medium text-stone-500">Member since</h2><span class="metric-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M8 3v4M16 3v4M4 11h16" stroke-linecap="round"/></svg></span></div><p class="text-2xl font-semibold tracking-tight">{{ request.user.date_joined|date:"j M Y" }}</p><p class="mt-2 text-xs leading-5 text-stone-400">The start of your eManager journey.</p></section>
-        <section class="overview-card"><div class="mb-5 flex items-center justify-between"><h2 class="text-xs font-medium text-stone-500">Last sign-in</h2><span class="metric-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2" stroke-linecap="round"/></svg></span></div><p class="text-2xl font-semibold tracking-tight">{% if request.user.last_login %}{{ request.user.last_login|date:"g:i A" }}{% else %}—{% endif %}</p><p class="mt-2 text-xs leading-5 text-stone-400">{% if request.user.last_login %}{{ request.user.last_login|date:"j F Y" }}{% else %}Your current session{% endif %}</p></section>
+    <section class="dashboard-hero" aria-labelledby="dashboard-overview-title">
+        <div class="dashboard-hero-copy">
+            <p class="hero-label">Workspace overview</p>
+            <h2 id="dashboard-overview-title">{% if sale_access.view or finance_access.ledger or warehouse_access.stock %}Your business at a glance{% else %}Your workspace at a glance{% endif %}</h2>
+            <p>{% if sale_access.view or finance_access.ledger or warehouse_access.stock %}Review recent activity and open the tools you use to manage your business.{% else %}Review your account details and find the pages available to you.{% endif %}</p>
+            <div class="dashboard-hero-links">
+                {% if finance_access.ledger %}<a href="{{ daybook_url }}">View cash flow</a>
+                {% elif sale_access.view %}<a href="{{ sales_url }}">View sales</a>
+                {% else %}<a href="{{ profile_url }}">View your profile</a>{% endif %}
+                {% if warehouse_access.stock %}<a href="{{ stock_url }}">Review inventory</a>{% endif %}
+            </div>
+        </div>
+        <div class="dashboard-hero-visual">
+            <div class="hero-float hero-float-primary">
+                {% if finance_access.ledger %}<span>Cash flow this month</span><strong data-dashboard-metric="cashflow">—</strong>
+                {% elif sale_access.view %}<span>Sales orders</span><strong data-dashboard-metric="sales">—</strong>
+                {% else %}<span>Account status</span><strong>Active</strong>{% endif %}
+            </div>
+            {% if finance_access.ledger %}
+            <div class="hero-float hero-float-secondary hero-float-bars" data-hero-cashflow hidden aria-hidden="true">
+                <div class="hero-mini-bars" data-hero-cashflow-bars></div>
+                <span>Monthly inflows</span>
+            </div>
+            {% else %}
+            <div class="hero-float hero-float-secondary">
+                {% if warehouse_access.stock %}{% include "includes/workspace_icon.html" with icon="stock" only %}<div><span>Stock records</span><strong data-dashboard-metric="stock">—</strong></div>
+                {% else %}{% include "includes/workspace_icon.html" with icon="calendar" only %}<div><span>Member since</span><strong>{{ request.user.date_joined|date:"M Y" }}</strong></div>{% endif %}
+            </div>
+            {% endif %}
+        </div>
+    </section>
+
+    <div class="dashboard-stats" aria-label="Overview metrics">
+        {% if finance_access.ledger %}
+            {% include "account/includes/dashboard_stat.html" with tone="purple" icon="wallet" href=daybook_url label="Net cash flow" metric="cashflow" description="This month" only %}
+        {% else %}
+            {% include "account/includes/dashboard_stat.html" with tone="purple" icon="check" href=profile_url label="Account status" value="Active" description="Signed in" only %}
+        {% endif %}
+        {% if sale_access.view %}
+            {% include "account/includes/dashboard_stat.html" with tone="cyan" icon="sales" href=sales_url label="Sales orders" metric="sales" description="Across accessible warehouses" only %}
+        {% else %}
+            {% include "account/includes/dashboard_stat.html" with tone="cyan" icon="calendar" href=profile_url label="Member since" value=request.user.date_joined|date:"j M Y" description="Account created" only %}
+        {% endif %}
+        {% if warehouse_access.stock %}
+            {% include "account/includes/dashboard_stat.html" with tone="green" icon="stock" href=stock_url label="Stock records" metric="stock" description="Across accessible warehouses" only %}
+        {% else %}
+            {% include "account/includes/dashboard_stat.html" with tone="green" icon="clock" href=profile_url label="Last sign-in" value=request.user.last_login|date:"g:i A" description=request.user.last_login|date:"j F Y" only %}
+        {% endif %}
+        {% if perms.hrm.view_employee %}
+            {% include "account/includes/dashboard_stat.html" with tone="orange" icon="users" href=employees_url label="Employees" metric="employees" description="Employee directory" only %}
+        {% elif profile.designation %}
+            {% include "account/includes/dashboard_stat.html" with tone="orange" icon="users" href=profile_url label="Designation" value=profile.designation only %}
+        {% endif %}
     </div>
 
-    <div class="mt-6 grid gap-6 xl:grid-cols-[1.5fr_1fr]">
-        <section class="welcome-panel">
-            <span class="mb-7 inline-flex w-fit rounded-full border border-emerald-200 bg-white/80 px-3 py-1 text-[11px] font-medium text-emerald-800">Made for a clearer day</span>
-            <div class="welcome-illustration" aria-hidden="true"><div class="illustration-window"><span></span><span></span><span></span><div class="illustration-line long"></div><div class="illustration-line"></div><div class="illustration-grid"><i></i><i></i><i></i></div></div><span class="illustration-check"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m5 12 4 4L19 6" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div>
-            <h2 class="mt-7 max-w-sm text-2xl font-semibold tracking-tight text-stone-950">Your workspace, in focus.</h2><p class="mt-3 max-w-sm text-sm leading-6 text-stone-600">A simple place to settle in, review your details, and get on with what matters.</p>
-            <a href="{% url 'account_pages:profile' %}" class="mt-7 inline-flex w-fit items-center gap-2 text-sm font-semibold text-emerald-800 hover:text-emerald-950">View your profile <span aria-hidden="true">→</span></a>
+    {% if finance_access.ledger or sale_access.view %}
+    <div class="dashboard-panels">
+        {% if finance_access.ledger %}
+        <section class="users-panel dashboard-cashflow" data-dashboard-panel="cashflow">
+            <div class="dashboard-panel-heading">
+                <div><h2 class="section-title">Cash flow overview</h2><p>Inflows and outflows from the daybook</p></div>
+                <label class="sr-only" for="cashflow-period">Cash flow period</label>
+                <select class="form-input dashboard-period" id="cashflow-period" data-cashflow-period hidden>
+                    <option value="6">Last 6 months</option><option value="3">Last 3 months</option>
+                </select>
+            </div>
+            <p class="dashboard-feedback" data-dashboard-status role="status">Loading cash flow…</p>
+            <div data-dashboard-content hidden>
+                <div class="dashboard-chart-summary">
+                    <div><span>Net cash flow</span><strong data-cashflow-total></strong></div>
+                    <div class="dashboard-chart-legend"><span>Inflow</span><span>Outflow</span></div>
+                </div>
+                <div class="dashboard-plot">
+                    <div class="dashboard-plot-values" data-chart-values aria-hidden="true"></div>
+                    <div>
+                        <svg class="dashboard-line-chart" viewBox="0 0 550 140" preserveAspectRatio="none" role="img" aria-label="Monthly inflows and outflows" data-cashflow-chart>
+                            <defs><linearGradient id="cashflow-fill" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#7367f0" stop-opacity=".25"/><stop offset="1" stop-color="#7367f0" stop-opacity="0"/></linearGradient></defs>
+                            <path fill="url(#cashflow-fill)" data-chart-fill></path>
+                            <path class="dashboard-line-in" data-chart-in></path>
+                            <path class="dashboard-line-out" data-chart-out></path>
+                        </svg>
+                        <div class="dashboard-plot-months" data-chart-months aria-hidden="true"></div>
+                    </div>
+                </div>
+            </div>
         </section>
-        <section class="rounded-2xl border border-stone-200 bg-white p-6 sm:p-7"><div class="flex items-center justify-between"><h2 class="text-base font-semibold tracking-tight">Account details</h2><span class="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold text-emerald-700">SIGNED IN</span></div><div class="my-7 flex items-center gap-3">{% include "includes/avatar.html" with image=profile.image initials=user_initials avatar_class="avatar-large" only %}<div class="min-w-0"><p class="truncate text-sm font-semibold">{{ display_name }}</p><p class="mt-1 break-all text-xs text-stone-500">{{ profile_email }}</p></div></div><dl class="space-y-5 text-sm"><div class="flex items-center justify-between gap-4"><dt class="text-stone-500">Phone</dt><dd class="text-right font-medium">{{ profile.phone_number|default:"Not provided" }}</dd></div><div class="flex items-center justify-between gap-4"><dt class="text-stone-500">Designation</dt><dd class="text-right font-medium">{{ profile.designation|default:"Not provided" }}</dd></div><div class="flex items-center justify-between gap-4"><dt class="text-stone-500">Country</dt><dd class="text-right font-medium">{{ profile.country|default:"Not provided" }}</dd></div></dl><a href="{% url 'account_pages:profile' %}" class="mt-7 block border-t border-stone-100 pt-5 text-sm font-medium text-stone-700 hover:text-emerald-700">See full profile <span class="float-right" aria-hidden="true">↗</span></a></section>
+        {% endif %}
+        {% if sale_access.view %}
+        <section class="users-panel dashboard-breakdown" data-dashboard-panel="breakdown">
+            <div class="dashboard-panel-heading"><div><h2 class="section-title">Sales by status</h2><p>Breakdown of the latest orders</p></div></div>
+            <p class="dashboard-feedback" data-dashboard-status role="status">Loading orders…</p>
+            <div data-dashboard-content hidden>
+                <div class="dashboard-ring" data-sales-ring><div><strong data-sales-sample></strong><span>Orders shown</span></div></div>
+                <dl class="dashboard-breakdown-list">
+                    <div><dt>Completed</dt><dd data-sales-completed></dd></div>
+                    <div><dt>Not completed</dt><dd data-sales-incomplete></dd></div>
+                </dl>
+            </div>
+        </section>
+        {% endif %}
     </div>
-    <p class="mt-9 text-xs text-stone-400">A little more clarity, every day. <span class="ml-1">eManager.</span></p>
+    {% endif %}
+    <div class="dashboard-panels dashboard-panels-lower">
+        {% if sale_access.view %}
+        <section class="users-panel" data-dashboard-panel="sales">
+            <div class="dashboard-panel-heading"><div><h2 class="section-title">Recent sales</h2><p>Latest orders across accessible warehouses</p></div><a class="text-button" href="{{ sales_url }}">View all</a></div>
+            <p class="dashboard-feedback" data-dashboard-status role="status">Loading orders…</p>
+            <div class="users-table-scroll" data-dashboard-content hidden>
+                <table class="users-table"><thead><tr><th scope="col">Order</th><th scope="col">Customer</th><th scope="col">Total</th><th scope="col">Status</th></tr></thead><tbody data-recent-sales></tbody></table>
+            </div>
+        </section>
+        {% endif %}
+        {% if perms.audit_log.view_auditlog %}
+        <section class="users-panel" data-dashboard-panel="activity">
+            <div class="dashboard-panel-heading"><div><h2 class="section-title">Recent activity</h2><p>Updates across your workspace</p></div><a class="text-button" href="{{ audit_url }}">View log</a></div>
+            <p class="dashboard-feedback" data-dashboard-status role="status">Loading activity…</p>
+            <ol class="dashboard-activity" data-dashboard-content hidden></ol>
+            <template data-activity-icon>{% include "includes/workspace_icon.html" with icon="activity" size=17 only %}</template>
+        </section>
+        {% endif %}
+        <section class="users-panel dashboard-account">
+            <div class="dashboard-panel-heading"><div><h2 class="section-title">Account details</h2><p>Signed-in profile</p></div><a class="text-button" href="{{ profile_url }}">View profile</a></div>
+            <div class="dashboard-account-identity">
+                {% include "includes/avatar.html" with image=profile.image initials=user_initials avatar_class="avatar-large" only %}
+                <div class="min-w-0"><strong>{{ display_name }}</strong><span>{{ profile_email }}</span></div>
+            </div>
+            <dl class="dashboard-account-details">
+                <div><dt>Phone</dt><dd>{{ profile.phone_number|default:"Not provided" }}</dd></div>
+                <div><dt>Designation</dt><dd>{{ profile.designation|default:"Not provided" }}</dd></div>
+                <div><dt>Country</dt><dd>{{ profile.country|default:"Not provided" }}</dd></div>
+            </dl>
+        </section>
+    </div>
 </div>
 {% endblock %}
+
+{% block workspace_js %}<script type="module" src="{% static 'account/js/dashboard.js' %}"></script>{% endblock %}

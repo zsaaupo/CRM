@@ -2,27 +2,27 @@
 .pos-layout > * {min-width:0}
 .pos-pad {padding:1.25rem}
 .pos-fields {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.8rem}
-.pos-fields label,.pos-fields .pos-wide > label {font-size:.78rem;font-weight:550;color:#57534e}
+.pos-fields label,.pos-fields .pos-wide > label {font-size:.875rem;font-weight:550;color:var(--erp-text)}
 .pos-fields .form-input {margin-top:.3rem}
 .pos-wide {grid-column:1/-1}
 .pos-row,.pos-actions {display:flex;align-items:center;gap:.6rem}
 .pos-actions {flex-wrap:wrap;justify-content:flex-end}
 .pos-check {display:flex;align-items:center;gap:.4rem;margin:1rem 0;font-size:.8rem}
 .pos-tiles {display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:.6rem}
-.pos-tile {border:1px solid #e7e5e4;border-radius:.65rem;padding:.7rem;text-align:left;display:grid;gap:.3rem;align-content:start}
-.pos-tile:hover,.pos-tile:focus-visible {border-color:#059669;background:#f5fcf8}
+.pos-tile {border:1px solid var(--erp-border);border-radius:.65rem;background:var(--erp-surface-alt);padding:.7rem;text-align:left;display:grid;gap:.3rem;align-content:start}
+.pos-tile:hover,.pos-tile:focus-visible {border-color:var(--erp-primary);background:var(--erp-primary-soft)}
 .pos-tile img {width:100%;height:78px;object-fit:contain}
 .pos-tile strong {font-size:.84rem;overflow-wrap:anywhere}
-.pos-tile small,.pos-muted {font-size:.75rem;color:#78716c}
-.pos-tile span {font-size:.8rem;color:#047857}
+.pos-tile small,.pos-muted {font-size:.75rem;color:var(--erp-muted)}
+.pos-tile span {font-size:.875rem;color:var(--erp-accent)}
 #cart-lines .form-input {min-width:5rem;min-height:2.2rem;padding:.3rem}
 .pos-layout .users-table td,.pos-layout .users-table th {padding:.6rem}
 .pos-pad summary {cursor:pointer;font-size:.84rem;font-weight:550}
 .pos-totals {margin:1.25rem 0;display:grid;gap:.4rem;font-size:.85rem;font-variant-numeric:tabular-nums}
 .pos-totals div,.pos-receipt-line {display:flex;justify-content:space-between;gap:1rem}
-.pos-grand {font-size:1.15rem;font-weight:650;border-top:1px solid #e7e5e4;padding-top:.7rem}
+.pos-grand {font-size:1.15rem;font-weight:650;border-top:1px solid var(--erp-border);padding-top:.7rem}
 .pos-dialog {width:min(95vw,40rem);max-height:88vh;overflow:auto}
-.pos-tender {border:1px solid #e7e5e4;border-radius:.75rem;padding:1rem;margin:.6rem 0}
+.pos-tender {border:1px solid var(--erp-border);border-radius:.75rem;padding:1rem;margin:.6rem 0}
 .pos-history {display:grid;gap:.5rem;margin-top:1rem}
 .pos-history button,.pos-customer-choice {text-align:left;padding:.55rem;border-bottom:1px solid #eee;width:100%}
 .pos-receipt-line {padding:.48rem 0;border-bottom:1px solid #eee;font-size:.85rem}

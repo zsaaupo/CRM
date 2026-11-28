@@ -73,6 +73,26 @@ if (sidebar) {
     desktop.addEventListener("change", () => setSidebar(false));
 }
 
+const moduleNavigation = document.querySelector("[data-module-navigation]");
+if (moduleNavigation && sidebar) {
+    const current = [...sidebar.querySelectorAll("a[data-nav-list]")].find((link) => {
+        return link.pathname === window.location.pathname;
+    });
+    const submenu = current?.closest(".sidebar-submenu");
+    const siblings = submenu?.querySelectorAll(":scope > a[data-nav-list]");
+    if (siblings?.length > 1) {
+        const links = [...siblings].map((item) => {
+            const link = document.createElement("a");
+            link.href = item.href;
+            link.textContent = item.textContent.trim();
+            if (item === current) link.setAttribute("aria-current", "page");
+            return link;
+        });
+        moduleNavigation.replaceChildren(...links);
+        moduleNavigation.hidden = false;
+    }
+}
+
 document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
         if (dropdown && !dropdown.hidden) closeUserMenu(true);
@@ -92,6 +112,77 @@ document.addEventListener("keydown", (event) => {
         }
     }
 });
+
+const search = document.getElementById("workspace-search");
+const searchToggle = document.querySelector("[data-workspace-search-open]");
+
+if (search && searchToggle) {
+    const input = search.querySelector('input[type="search"]');
+    const results = search.querySelector("[data-workspace-search-results]");
+    const empty = search.querySelector("[data-workspace-search-empty]");
+    const pages = [...sidebar.querySelectorAll("a[data-nav-item]")].map((link) => {
+        const group = link.closest(".sidebar-submenu");
+        const label = link.textContent.trim();
+        const groupName = group?.previousElementSibling?.querySelector("span")?.textContent.trim() || "Workspace";
+        return { label, groupName, href: link.href };
+    });
+
+    function renderSearch() {
+        const terms = input.value.trim().toLowerCase().split(/\s+/);
+        const matches = pages.filter(({ label, groupName }) => {
+            const text = `${label} ${groupName}`.toLowerCase();
+            return terms.every((term) => text.includes(term));
+        });
+        const items = matches.slice(0, input.value.trim() ? 30 : 8).map(({ label, groupName, href }) => {
+            const item = document.createElement("li");
+            const link = document.createElement("a");
+            const title = document.createElement("strong");
+            const context = document.createElement("small");
+            link.href = href;
+            title.textContent = label;
+            context.textContent = groupName;
+            link.append(title, context);
+            item.append(link);
+            return item;
+        });
+        results.replaceChildren(...items);
+        empty.hidden = Boolean(items.length);
+    }
+
+    function openSearch() {
+        if (document.querySelector("dialog[open]")) return;
+        setSidebar(false);
+        closeUserMenu();
+        input.value = "";
+        renderSearch();
+        search.showModal();
+        input.focus();
+    }
+
+    searchToggle.addEventListener("click", openSearch);
+    input.addEventListener("input", renderSearch);
+    input.addEventListener("keydown", (event) => {
+        const first = results.querySelector("a");
+        if (event.key === "ArrowDown" && first) {
+            event.preventDefault();
+            first.focus();
+        } else if (event.key === "Enter" && first && input.value.trim()) {
+            first.click();
+        }
+    });
+    search.addEventListener("click", (event) => {
+        if (event.target !== search) return;
+        const { top, bottom, left, right } = search.getBoundingClientRect();
+        if (event.clientY < top || event.clientY > bottom || event.clientX < left || event.clientX > right) search.close();
+    });
+    search.addEventListener("close", () => searchToggle.focus());
+    document.addEventListener("keydown", (event) => {
+        if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k" && !document.querySelector("dialog[open]")) {
+            event.preventDefault();
+            openSearch();
+        }
+    });
+}
 
 document.querySelectorAll("[data-logout-form]").forEach((form) => {
     form.addEventListener("submit", async (event) => {

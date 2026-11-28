@@ -1,0 +1,8 @@
+<a class="dashboard-stat" href="{{ href }}">
+    <span class="dashboard-stat-icon {{ tone }}">{% include "includes/workspace_icon.html" with icon=icon only %}</span>
+    <span class="dashboard-stat-text">
+        <span>{{ label }}</span>
+        <strong{% if metric %} data-dashboard-metric="{{ metric }}"{% endif %}>{{ value|default:"—" }}</strong>
+        {% if description %}<small>{{ description }}</small>{% endif %}
+    </span>
+</a>
